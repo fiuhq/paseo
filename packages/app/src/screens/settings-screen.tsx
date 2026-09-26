@@ -1093,7 +1093,10 @@ function SettingsSidebar({
   const outerContainerStyle = useMemo(
     () =>
       isDesktop
-        ? [sidebarStyles.desktopContainer, { width: resolveSettingsDesktopSidebarWidth(windowWidth) }]
+        ? [
+            sidebarStyles.desktopContainer,
+            { width: resolveSettingsDesktopSidebarWidth(windowWidth) },
+          ]
         : [sidebarStyles.mobileContainer],
     [isDesktop, windowWidth],
   );

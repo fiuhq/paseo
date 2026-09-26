@@ -1,4 +1,7 @@
-import { SETTINGS_DESKTOP_SIDEBAR_WIDTH, SETTINGS_DESKTOP_SPLIT_MIN_WIDTH } from "@/constants/layout";
+import {
+  SETTINGS_DESKTOP_SIDEBAR_WIDTH,
+  SETTINGS_DESKTOP_SPLIT_MIN_WIDTH,
+} from "@/constants/layout";
 import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from "@/stores/panel-store";
 
 const MIN_DESKTOP_CENTER_WIDTH = 400;
