@@ -7,6 +7,8 @@ import {
   expectAttachmentSheetRowsOnTitleRail,
   openGithubPickerFromMenu,
   attachImageFromMenu,
+  copyImageToClipboard,
+  pasteImageFromMenu,
   expectAttachmentPill,
   removeAttachmentPill,
   openImageLightbox,
@@ -178,6 +180,19 @@ test.describe("Composer attachments", () => {
       await dropFileOnComposer(page, TEST_JSON);
       await expectAttachmentPill(page, "composer-file-attachment-pill");
     });
+  });
+
+  test("Paste image attaches the image on the clipboard", async ({ page, withWorkspace }) => {
+    test.setTimeout(60_000);
+    const workspace = await withWorkspace({ prefix: "attach-paste-image-" });
+    await workspace.navigateTo();
+    await clickNewChat(page);
+    await expectComposerVisible(page);
+
+    await copyImageToClipboard(page, TEST_IMAGE);
+    await pasteImageFromMenu(page);
+
+    await expectAttachmentPill(page, "composer-image-attachment-pill");
   });
 
   test("dropped JSON file renders as a file attachment in New Workspace", async ({ page }) => {

@@ -2154,8 +2154,8 @@ function ComposerContentImpl({
     [githubSearchItems, githubSearchQueryTrimmed],
   );
 
-  const attachmentMenuItems = useMemo<AttachmentMenuItem[]>(() => {
-    const items: AttachmentMenuItem[] = [
+  const attachmentMenuItems = useMemo<AttachmentMenuItem[]>(
+    () => [
       {
         id: "image",
         label: t("composer.attachments.addImage"),
@@ -2164,18 +2164,14 @@ function ComposerContentImpl({
           void handlePickImage();
         },
       },
-    ];
-    if (isNative) {
-      items.push({
+      {
         id: "paste-image",
         label: t("composer.attachments.pasteImage"),
         icon: <ThemedClipboardPaste size={ICON_SIZE.md} uniProps={iconForegroundMutedMapping} />,
         onSelect: () => {
           void handlePasteImage();
         },
-      });
-    }
-    items.push(
+      },
       {
         id: "github",
         label: t("composer.attachments.addIssueOrPr", {
@@ -2195,16 +2191,16 @@ function ComposerContentImpl({
           void handlePickFile();
         },
       },
-    );
-    return items;
-  }, [
-    forgePresentation,
-    handlePasteImage,
-    handlePickFile,
-    handlePickImage,
-    pluginAttachments.menuItems,
-    t,
-  ]);
+    ],
+    [
+      forgePresentation,
+      handlePasteImage,
+      handlePickFile,
+      handlePickImage,
+      pluginAttachments.menuItems,
+      t,
+    ],
+  );
 
   const handleToggleGithubItem = useCallback(
     (item: ForgeSearchItem) => {

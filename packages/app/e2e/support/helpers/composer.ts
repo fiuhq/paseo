@@ -131,6 +131,26 @@ export async function attachImageFromMenu(
   await chooser.setFiles([file]);
 }
 
+export async function copyImageToClipboard(
+  page: Page,
+  file: { mimeType: string; buffer: Buffer },
+): Promise<void> {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.evaluate(
+    async ({ mimeType, base64 }) => {
+      const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+      const image = new Blob([bytes], { type: mimeType });
+      await navigator.clipboard.write([new ClipboardItem({ [mimeType]: image })]);
+    },
+    { mimeType: file.mimeType, base64: file.buffer.toString("base64") },
+  );
+}
+
+export async function pasteImageFromMenu(page: Page): Promise<void> {
+  await openAttachmentMenu(page);
+  await page.getByTestId("message-input-attachment-menu-item-paste-image").click();
+}
+
 export async function expectAttachmentPill(page: Page, testID: string): Promise<void> {
   await expect(page.getByTestId(testID).first()).toBeVisible({ timeout: 10_000 });
 }
