@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
   type PressableStateCallbackType,
 } from "react-native";
@@ -121,7 +122,8 @@ import { HostPluginsPage } from "@/screens/settings/plugins-page";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import ProjectsScreen from "@/screens/projects-screen";
 import ProjectSettingsScreen from "@/screens/project-settings-screen";
-import { SETTINGS_DESKTOP_SIDEBAR_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
+import { resolveSettingsDesktopSidebarWidth } from "@/components/desktop-sidebar-layout";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import {
   type EnableBuiltInDaemonOption,
@@ -1087,9 +1089,16 @@ function SettingsSidebar({
   );
   const insets = useSafeAreaInsets();
   const isDesktop = layout === "desktop";
+  const { width: windowWidth } = useWindowDimensions();
   const outerContainerStyle = useMemo(
-    () => [isDesktop ? sidebarStyles.desktopContainer : sidebarStyles.mobileContainer],
-    [isDesktop],
+    () =>
+      isDesktop
+        ? [
+            sidebarStyles.desktopContainer,
+            { width: resolveSettingsDesktopSidebarWidth(windowWidth) },
+          ]
+        : [sidebarStyles.mobileContainer],
+    [isDesktop, windowWidth],
   );
   const innerContainerStyle = useMemo(
     () => [{ flex: 1 }, isDesktop ? { paddingTop: insets.top } : null],
@@ -1798,7 +1807,6 @@ const desktopStyles = StyleSheet.create((theme) => ({
 
 const sidebarStyles = StyleSheet.create((theme) => ({
   desktopContainer: {
-    width: SETTINGS_DESKTOP_SIDEBAR_WIDTH,
     borderRightWidth: 1,
     borderRightColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSidebar,
