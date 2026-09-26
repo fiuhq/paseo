@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "../support/fixtures";
-import { gotoAppShell } from "../support/helpers/app";
+import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { seedWorkspace } from "../support/helpers/seed-client";
 
 // An unfolded foldable held upright: past the 600px where a touch browser gets the desktop
@@ -24,6 +24,19 @@ test.describe("touch screen between the touch and mouse desktop widths", () => {
     try {
       await expect(shell.projectRow).toBeInViewport({ timeout: 60_000 });
       await expect(shell.openMenu).toHaveCount(0);
+    } finally {
+      await shell.cleanup();
+    }
+  });
+
+  test("keeps the settings detail pane at its 400px target", async ({ page }) => {
+    const shell = await openAppShellWithProject(page, "touch-desktop-settings-");
+    try {
+      await openSettings(page);
+      const detailPane = page.getByTestId("settings-detail-pane");
+      await expect(detailPane).toBeVisible();
+      const box = await detailPane.boundingBox();
+      expect(box?.width).toBeGreaterThanOrEqual(400);
     } finally {
       await shell.cleanup();
     }
