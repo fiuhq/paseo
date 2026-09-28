@@ -1,28 +1,27 @@
-// A preview renders a self-contained document and nothing else. Inline styles and
-// scripts run so a plan page keeps its layout and its diagrams; fetch, XHR,
-// WebSocket, beacon, remote script, remote font, remote image, and form posts are
-// all refused. Agent-written HTML is not trusted markup.
+// A preview runs a web app: React from a CDN, Tailwind, Google Fonts, a chart
+// library, a fetch to an API. Every resource the page loads or calls must be HTTPS
+// (or inline, data:, blob:). Plaintext `http:` and `ws:` are refused. That is where
+// localhost and LAN services live, the Paseo daemon among them, and a page opened
+// from a cloned repo must not reach them. Mixed-content blocking does not cover
+// this: browsers treat localhost as a secure context.
 //
-// What this does NOT stop: the document navigating itself. No CSP directive
-// available in current browsers prevents it — `navigate-to` was dropped from CSP3
-// and is unenforced, and `<meta http-equiv="refresh">` needs no script at all
-// (both verified against the Chromium this app ships against). So a hostile page
-// can still reach a server by navigating, carrying data available inside the
-// preview. The opaque origin is what bounds the damage: the frame has no storage,
-// no parent access, and no way to read any file but itself. Native narrows it
-// further in html-preview.tsx, because a WebView can refuse navigation outside CSP — see the
-// caveat there on why that is a mitigation rather than a guarantee.
+// The CSP does not contain what the page can send out. A page can navigate itself
+// anywhere (`navigate-to` was dropped from CSP3, and `<meta http-equiv="refresh">`
+// needs no script), and it can fetch any HTTPS host. What bounds it is the opaque
+// origin: the frame has no storage, no parent access, and no way to read any file
+// but itself, so it can only disclose what it already contains. Native refuses
+// navigation after the initial document in html-preview.tsx.
 const POLICY = [
   "default-src 'none'",
-  "script-src 'unsafe-inline' 'unsafe-eval' blob:",
-  "style-src 'unsafe-inline'",
-  "img-src data: blob:",
-  "font-src data:",
-  "media-src data: blob:",
-  "connect-src 'none'",
-  "form-action 'none'",
+  "script-src 'unsafe-inline' 'unsafe-eval' data: blob: https:",
+  "style-src 'unsafe-inline' https:",
+  "img-src data: blob: https:",
+  "font-src data: https:",
+  "media-src data: blob: https:",
+  "connect-src data: blob: https: wss:",
+  "frame-src https:",
+  "form-action https:",
   "base-uri 'none'",
-  "frame-src 'none'",
   "object-src 'none'",
 ].join("; ");
 

@@ -49,7 +49,7 @@ import {
   registerNotificationHandlers,
   ensureNotificationCenterRegistration,
 } from "./features/notifications.js";
-import { createExternalUrlOpener } from "./features/opener.js";
+import { createAppWindowOpenHandler, createExternalUrlOpener } from "./features/opener.js";
 import { createBrowserCaptureService } from "./features/browser-capture.js";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
 import { resolveAppIconPath } from "./features/stamped-icon.js";
@@ -736,6 +736,11 @@ async function createWindow(
   }
   setupDefaultContextMenu(mainWindow);
   setupDragDropPrevention(mainWindow);
+  mainWindow.webContents.setWindowOpenHandler(
+    createAppWindowOpenHandler({ open: shell.openExternal }, (error) =>
+      log.warn("[window] failed to open a popup in the system browser", error),
+    ),
+  );
   mainWindow.webContents.on("will-attach-webview", (event, webPreferences, params) => {
     if (!isPaseoBrowserWebviewAttach(params)) {
       event.preventDefault();
