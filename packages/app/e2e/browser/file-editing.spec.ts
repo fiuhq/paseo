@@ -757,7 +757,7 @@ test.describe("CodeMirror workspace file editing", () => {
       openedTabs.push(opened);
     });
 
-    await preview.document.getByRole("link", { name: "Handled link" }).click();
+    await preview.document.getByRole("link", { name: "Handled link", exact: true }).click();
     await preview.document.getByRole("link", { name: "Window handled link" }).click();
     await preview.document.getByRole("link", { name: "Jump to section" }).click();
     await expect(preview.document.getByRole("heading", { name: "Section" })).toBeInViewport();
