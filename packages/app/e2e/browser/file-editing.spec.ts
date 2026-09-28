@@ -761,13 +761,13 @@ test.describe("CodeMirror workspace file editing", () => {
     await preview.document.getByRole("link", { name: "Window handled link" }).click();
     await preview.document.getByRole("link", { name: "Jump to section" }).click();
     await expect(preview.document.getByRole("heading", { name: "Section" })).toBeInViewport();
+    await expect(preview.document.getByRole("heading", { name: "Plain links plan" })).toBeVisible();
 
     const tabOpened = page.context().waitForEvent("page");
     await preview.document.getByRole("link", { name: "Open mockup row" }).click();
     const tab = await tabOpened;
     await expect(tab).toHaveURL(PREVIEW_LINK_URL);
     await expect(tab.getByRole("heading", { name: "Mockup row" })).toBeVisible();
-    await expect(preview.document.getByRole("heading", { name: "Plain links plan" })).toBeVisible();
 
     expect(openedTabs).toHaveLength(1);
     expect(openedTabs[0]).toBe(tab);

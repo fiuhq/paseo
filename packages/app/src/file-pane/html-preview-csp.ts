@@ -58,10 +58,17 @@ const PROLOGUE = `<!doctype html>${META}`;
 //
 // A page that registers its own window click handler after this script runs
 // would otherwise see it first, so its preventDefault could never reach this
-// handler's defaultPrevented guard. Re-adding the handler on every pointerdown
-// and keydown capture, and once on load, moves it to the end of window's click
-// listener list each time, so any handler the page attached earlier always runs
-// first and this one always sees the outcome.
+// handler's defaultPrevented guard. Re-adding the handler moves it to the end
+// of window's click listener list, so any handler the page attached earlier
+// always runs first and this one always sees the outcome. For a pointer, the
+// re-append is deferred with setTimeout from the pointerdown capture listener:
+// pointerdown and the click it leads to are separate input tasks, so the timer
+// runs after every pointerdown listener, including one that registers a click
+// handler, and still before the click. For a keyboard activation the re-append
+// on keydown capture must stay synchronous, because Enter synthesizes the
+// click inside keydown's own default action, after which a timer would run too
+// late. A page that registers its window click handler from inside its own
+// keydown handler still runs after this one on keyboard activation.
 const OPEN_LINKS_SCRIPT = `<script>
 function paseoPreviewLinkClick(event) {
   if (event.defaultPrevented) return;
@@ -108,7 +115,13 @@ function paseoRebindPreviewLinkClick() {
 }
 
 window.addEventListener("click", paseoPreviewLinkClick);
-window.addEventListener("pointerdown", paseoRebindPreviewLinkClick, true);
+window.addEventListener(
+  "pointerdown",
+  function () {
+    setTimeout(paseoRebindPreviewLinkClick, 0);
+  },
+  true,
+);
 window.addEventListener("keydown", paseoRebindPreviewLinkClick, true);
 window.addEventListener("load", paseoRebindPreviewLinkClick);
 </script>`;
