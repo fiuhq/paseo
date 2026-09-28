@@ -23,6 +23,7 @@ const PREVIEW_CDN_URL = "https://cdn.html-preview.test/app.js";
 const PREVIEW_API_URL = "https://api.html-preview.test/status";
 const PREVIEW_LINK_URL = "https://mockup.html-preview.test/";
 const PREVIEW_HANDLED_LINK_URL = "https://handled.html-preview.test/";
+const PREVIEW_WINDOW_HANDLED_LINK_URL = "https://window-handled.html-preview.test/";
 const PLAINTEXT_PREVIEW_URL = "http://plaintext.html-preview.test/leak";
 
 interface LinkedFile {
@@ -722,6 +723,12 @@ test.describe("CodeMirror workspace file editing", () => {
         body: "<!doctype html><title>Handled row</title><h1>Handled row</h1>",
       }),
     );
+    await page.context().route(PREVIEW_WINDOW_HANDLED_LINK_URL, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><title>Window handled row</title><h1>Window handled row</h1>",
+      }),
+    );
     await writeFile(
       path.join(workspace.repoPath, "plain-links.html"),
       `<!doctype html><html><body>
@@ -729,7 +736,13 @@ test.describe("CodeMirror workspace file editing", () => {
 <a href="${PREVIEW_LINK_URL}">Open mockup row</a>
 <a href="#section" id="fragment-link">Jump to section</a>
 <a href="${PREVIEW_HANDLED_LINK_URL}" id="handled-link" onclick="event.preventDefault()">Handled link</a>
+<a href="${PREVIEW_WINDOW_HANDLED_LINK_URL}" id="window-handled-link">Window handled link</a>
 <h2 id="section">Section</h2>
+<script>
+  window.addEventListener("click", function (event) {
+    if (event.target && event.target.id === "window-handled-link") event.preventDefault();
+  });
+</script>
 </body></html>`,
       "utf8",
     );
@@ -745,6 +758,7 @@ test.describe("CodeMirror workspace file editing", () => {
     });
 
     await preview.document.getByRole("link", { name: "Handled link" }).click();
+    await preview.document.getByRole("link", { name: "Window handled link" }).click();
     await preview.document.getByRole("link", { name: "Jump to section" }).click();
     await expect(preview.document.getByRole("heading", { name: "Section" })).toBeInViewport();
 

@@ -55,8 +55,15 @@ const PROLOGUE = `<!doctype html>${META}`;
 // app shell into the preview frame; setting location.hash instead keeps the
 // frame on its own document. Native keeps its navigation guard unchanged, this
 // script never ships to the WebView document.
+//
+// A page that registers its own window click handler after this script runs
+// would otherwise see it first, so its preventDefault could never reach this
+// handler's defaultPrevented guard. Re-adding the handler on every pointerdown
+// and keydown capture, and once on load, moves it to the end of window's click
+// listener list each time, so any handler the page attached earlier always runs
+// first and this one always sees the outcome.
 const OPEN_LINKS_SCRIPT = `<script>
-window.addEventListener("click", function (event) {
+function paseoPreviewLinkClick(event) {
   if (event.defaultPrevented) return;
   if (event.button !== 0) return;
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -93,7 +100,17 @@ window.addEventListener("click", function (event) {
 
   event.preventDefault();
   window.open(url.href, "_blank", "noopener,noreferrer");
-});
+}
+
+function paseoRebindPreviewLinkClick() {
+  window.removeEventListener("click", paseoPreviewLinkClick);
+  window.addEventListener("click", paseoPreviewLinkClick);
+}
+
+window.addEventListener("click", paseoPreviewLinkClick);
+window.addEventListener("pointerdown", paseoRebindPreviewLinkClick, true);
+window.addEventListener("keydown", paseoRebindPreviewLinkClick, true);
+window.addEventListener("load", paseoRebindPreviewLinkClick);
 </script>`;
 
 const PROLOGUE_WEB = `<!doctype html>${META}${OPEN_LINKS_SCRIPT}`;
