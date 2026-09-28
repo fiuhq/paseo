@@ -69,7 +69,11 @@ const PROLOGUE = `<!doctype html>${META}`;
 // click inside keydown's own default action, after which a timer would run too
 // late. A page that registers its window click handler from inside its own
 // keydown handler still runs after this one on keyboard activation.
+//
+// Everything runs inside an IIFE so the page never sees paseoPreviewLinkClick
+// or paseoRebindPreviewLinkClick as globals it could define or reassign.
 const OPEN_LINKS_SCRIPT = `<script>
+(function () {
 function paseoPreviewLinkClick(event) {
   if (event.defaultPrevented) return;
   if (event.button !== 0) return;
@@ -124,6 +128,7 @@ window.addEventListener(
 );
 window.addEventListener("keydown", paseoRebindPreviewLinkClick, true);
 window.addEventListener("load", paseoRebindPreviewLinkClick);
+})();
 </script>`;
 
 const PROLOGUE_WEB = `<!doctype html>${META}${OPEN_LINKS_SCRIPT}`;
