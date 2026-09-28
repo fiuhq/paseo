@@ -703,6 +703,64 @@ test.describe("CodeMirror workspace file editing", () => {
     await tab.close();
   });
 
+  test("opens a plain link from an HTML plan in a new tab and leaves the rest alone", async ({
+    page,
+    withWorkspace,
+  }) => {
+    test.setTimeout(90_000);
+    const workspace = await withWorkspace({ prefix: "file-editing-html-plain-link-" });
+    await page.context().route(PREVIEW_LINK_URL, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><title>Mockup row</title><h1>Mockup row</h1>",
+      }),
+    );
+    await writeFile(
+      path.join(workspace.repoPath, "plain-links.html"),
+      `<!doctype html><html><body>
+<h1>Plain links plan</h1>
+<a href="${PREVIEW_LINK_URL}">Open mockup row</a>
+<a href="#section" id="fragment-link">Jump to section</a>
+<a href="${PREVIEW_LINK_URL}" id="handled-link" onclick="event.preventDefault()">Handled link</a>
+<h2 id="section">Section</h2>
+</body></html>`,
+      "utf8",
+    );
+    await workspace.navigateTo();
+    await openWorkspaceFile(page, "plain-links.html");
+
+    const preview = htmlPreview(page);
+    await expect(preview.document.getByRole("heading", { name: "Plain links plan" })).toBeVisible();
+
+    const tabOpened = page.context().waitForEvent("page");
+    await preview.document.getByRole("link", { name: "Open mockup row" }).click();
+    const tab = await tabOpened;
+    await expect(tab).toHaveURL(PREVIEW_LINK_URL);
+    await expect(tab.getByRole("heading", { name: "Mockup row" })).toBeVisible();
+    await expect(preview.document.getByRole("heading", { name: "Plain links plan" })).toBeVisible();
+    await tab.close();
+
+    let fragmentTabOpened = false;
+    const fragmentWatcher = () => {
+      fragmentTabOpened = true;
+    };
+    page.context().on("page", fragmentWatcher);
+    await preview.document.getByRole("link", { name: "Jump to section" }).click();
+    await expect(preview.document.getByRole("heading", { name: "Section" })).toBeInViewport();
+    expect(fragmentTabOpened).toBe(false);
+    page.context().off("page", fragmentWatcher);
+
+    let handledTabOpened = false;
+    const handledWatcher = () => {
+      handledTabOpened = true;
+    };
+    page.context().on("page", handledWatcher);
+    await preview.document.getByRole("link", { name: "Handled link" }).click();
+    await page.waitForTimeout(500);
+    expect(handledTabOpened).toBe(false);
+    page.context().off("page", handledWatcher);
+  });
+
   test("isolates HTML plans from the app origin and storage", async ({ page, withWorkspace }) => {
     test.setTimeout(90_000);
     const workspace = await withWorkspace({ prefix: "file-editing-html-origin-" });

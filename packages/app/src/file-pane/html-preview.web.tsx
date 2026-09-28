@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { withPreviewCsp } from "./html-preview-csp";
+import { withPreviewCspWeb } from "./html-preview-csp";
 
 // The frame runs a page the way a browser tab would, minus the Paseo app's
 // privileges. It never gets `allow-same-origin`: a srcdoc frame with that token
@@ -13,7 +13,9 @@ import { withPreviewCsp } from "./html-preview-csp";
 // event never fires, which breaks every framework's onSubmit. Dialogs, downloads
 // (a page exports its state that way), and popups work. `allow-popups-to-escape-sandbox`
 // makes a target="_blank" link open an ordinary tab instead of one that inherits
-// this sandbox. On desktop, main.ts hands those popups to the system browser.
+// this sandbox. On desktop, main.ts hands those popups to the system browser. A
+// plain link with no target also opens in a new tab, like a chat link, instead of
+// replacing the preview — see the click interceptor in html-preview-csp.ts.
 // Clipboard writes and fullscreen are delegated so copy buttons and fullscreen
 // charts work.
 //
@@ -38,7 +40,7 @@ const iframeStyle = {
 
 export function FileHtmlPreview({ html, testID }: { html: string; testID?: string }) {
   const { t } = useTranslation();
-  const document = useMemo(() => withPreviewCsp(html), [html]);
+  const document = useMemo(() => withPreviewCspWeb(html), [html]);
   return (
     <iframe
       data-testid={testID}

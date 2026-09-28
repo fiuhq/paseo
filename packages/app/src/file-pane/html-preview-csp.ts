@@ -46,9 +46,29 @@ const META = `<meta http-equiv="Content-Security-Policy" content="${POLICY}">`;
 // document has to be parsed to place it.
 const PROLOGUE = `<!doctype html>${META}`;
 
+// Web only: a plain link (no target, like a chat link) should open in a new tab
+// instead of replacing the preview frame. The listener runs on window in the
+// bubble phase, after the page's own handlers, and only acts when nothing else
+// already claimed the click. Native keeps its navigation guard unchanged \u2014 this
+// script never ships to the WebView document.
+const OPEN_LINKS_SCRIPT = `<script>window.addEventListener("click",function(e){if(e.defaultPrevented||e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;var el=null;var path=typeof e.composedPath==="function"?e.composedPath():[];for(var i=0;i<path.length;i++){var node=path[i];if(node&&node.tagName&&(node.tagName==="A"||node.tagName==="AREA")&&node.hasAttribute("href")){el=node;break;}}if(!el)return;var target=el.getAttribute("target");if(target&&target!=="_self")return;if(el.hasAttribute("download"))return;var rawHref=el.getAttribute("href")||"";if(rawHref.startsWith("#"))return;var url;try{url=new URL(el.href,document.baseURI);}catch(err){return;}if(url.protocol!=="http:"&&url.protocol!=="https:")return;e.preventDefault();window.open(url.href,"_blank","noopener,noreferrer");});</script>`;
+
+const PROLOGUE_WEB = `<!doctype html>${META}${OPEN_LINKS_SCRIPT}`;
+
 // Left where it is, a BOM would sit mid-document and render as a zero-width space.
 const BOM = "\uFEFF";
 
+function stripBom(html: string): string {
+  return html.startsWith(BOM) ? html.slice(BOM.length) : html;
+}
+
 export function withPreviewCsp(html: string): string {
-  return PROLOGUE + (html.startsWith(BOM) ? html.slice(BOM.length) : html);
+  return PROLOGUE + stripBom(html);
+}
+
+// Same supplied-prologue document as withPreviewCsp, plus the click interceptor
+// above. The CSP meta stays the first element in <head> and standards mode stays
+// guaranteed; only web preview frames get this variant.
+export function withPreviewCspWeb(html: string): string {
+  return PROLOGUE_WEB + stripBom(html);
 }
