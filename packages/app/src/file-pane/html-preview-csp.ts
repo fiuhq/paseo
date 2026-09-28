@@ -49,9 +49,44 @@ const PROLOGUE = `<!doctype html>${META}`;
 // Web only: a plain link (no target, like a chat link) should open in a new tab
 // instead of replacing the preview frame. The listener runs on window in the
 // bubble phase, after the page's own handlers, and only acts when nothing else
-// already claimed the click. Native keeps its navigation guard unchanged \u2014 this
+// already claimed the click. Native keeps its navigation guard unchanged, this
 // script never ships to the WebView document.
-const OPEN_LINKS_SCRIPT = `<script>window.addEventListener("click",function(e){if(e.defaultPrevented||e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;var el=null;var path=typeof e.composedPath==="function"?e.composedPath():[];for(var i=0;i<path.length;i++){var node=path[i];if(node&&node.tagName&&(node.tagName==="A"||node.tagName==="AREA")&&node.hasAttribute("href")){el=node;break;}}if(!el)return;var target=el.getAttribute("target");if(target&&target!=="_self")return;if(el.hasAttribute("download"))return;var rawHref=el.getAttribute("href")||"";if(rawHref.startsWith("#"))return;var url;try{url=new URL(el.href,document.baseURI);}catch(err){return;}if(url.protocol!=="http:"&&url.protocol!=="https:")return;e.preventDefault();window.open(url.href,"_blank","noopener,noreferrer");});</script>`;
+const OPEN_LINKS_SCRIPT = `<script>
+window.addEventListener("click", function (event) {
+  if (event.defaultPrevented) return;
+  if (event.button !== 0) return;
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+
+  var path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  var link = null;
+  for (var i = 0; i < path.length; i++) {
+    var node = path[i];
+    if (node && node.tagName && (node.tagName === "A" || node.tagName === "AREA") && node.hasAttribute("href")) {
+      link = node;
+      break;
+    }
+  }
+  if (!link) return;
+
+  var target = link.getAttribute("target");
+  if (target && target !== "_self") return;
+  if (link.hasAttribute("download")) return;
+
+  var rawHref = link.getAttribute("href") || "";
+  if (rawHref.indexOf("#") === 0) return;
+
+  var url;
+  try {
+    url = new URL(link.href, document.baseURI);
+  } catch (error) {
+    return;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return;
+
+  event.preventDefault();
+  window.open(url.href, "_blank", "noopener,noreferrer");
+});
+</script>`;
 
 const PROLOGUE_WEB = `<!doctype html>${META}${OPEN_LINKS_SCRIPT}`;
 

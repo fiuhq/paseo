@@ -22,6 +22,7 @@ const BLUE_PIXEL = Buffer.from(
 const PREVIEW_CDN_URL = "https://cdn.html-preview.test/app.js";
 const PREVIEW_API_URL = "https://api.html-preview.test/status";
 const PREVIEW_LINK_URL = "https://mockup.html-preview.test/";
+const PREVIEW_HANDLED_LINK_URL = "https://handled.html-preview.test/";
 const PLAINTEXT_PREVIEW_URL = "http://plaintext.html-preview.test/leak";
 
 interface LinkedFile {
@@ -715,13 +716,19 @@ test.describe("CodeMirror workspace file editing", () => {
         body: "<!doctype html><title>Mockup row</title><h1>Mockup row</h1>",
       }),
     );
+    await page.context().route(PREVIEW_HANDLED_LINK_URL, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><title>Handled row</title><h1>Handled row</h1>",
+      }),
+    );
     await writeFile(
       path.join(workspace.repoPath, "plain-links.html"),
       `<!doctype html><html><body>
 <h1>Plain links plan</h1>
 <a href="${PREVIEW_LINK_URL}">Open mockup row</a>
 <a href="#section" id="fragment-link">Jump to section</a>
-<a href="${PREVIEW_LINK_URL}" id="handled-link" onclick="event.preventDefault()">Handled link</a>
+<a href="${PREVIEW_HANDLED_LINK_URL}" id="handled-link" onclick="event.preventDefault()">Handled link</a>
 <h2 id="section">Section</h2>
 </body></html>`,
       "utf8",
@@ -732,33 +739,25 @@ test.describe("CodeMirror workspace file editing", () => {
     const preview = htmlPreview(page);
     await expect(preview.document.getByRole("heading", { name: "Plain links plan" })).toBeVisible();
 
+    const openedTabs: Page[] = [];
+    page.context().on("page", (opened) => {
+      openedTabs.push(opened);
+    });
+
+    await preview.document.getByRole("link", { name: "Handled link" }).click();
+    await preview.document.getByRole("link", { name: "Jump to section" }).click();
+    await expect(preview.document.getByRole("heading", { name: "Section" })).toBeInViewport();
+
     const tabOpened = page.context().waitForEvent("page");
     await preview.document.getByRole("link", { name: "Open mockup row" }).click();
     const tab = await tabOpened;
     await expect(tab).toHaveURL(PREVIEW_LINK_URL);
     await expect(tab.getByRole("heading", { name: "Mockup row" })).toBeVisible();
     await expect(preview.document.getByRole("heading", { name: "Plain links plan" })).toBeVisible();
+
+    expect(openedTabs).toHaveLength(1);
+    expect(openedTabs[0]).toBe(tab);
     await tab.close();
-
-    let fragmentTabOpened = false;
-    const fragmentWatcher = () => {
-      fragmentTabOpened = true;
-    };
-    page.context().on("page", fragmentWatcher);
-    await preview.document.getByRole("link", { name: "Jump to section" }).click();
-    await expect(preview.document.getByRole("heading", { name: "Section" })).toBeInViewport();
-    expect(fragmentTabOpened).toBe(false);
-    page.context().off("page", fragmentWatcher);
-
-    let handledTabOpened = false;
-    const handledWatcher = () => {
-      handledTabOpened = true;
-    };
-    page.context().on("page", handledWatcher);
-    await preview.document.getByRole("link", { name: "Handled link" }).click();
-    await page.waitForTimeout(500);
-    expect(handledTabOpened).toBe(false);
-    page.context().off("page", handledWatcher);
   });
 
   test("isolates HTML plans from the app origin and storage", async ({ page, withWorkspace }) => {
