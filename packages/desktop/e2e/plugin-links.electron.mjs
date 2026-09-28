@@ -70,22 +70,18 @@ export async function runPluginLinksRegression({
   await expect(
     page.getByRole("button", { name: "Old documentation workaround", exact: true }),
   ).toBeVisible({ timeout: 60_000 });
-  const oldPopup = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Old documentation workaround", exact: true }).click();
-  const popup = await oldPopup;
-  await popup.waitForLoadState();
-  await popup.screenshot({ path: path.join(artifactDir, "plugin-old-popup.png") });
-  await popup.close();
-
   const popups = [];
   page.on("popup", (openedPopup) => popups.push(openedPopup));
+  // The app window sends every popup to the system browser, so the old
+  // window.open() workaround opens externally like openExternalUrl.
+  await page.getByRole("button", { name: "Old documentation workaround", exact: true }).click();
   await page.getByRole("button", { name: "Open externally", exact: true }).click();
   await expect(page.getByText("Opened externally", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Documentation link", exact: true }).click();
   if (externalOpenLog) {
     await expect
       .poll(() => fs.readFileSync(externalOpenLog, "utf8").trim().split("\n"))
-      .toEqual([url, url]);
+      .toEqual([url, url, url]);
   }
   await expect(page.getByText("Browser available", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Open workspace browser", exact: true }).click();
@@ -100,7 +96,7 @@ export async function runPluginLinksRegression({
   await page.screenshot({ path: path.join(artifactDir, "plugin-remote-workspace-browser.png") });
   return {
     remoteWorkspaceId,
-    oldWorkaroundOpenedPopup: true,
+    oldWorkaroundOpenedExternally: true,
     newExternalPopups: popups.length,
     workspaceId,
     url,
