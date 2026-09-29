@@ -1,20 +1,35 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { withPreviewCsp } from "./html-preview-csp";
+import { withPreviewCspWeb } from "./html-preview-csp";
 
-// `allow-scripts` alone: the file gets an opaque origin, so a plan page can run
-// its own scripts (Excalidraw, charts) but cannot reach the Paseo app's DOM,
-// cookies, or storage, and cannot navigate the top window. Agent-written HTML is
-// not trusted markup. No popup tokens — a preview is a viewer, not a browser, and
-// escaping the sandbox to open one buys nothing for reading a local plan. The same
-// isolation means storage APIs throw inside the frame; pages that want to persist
-// state have to export.
+// The frame runs a page the way a browser tab would, minus the Paseo app's
+// privileges. It never gets `allow-same-origin`: a srcdoc frame with that token
+// takes the app's origin, and with it the daemon session. The page stays in an
+// opaque origin that cannot reach the app's DOM, cookies, or storage (storage APIs
+// throw inside it). It never gets `allow-top-navigation*`, so it cannot replace the
+// app with a page of its own.
 //
-// A sandboxed frame may still navigate *itself*, and nothing in CSP stops that
-// (see html-preview-csp.ts). That is the one hole left on web, it is bounded to
-// the page's own contents, and it is documented in SECURITY.md rather than papered
-// over with a directive browsers ignore.
-const SANDBOX = "allow-scripts";
+// Everything else a web app needs is on. Without `allow-forms` a form's submit
+// event never fires, which breaks every framework's onSubmit. Dialogs, downloads
+// (a page exports its state that way), and popups work. `allow-popups-to-escape-sandbox`
+// makes a target="_blank" link open an ordinary tab instead of one that inherits
+// this sandbox. On desktop, main.ts hands those popups to the system browser. A
+// plain link with no target also opens in a new tab, like a chat link, instead of
+// replacing the preview — see the click interceptor in html-preview-csp.ts.
+// Clipboard writes and fullscreen are delegated so copy buttons and fullscreen
+// charts work.
+//
+// Which hosts the page can reach is the CSP's job (html-preview-csp.ts).
+const SANDBOX = [
+  "allow-scripts",
+  "allow-forms",
+  "allow-modals",
+  "allow-downloads",
+  "allow-popups",
+  "allow-popups-to-escape-sandbox",
+].join(" ");
+
+const PERMISSIONS = "clipboard-write; fullscreen";
 
 const iframeStyle = {
   flex: 1,
@@ -25,13 +40,14 @@ const iframeStyle = {
 
 export function FileHtmlPreview({ html, testID }: { html: string; testID?: string }) {
   const { t } = useTranslation();
-  const document = useMemo(() => withPreviewCsp(html), [html]);
+  const document = useMemo(() => withPreviewCspWeb(html), [html]);
   return (
     <iframe
       data-testid={testID}
       title={t("panels.file.editor.preview")}
       srcDoc={document}
       sandbox={SANDBOX}
+      allow={PERMISSIONS}
       referrerPolicy="no-referrer"
       style={iframeStyle}
     />

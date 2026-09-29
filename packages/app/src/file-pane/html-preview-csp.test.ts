@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { withPreviewCsp } from "@/file-pane/html-preview-csp";
 
+function previewPolicy(document: string): Map<string, string[]> {
+  const content = /<meta http-equiv="Content-Security-Policy" content="([^"]*)">/.exec(document);
+  if (!content) throw new Error("The preview document carries no policy.");
+  return new Map(
+    content[1].split(";").map((directive) => {
+      const [name, ...sources] = directive.trim().split(/\s+/);
+      return [name, sources];
+    }),
+  );
+}
+
 describe("withPreviewCsp", () => {
   it("places the policy before the complete source document", () => {
     const source =
@@ -25,20 +36,30 @@ describe("withPreviewCsp", () => {
     expect(output).toContain("<!doctype html><h1>Plan</h1>");
   });
 
-  it("refuses remote resources while allowing inline scripts and styles", () => {
-    const document = withPreviewCsp("<h1>Plan</h1>");
+  it("lets a page load and call HTTPS hosts", () => {
+    const policy = previewPolicy(withPreviewCsp("<h1>Plan</h1>"));
 
-    expect(document).toContain("default-src 'none'");
-    expect(document).toContain("connect-src 'none'");
-    expect(document).toContain("form-action 'none'");
-    expect(document).toContain("base-uri 'none'");
-    expect(document).toContain("frame-src 'none'");
-    expect(document).toContain("object-src 'none'");
-    expect(document).toContain("script-src 'unsafe-inline'");
-    expect(document).toContain("style-src 'unsafe-inline'");
-    expect(document).not.toMatch(/script-src[^;]*https:/);
-    expect(document).not.toMatch(/img-src[^;]*https:/);
-    expect(document).not.toMatch(/connect-src[^;]*https:/);
+    expect(policy.get("script-src")).toEqual(
+      expect.arrayContaining(["'unsafe-inline'", "'unsafe-eval'", "https:"]),
+    );
+    expect(policy.get("style-src")).toEqual(expect.arrayContaining(["'unsafe-inline'", "https:"]));
+    for (const directive of ["img-src", "font-src", "media-src", "frame-src", "form-action"]) {
+      expect(policy.get(directive)).toContain("https:");
+    }
+    expect(policy.get("connect-src")).toEqual(expect.arrayContaining(["https:", "wss:"]));
+  });
+
+  it("keeps plaintext hosts, base rewrites, and plugins out", () => {
+    const policy = previewPolicy(withPreviewCsp("<h1>Plan</h1>"));
+
+    expect(policy.get("default-src")).toEqual(["'none'"]);
+    expect(policy.get("base-uri")).toEqual(["'none'"]);
+    expect(policy.get("object-src")).toEqual(["'none'"]);
+    for (const [directive, sources] of policy) {
+      for (const source of sources) {
+        expect(`${directive} ${source}`).not.toMatch(/ (http|ws):$|\*|localhost|127\.0\.0\.1/);
+      }
+    }
   });
 
   it("handles pathological source without parsing it", () => {

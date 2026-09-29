@@ -23,7 +23,12 @@ const BLUE_PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
-const BLOCKED_PREVIEW_URL = "https://html-preview.invalid/leak";
+const PREVIEW_CDN_URL = "https://cdn.html-preview.test/app.js";
+const PREVIEW_API_URL = "https://api.html-preview.test/status";
+const PREVIEW_LINK_URL = "https://mockup.html-preview.test/";
+const PREVIEW_HANDLED_LINK_URL = "https://handled.html-preview.test/";
+const PREVIEW_WINDOW_HANDLED_LINK_URL = "https://window-handled.html-preview.test/";
+const PLAINTEXT_PREVIEW_URL = "http://plaintext.html-preview.test/leak";
 
 interface LinkedFile {
   target: string;
@@ -609,7 +614,9 @@ test.describe("CodeMirror workspace file editing", () => {
     const preview = htmlPreview(page);
     await expect(preview.host).toBeVisible();
     await expect(preview.host).toHaveAttribute("sandbox", /allow-scripts/);
+    await expect(preview.host).toHaveAttribute("sandbox", /allow-popups-to-escape-sandbox/);
     await expect(preview.host).not.toHaveAttribute("sandbox", /allow-same-origin/);
+    await expect(preview.host).not.toHaveAttribute("sandbox", /allow-top-navigation/);
     await expect(preview.document.getByRole("heading", { name: "Visual plan" })).toBeVisible();
 
     await writeFile(
@@ -626,31 +633,65 @@ test.describe("CodeMirror workspace file editing", () => {
     await expect(preview.host).toBeVisible();
   });
 
-  test("runs inline scripts without allowing fetch egress", async ({ page, withWorkspace }) => {
+  test("runs a web app from HTTPS hosts and keeps plaintext hosts out", async ({
+    page,
+    withWorkspace,
+  }) => {
     test.setTimeout(90_000);
     const workspace = await withWorkspace({ prefix: "file-editing-html-csp-" });
+    await page.route(PREVIEW_CDN_URL, (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: 'document.getElementById("cdn-result").textContent = "CDN script ran";',
+      }),
+    );
+    await page.route(PREVIEW_API_URL, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ status: "HTTPS fetch answered" }),
+      }),
+    );
+    await page.route(PLAINTEXT_PREVIEW_URL, (route) =>
+      route.fulfill({
+        contentType: "text/plain",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: "reached",
+      }),
+    );
     await writeFile(
       path.join(workspace.repoPath, "probe.html"),
-      `<!doctype html><html><head><title>probe</title></head><body>
+      `<!doctype html><html><head><title>probe</title>
+<script src="${PREVIEW_CDN_URL}" defer></script></head><body>
 <h1 id="script-result">Inline script did not run</h1>
-<p id="network-result">Network request not attempted</p>
+<p id="cdn-result">CDN script did not run</p>
+<p id="api-result">HTTPS fetch not attempted</p>
+<p id="plaintext-result">Plaintext fetch not attempted</p>
 <p id="document-mode">Standards mode not detected</p>
+<form id="form"><button type="submit">Send</button></form>
+<p id="form-result">Form not submitted</p>
 <script>
-  document.getElementById("script-result").textContent = "Inline script ran";
-  if (document.compatMode === "CSS1Compat") {
-    document.getElementById("document-mode").textContent = "Standards mode enabled";
-  }
-  var networkResult = document.getElementById("network-result");
-  fetch("${BLOCKED_PREVIEW_URL}", { method: "POST", body: "repo-content" })
-    .then(function () { networkResult.textContent = "Network request allowed"; })
-    .catch(function () { networkResult.textContent = "Network request blocked"; });
+  function show(id, text) { document.getElementById(id).textContent = text; }
+  show("script-result", "Inline script ran");
+  if (document.compatMode === "CSS1Compat") show("document-mode", "Standards mode enabled");
+  document.getElementById("form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    show("form-result", "Form submitted");
+  });
+  fetch("${PREVIEW_API_URL}")
+    .then(function (response) { return response.json(); })
+    .then(function (body) { show("api-result", body.status); })
+    .catch(function () { show("api-result", "HTTPS fetch blocked"); });
+  fetch("${PLAINTEXT_PREVIEW_URL}", { method: "POST", body: "repo-content" })
+    .then(function () { show("plaintext-result", "Plaintext fetch allowed"); })
+    .catch(function () { show("plaintext-result", "Plaintext fetch blocked"); });
 </script>
 </body></html>`,
       "utf8",
     );
     await workspace.navigateTo();
 
-    const blockedRequests = watchRequestsTo(page, BLOCKED_PREVIEW_URL);
+    const plaintextRequests = watchRequestsTo(page, PLAINTEXT_PREVIEW_URL);
 
     await openWorkspaceFile(page, "probe.html");
 
@@ -661,10 +702,114 @@ test.describe("CodeMirror workspace file editing", () => {
     await expect(
       preview.document.getByText("Standards mode enabled", { exact: true }),
     ).toBeVisible();
+    await expect(preview.document.getByText("CDN script ran", { exact: true })).toBeVisible();
+    await expect(preview.document.getByText("HTTPS fetch answered", { exact: true })).toBeVisible();
     await expect(
-      preview.document.getByText("Network request blocked", { exact: true }),
+      preview.document.getByText("Plaintext fetch blocked", { exact: true }),
     ).toBeVisible();
-    expect(blockedRequests).toEqual([]);
+    expect(plaintextRequests).toEqual([]);
+
+    await preview.document.getByRole("button", { name: "Send" }).click();
+    await expect(preview.document.getByText("Form submitted", { exact: true })).toBeVisible();
+  });
+
+  test("opens a link from an HTML plan in a new tab", async ({ page, withWorkspace }) => {
+    test.setTimeout(90_000);
+    const workspace = await withWorkspace({ prefix: "file-editing-html-link-" });
+    await page.context().route(PREVIEW_LINK_URL, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><title>Mockup row</title><h1>Mockup row</h1>",
+      }),
+    );
+    await writeFile(
+      path.join(workspace.repoPath, "links.html"),
+      `<!doctype html><html><body>
+<a href="${PREVIEW_LINK_URL}" target="_blank" rel="noreferrer noopener">Open mockup row</a>
+</body></html>`,
+      "utf8",
+    );
+    await workspace.navigateTo();
+    await openWorkspaceFile(page, "links.html");
+
+    const preview = htmlPreview(page);
+    const tabOpened = page.context().waitForEvent("page");
+    await preview.document.getByRole("link", { name: "Open mockup row" }).click();
+    const tab = await tabOpened;
+
+    await expect(tab).toHaveURL(PREVIEW_LINK_URL);
+    await expect(tab.getByRole("heading", { name: "Mockup row" })).toBeVisible();
+    await expect(page.getByTestId("file-html-preview")).toBeVisible();
+    await tab.close();
+  });
+
+  test("opens a plain link from an HTML plan in a new tab and leaves the rest alone", async ({
+    page,
+    withWorkspace,
+  }) => {
+    test.setTimeout(90_000);
+    const workspace = await withWorkspace({ prefix: "file-editing-html-plain-link-" });
+    await page.context().route(PREVIEW_LINK_URL, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><title>Mockup row</title><h1>Mockup row</h1>",
+      }),
+    );
+    await page.context().route(PREVIEW_HANDLED_LINK_URL, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><title>Handled row</title><h1>Handled row</h1>",
+      }),
+    );
+    await page.context().route(PREVIEW_WINDOW_HANDLED_LINK_URL, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><title>Window handled row</title><h1>Window handled row</h1>",
+      }),
+    );
+    await writeFile(
+      path.join(workspace.repoPath, "plain-links.html"),
+      `<!doctype html><html><body>
+<h1>Plain links plan</h1>
+<a href="${PREVIEW_LINK_URL}">Open mockup row</a>
+<a href="#section" id="fragment-link">Jump to section</a>
+<a href="${PREVIEW_HANDLED_LINK_URL}" id="handled-link" onclick="event.preventDefault()">Handled link</a>
+<a href="${PREVIEW_WINDOW_HANDLED_LINK_URL}" id="window-handled-link">Window handled link</a>
+<h2 id="section">Section</h2>
+<script>
+  window.addEventListener("click", function (event) {
+    if (event.target && event.target.id === "window-handled-link") event.preventDefault();
+  });
+</script>
+</body></html>`,
+      "utf8",
+    );
+    await workspace.navigateTo();
+    await openWorkspaceFile(page, "plain-links.html");
+
+    const preview = htmlPreview(page);
+    await expect(preview.document.getByRole("heading", { name: "Plain links plan" })).toBeVisible();
+
+    const openedTabs: Page[] = [];
+    page.context().on("page", (opened) => {
+      openedTabs.push(opened);
+    });
+
+    await preview.document.getByRole("link", { name: "Handled link", exact: true }).click();
+    await preview.document.getByRole("link", { name: "Window handled link" }).click();
+    await preview.document.getByRole("link", { name: "Jump to section" }).click();
+    await expect(preview.document.getByRole("heading", { name: "Section" })).toBeInViewport();
+    await expect(preview.document.getByRole("heading", { name: "Plain links plan" })).toBeVisible();
+
+    const tabOpened = page.context().waitForEvent("page");
+    await preview.document.getByRole("link", { name: "Open mockup row" }).click();
+    const tab = await tabOpened;
+    await expect(tab).toHaveURL(PREVIEW_LINK_URL);
+    await expect(tab.getByRole("heading", { name: "Mockup row" })).toBeVisible();
+
+    expect(openedTabs).toHaveLength(1);
+    expect(openedTabs[0]).toBe(tab);
+    await tab.close();
   });
 
   test("isolates HTML plans from the app origin and storage", async ({ page, withWorkspace }) => {

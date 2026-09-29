@@ -19,3 +19,17 @@ export function createExternalUrlOpener(owner: ExternalUrlOwner) {
     return owner.open(url.href);
   };
 }
+
+// A frame inside the app window, such as the HTML file preview, can open a popup.
+// It never becomes an Electron window. A web URL opens in the system browser, like
+// every other link in the app, and anything else is dropped.
+export function createAppWindowOpenHandler(
+  owner: ExternalUrlOwner,
+  onOpenFailed: (error: unknown) => void,
+) {
+  return ({ url }: { url: string }): { action: "deny" } => {
+    const external = asExternalUrl(url);
+    if (external !== undefined) owner.open(external.href).catch(onOpenFailed);
+    return { action: "deny" };
+  };
+}

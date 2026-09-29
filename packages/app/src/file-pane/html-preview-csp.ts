@@ -1,28 +1,27 @@
-// A preview renders a self-contained document and nothing else. Inline styles and
-// scripts run so a plan page keeps its layout and its diagrams; fetch, XHR,
-// WebSocket, beacon, remote script, remote font, remote image, and form posts are
-// all refused. Agent-written HTML is not trusted markup.
+// A preview runs a web app: React from a CDN, Tailwind, Google Fonts, a chart
+// library, a fetch to an API. Every resource the page loads or calls must be HTTPS
+// (or inline, data:, blob:). Plaintext `http:` and `ws:` are refused. That is where
+// localhost and LAN services live, the Paseo daemon among them, and a page opened
+// from a cloned repo must not reach them. Mixed-content blocking does not cover
+// this: browsers treat localhost as a secure context.
 //
-// What this does NOT stop: the document navigating itself. No CSP directive
-// available in current browsers prevents it — `navigate-to` was dropped from CSP3
-// and is unenforced, and `<meta http-equiv="refresh">` needs no script at all
-// (both verified against the Chromium this app ships against). So a hostile page
-// can still reach a server by navigating, carrying data available inside the
-// preview. The opaque origin is what bounds the damage: the frame has no storage,
-// no parent access, and no way to read any file but itself. Native narrows it
-// further in html-preview.tsx, because a WebView can refuse navigation outside CSP — see the
-// caveat there on why that is a mitigation rather than a guarantee.
+// The CSP does not contain what the page can send out. A page can navigate itself
+// anywhere (`navigate-to` was dropped from CSP3, and `<meta http-equiv="refresh">`
+// needs no script), and it can fetch any HTTPS host. What bounds it is the opaque
+// origin: the frame has no storage, no parent access, and no way to read any file
+// but itself, so it can only disclose what it already contains. Native refuses
+// navigation after the initial document in html-preview.tsx.
 const POLICY = [
   "default-src 'none'",
-  "script-src 'unsafe-inline' 'unsafe-eval' blob:",
-  "style-src 'unsafe-inline'",
-  "img-src data: blob:",
-  "font-src data:",
-  "media-src data: blob:",
-  "connect-src 'none'",
-  "form-action 'none'",
+  "script-src 'unsafe-inline' 'unsafe-eval' data: blob: https:",
+  "style-src 'unsafe-inline' https:",
+  "img-src data: blob: https:",
+  "font-src data: https:",
+  "media-src data: blob: https:",
+  "connect-src data: blob: https: wss:",
+  "frame-src https:",
+  "form-action https:",
   "base-uri 'none'",
-  "frame-src 'none'",
   "object-src 'none'",
 ].join("; ");
 
@@ -47,9 +46,107 @@ const META = `<meta http-equiv="Content-Security-Policy" content="${POLICY}">`;
 // document has to be parsed to place it.
 const PROLOGUE = `<!doctype html>${META}`;
 
+// Web only: a plain link (no target, like a chat link) should open in a new tab
+// instead of replacing the preview frame, and a #fragment link should scroll
+// within the page instead of navigating away. The listener runs on window in the
+// bubble phase, after the page's own handlers, and only acts when nothing else
+// already claimed the click. A fragment href resolves against the embedding app
+// URL inside a srcdoc frame, not about:srcdoc, so the default click would load the
+// app shell into the preview frame; setting location.hash instead keeps the
+// frame on its own document. Native keeps its navigation guard unchanged, this
+// script never ships to the WebView document.
+//
+// A page that registers its own window click handler after this script runs
+// would otherwise see it first, so its preventDefault could never reach this
+// handler's defaultPrevented guard. Re-adding the handler moves it to the end
+// of window's click listener list, so any handler the page attached earlier
+// always runs first and this one always sees the outcome. For a pointer, the
+// re-append is deferred with setTimeout from the pointerdown capture listener:
+// pointerdown and the click it leads to are separate input tasks, so the timer
+// runs after every pointerdown listener, including one that registers a click
+// handler, and still before the click. For a keyboard activation the re-append
+// on keydown capture must stay synchronous, because Enter synthesizes the
+// click inside keydown's own default action, after which a timer would run too
+// late. A page that registers its window click handler from inside its own
+// keydown handler still runs after this one on keyboard activation.
+//
+// Everything runs inside an IIFE so the page never sees paseoPreviewLinkClick
+// or paseoRebindPreviewLinkClick as globals it could define or reassign.
+const OPEN_LINKS_SCRIPT = `<script>
+(function () {
+function paseoPreviewLinkClick(event) {
+  if (event.defaultPrevented) return;
+  if (event.button !== 0) return;
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+
+  var path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  var link = null;
+  for (var i = 0; i < path.length; i++) {
+    var node = path[i];
+    if (node && node.tagName && (node.tagName === "A" || node.tagName === "AREA") && node.hasAttribute("href")) {
+      link = node;
+      break;
+    }
+  }
+  if (!link) return;
+
+  var target = link.getAttribute("target");
+  if (target && target !== "_self") return;
+  if (link.hasAttribute("download")) return;
+
+  var rawHref = link.getAttribute("href") || "";
+  if (rawHref.indexOf("#") === 0) {
+    event.preventDefault();
+    location.hash = rawHref;
+    return;
+  }
+
+  var url;
+  try {
+    url = new URL(link.href, document.baseURI);
+  } catch (error) {
+    return;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return;
+
+  event.preventDefault();
+  window.open(url.href, "_blank", "noopener,noreferrer");
+}
+
+function paseoRebindPreviewLinkClick() {
+  window.removeEventListener("click", paseoPreviewLinkClick);
+  window.addEventListener("click", paseoPreviewLinkClick);
+}
+
+window.addEventListener("click", paseoPreviewLinkClick);
+window.addEventListener(
+  "pointerdown",
+  function () {
+    setTimeout(paseoRebindPreviewLinkClick, 0);
+  },
+  true,
+);
+window.addEventListener("keydown", paseoRebindPreviewLinkClick, true);
+window.addEventListener("load", paseoRebindPreviewLinkClick);
+})();
+</script>`;
+
+const PROLOGUE_WEB = `<!doctype html>${META}${OPEN_LINKS_SCRIPT}`;
+
 // Left where it is, a BOM would sit mid-document and render as a zero-width space.
 const BOM = "\uFEFF";
 
+function stripBom(html: string): string {
+  return html.startsWith(BOM) ? html.slice(BOM.length) : html;
+}
+
 export function withPreviewCsp(html: string): string {
-  return PROLOGUE + (html.startsWith(BOM) ? html.slice(BOM.length) : html);
+  return PROLOGUE + stripBom(html);
+}
+
+// Same supplied-prologue document as withPreviewCsp, plus the click interceptor
+// above. The CSP meta stays the first element in <head> and standards mode stays
+// guaranteed; only web preview frames get this variant.
+export function withPreviewCspWeb(html: string): string {
+  return PROLOGUE_WEB + stripBom(html);
 }

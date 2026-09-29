@@ -4,17 +4,15 @@ import { WebView } from "react-native-webview";
 import { withPreviewCsp } from "./html-preview-csp";
 import { htmlPreviewNavigationKind } from "./html-preview-navigation";
 
-// A preview is a viewer, not a browser. Only the document Paseo hands the WebView
-// loads; navigations the page attempts afterwards are refused, so a link, a
-// `location.href` assignment, or a meta refresh cannot pull a remote page into the
-// pane or leak the file through a URL. Storage and cache stay off so a page leaves
+// Only the document Paseo hands the WebView loads into the pane. The page may load
+// HTTPS resources (see html-preview-csp.ts), but navigations it attempts afterwards
+// are refused, so a link, a `location.href` assignment, or a meta refresh cannot
+// replace the pane with a remote page. Storage and cache stay off so a page leaves
 // nothing behind between opens.
 //
-// This guard is not absolute, and SECURITY.md says so rather than implying
-// otherwise: the decision runs in app JS, and Android's WebView allows a
-// navigation whose decision doesn't return in time. A stalled JS thread is
-// therefore a window, which is why the CSP does the load-bearing work and this
-// guard narrows what's left.
+// This guard is not absolute, and SECURITY.md says so: the decision runs in app
+// JS, and Android's WebView allows a navigation whose decision doesn't return in
+// time. A stalled JS thread is therefore a window.
 //
 // `originWhitelist: ["*"]` is what makes that guarantee hold. react-native-webview
 // checks the whitelist *before* calling onShouldStartLoadWithRequest and hands
