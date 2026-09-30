@@ -18,6 +18,8 @@ import { filePreviewRenderKind } from "@/components/file-pane-render-mode";
 import { useAttachmentPreviewUrl } from "@/attachments/use-attachment-preview-url";
 import { getFileNameFromPath } from "@/attachments/utils";
 import { resolveFilePreviewReadTarget } from "@/file-explorer/preview-target";
+import { PDF_MIME_TYPE } from "@/file-explorer/read-result";
+import type { AttachmentMetadata } from "@/attachments/types";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
@@ -297,11 +299,11 @@ export function FilePane({
   useEffect(() => setPreviewMode("preview"), [targetKey]);
 
   const { file: preview, attachment } = resolveFilePreviewLifecycle(previewLifecycle);
-  const resolvedPreviewUri = useAttachmentPreviewUrl(attachment);
-  const attachmentPreviewUri =
-    preview?.kind === "pdf" && attachment?.mimeType !== "application/pdf"
-      ? null
-      : resolvedPreviewUri;
+  const attachmentPreviewUri = previewUriForFile(
+    preview,
+    attachment,
+    useAttachmentPreviewUrl(attachment),
+  );
   const isRenderable = isRenderablePreview(preview, location.path);
   const editable = isEditableTextFile({
     preview,
@@ -340,6 +342,15 @@ export function FilePane({
       attachmentPreviewUri={attachmentPreviewUri}
     />
   );
+}
+
+// The PDF frame is unsandboxed, so it only ever gets a URL for bytes stored as a PDF.
+function previewUriForFile(
+  preview: ExplorerFile | null,
+  attachment: AttachmentMetadata | null,
+  uri: string | null,
+): string | null {
+  return preview?.kind === "pdf" && attachment?.mimeType !== PDF_MIME_TYPE ? null : uri;
 }
 
 function isRenderablePreview(preview: ExplorerFile | null, path: string): boolean {
