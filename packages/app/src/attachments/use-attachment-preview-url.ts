@@ -3,10 +3,18 @@ import type { AttachmentMetadata } from "@/attachments/types";
 import { releaseAttachmentPreviewUrl, resolveAttachmentPreviewUrl } from "@/attachments/service";
 
 export function attachmentPreviewIdentity(
-  attachment: Pick<AttachmentMetadata, "id" | "storageType" | "storageKey" | "mimeType"> | null | undefined,
+  attachment:
+    | Pick<AttachmentMetadata, "id" | "storageType" | "storageKey" | "mimeType">
+    | null
+    | undefined,
 ): string | null {
   return attachment
-    ? JSON.stringify([attachment.id, attachment.storageType, attachment.storageKey, attachment.mimeType])
+    ? JSON.stringify([
+        attachment.id,
+        attachment.storageType,
+        attachment.storageKey,
+        attachment.mimeType,
+      ])
     : null;
 }
 

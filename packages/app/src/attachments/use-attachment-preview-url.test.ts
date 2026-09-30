@@ -26,7 +26,9 @@ describe("pairedPreviewUrl", () => {
     const resolved = { identity: attachmentPreviewIdentity(svg)!, url: "blob:svg" };
 
     expect(pairedPreviewUrl(resolved, attachmentPreviewIdentity(pdf))).toBeNull();
-    expect(pairedPreviewUrl(resolved, attachmentPreviewIdentity({ ...svg, id: "preview_2" }))).toBeNull();
+    expect(
+      pairedPreviewUrl(resolved, attachmentPreviewIdentity({ ...svg, id: "preview_2" })),
+    ).toBeNull();
     expect(pairedPreviewUrl(resolved, attachmentPreviewIdentity(null))).toBeNull();
   });
 });

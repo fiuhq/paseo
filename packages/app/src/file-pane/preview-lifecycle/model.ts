@@ -1,7 +1,11 @@
 import type { FileReadResult } from "@getpaseo/client/internal/daemon-client";
 import type { AttachmentMetadata } from "@/attachments/types";
 import { persistAttachmentFromBytes } from "@/attachments/service";
-import { createPreviewAttachmentId, fingerprintBytes, getFileNameFromPath } from "@/attachments/utils";
+import {
+  createPreviewAttachmentId,
+  fingerprintBytes,
+  getFileNameFromPath,
+} from "@/attachments/utils";
 import { explorerFileFromReadResult } from "@/file-explorer/read-result";
 import type { ExplorerFile } from "@/stores/session-store";
 import type { LiveFileSnapshot } from "../live-file/model";
