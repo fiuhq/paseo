@@ -14,7 +14,7 @@ export function pairedPreviewUrl(
   resolved: { identity: string; url: string } | null,
   identity: string | null,
 ): string | null {
-  return pairedPreviewUrl(resolved, identity);
+  return resolved && resolved.identity === identity ? resolved.url : null;
 }
 
 export function useAttachmentPreviewUrl(
