@@ -230,7 +230,7 @@ function preserveMapIdentity<Key, Value>(
 }
 
 export type ExplorerEntryKind = "file" | "directory";
-export type ExplorerFileKind = "text" | "image" | "binary";
+export type ExplorerFileKind = "text" | "image" | "pdf" | "binary";
 export type ExplorerEncoding = "utf-8" | "base64" | "none";
 
 export interface ExplorerEntry {

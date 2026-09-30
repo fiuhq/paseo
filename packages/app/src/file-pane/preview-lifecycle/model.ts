@@ -8,7 +8,8 @@ import type { LiveFileSnapshot } from "../live-file/model";
 
 export interface FilePanePreview {
   file: ExplorerFile;
-  imageAttachment: AttachmentMetadata | null;
+  /** The bytes of an image or PDF, stored so the pane can hand the viewer a URL. */
+  attachment: AttachmentMetadata | null;
 }
 
 export type FilePreviewLifecycleSnapshot =
@@ -24,24 +25,27 @@ const initialSnapshot: FilePreviewLifecycleSnapshot = { status: "initial" };
 /** Converts a completed raw read into the preview resources consumed by FilePane. */
 export async function createFilePanePreview(file: FileReadResult): Promise<FilePanePreview | null> {
   const explorerFile = explorerFileFromReadResult(file);
-  if (file.kind !== "image") {
-    return { file: explorerFile, imageAttachment: null };
+  if (explorerFile.kind !== "image" && explorerFile.kind !== "pdf") {
+    return { file: explorerFile, attachment: null };
   }
 
-  const imageAttachment = await persistAttachmentFromBytes({
+  // The viewer picks its renderer from this type, so it comes from the classified
+  // file: a PDF read from an older daemon arrives as application/octet-stream.
+  const mimeType = explorerFile.mimeType ?? file.mime;
+  const attachment = await persistAttachmentFromBytes({
     id: createPreviewAttachmentId({
-      mimeType: file.mime,
+      mimeType,
       path: file.path,
       size: file.size,
       modifiedAt: file.modifiedAt,
       contentLength: file.bytes.byteLength,
     }),
     bytes: file.bytes,
-    mimeType: file.mime,
+    mimeType,
     fileName: getFileNameFromPath(file.path),
   });
 
-  return { file: explorerFile, imageAttachment };
+  return { file: explorerFile, attachment };
 }
 
 /** Owns conversion after LiveFileModel has produced a raw file snapshot. */
@@ -135,10 +139,10 @@ export function filePreviewFromLifecycle(
 
 export function resolveFilePreviewLifecycle(snapshot: FilePreviewLifecycleSnapshot): {
   file: ExplorerFile | null;
-  imageAttachment: AttachmentMetadata | null;
+  attachment: AttachmentMetadata | null;
 } {
   const preview = filePreviewFromLifecycle(snapshot);
-  return preview ?? { file: null, imageAttachment: null };
+  return preview ?? { file: null, attachment: null };
 }
 
 function getReadySource(input: {

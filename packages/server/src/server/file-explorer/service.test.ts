@@ -213,6 +213,31 @@ describe("file explorer service", () => {
     }
   });
 
+  it("reports a .pdf file as an application/pdf binary even when its bytes are ASCII", async () => {
+    const root = await createTempDir("paseo-file-explorer-");
+
+    try {
+      await writeFile(path.join(root, "doc.pdf"), "%PDF-1.4\n%%EOF\n");
+
+      const read = await readExplorerFile({ root, relativePath: "doc.pdf" });
+      let streamed: { kind: string; mimeType: string } | null = null;
+      await streamExplorerFile({ root, relativePath: "doc.pdf" }, async (file) => {
+        streamed = { kind: file.kind, mimeType: file.mimeType };
+        for await (const _chunk of file.chunks) {
+          // Drain the stream so the transfer completes.
+        }
+      });
+
+      expect({ kind: read.kind, mimeType: read.mimeType }).toEqual({
+        kind: "binary",
+        mimeType: "application/pdf",
+      });
+      expect(streamed).toEqual({ kind: "binary", mimeType: "application/pdf" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("fails a stream when the file grows after its revision is advertised", async () => {
     const root = await createTempDir("paseo-file-stream-growth-");
 
