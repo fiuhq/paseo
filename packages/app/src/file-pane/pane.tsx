@@ -18,6 +18,8 @@ import { filePreviewRenderKind } from "@/components/file-pane-render-mode";
 import { useAttachmentPreviewUrl } from "@/attachments/use-attachment-preview-url";
 import { getFileNameFromPath } from "@/attachments/utils";
 import { resolveFilePreviewReadTarget } from "@/file-explorer/preview-target";
+import { PDF_MIME_TYPE } from "@/file-explorer/read-result";
+import type { AttachmentMetadata } from "@/attachments/types";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
@@ -29,6 +31,7 @@ import { useFilePreview } from "./preview-lifecycle/hook";
 import { resolveFilePreviewLifecycle } from "./preview-lifecycle/model";
 import { FilePanelBar } from "./bar";
 import { FileHtmlPreview } from "./html-preview";
+import { FilePdfPreview } from "./pdf-preview";
 import { FileMarkdownPreview } from "./markdown-preview";
 import { FileEditorModel, getFileConflictCallout, type FileConflictCallout } from "./editor/model";
 import { createFileObservationSource } from "./editor/observation-source";
@@ -53,7 +56,7 @@ interface FilePreviewBodyProps {
   isMobile: boolean;
   location: WorkspaceFileLocation;
   navigationRevision: number;
-  imagePreviewUri: string | null;
+  attachmentPreviewUri: string | null;
 }
 
 type TextExplorerFile = ExplorerFile & { kind: "text" };
@@ -134,7 +137,7 @@ function FilePreviewBody({
   isMobile: _isMobile,
   location,
   navigationRevision,
-  imagePreviewUri,
+  attachmentPreviewUri,
 }: FilePreviewBodyProps) {
   const { t } = useTranslation();
   const filePath = location.path;
@@ -198,23 +201,40 @@ function FilePreviewBody({
     );
   }
 
-  if (preview.kind === "image") {
-    if (!imagePreviewUri) {
-      return (
-        <View style={styles.centerState}>
-          <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />
-          <Text style={styles.loadingText}>{t("panels.file.loading")}</Text>
-        </View>
-      );
+  if (preview.kind === "pdf" && FilePdfPreview) {
+    if (!attachmentPreviewUri) {
+      return <PreviewLoading />;
     }
 
-    return <ZoomableImage uri={imagePreviewUri} testID="image-file-preview" />;
+    return (
+      <View style={styles.previewScrollContainer}>
+        <FilePdfPreview uri={attachmentPreviewUri} testID="pdf-file-preview" />
+      </View>
+    );
+  }
+
+  if (preview.kind === "image") {
+    if (!attachmentPreviewUri) {
+      return <PreviewLoading />;
+    }
+
+    return <ZoomableImage uri={attachmentPreviewUri} testID="image-file-preview" />;
   }
 
   return (
     <View style={styles.centerState}>
       <Text style={styles.emptyText}>{t("panels.file.binaryPreviewUnavailable")}</Text>
       <Text style={styles.binaryMetaText}>{formatFileSize({ size: preview.size })}</Text>
+    </View>
+  );
+}
+
+function PreviewLoading() {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.centerState}>
+      <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />
+      <Text style={styles.loadingText}>{t("panels.file.loading")}</Text>
     </View>
   );
 }
@@ -278,8 +298,12 @@ export function FilePane({
 
   useEffect(() => setPreviewMode("preview"), [targetKey]);
 
-  const { file: preview, imageAttachment } = resolveFilePreviewLifecycle(previewLifecycle);
-  const imagePreviewUri = useAttachmentPreviewUrl(imageAttachment);
+  const { file: preview, attachment } = resolveFilePreviewLifecycle(previewLifecycle);
+  const attachmentPreviewUri = previewUriForFile(
+    preview,
+    attachment,
+    useAttachmentPreviewUrl(attachment),
+  );
   const isRenderable = isRenderablePreview(preview, location.path);
   const editable = isEditableTextFile({
     preview,
@@ -315,9 +339,18 @@ export function FilePane({
       isMobile={isMobile}
       location={location}
       navigationRevision={navigationRevision}
-      imagePreviewUri={imagePreviewUri}
+      attachmentPreviewUri={attachmentPreviewUri}
     />
   );
+}
+
+// The PDF frame is unsandboxed, so it only ever gets a URL for bytes stored as a PDF.
+function previewUriForFile(
+  preview: ExplorerFile | null,
+  attachment: AttachmentMetadata | null,
+  uri: string | null,
+): string | null {
+  return preview?.kind === "pdf" && attachment?.mimeType !== PDF_MIME_TYPE ? null : uri;
 }
 
 function isRenderablePreview(preview: ExplorerFile | null, path: string): boolean {
@@ -356,7 +389,7 @@ function FilePanePresentation({
   isMobile,
   location,
   navigationRevision,
-  imagePreviewUri,
+  attachmentPreviewUri,
 }: {
   serverId: string;
   client: DaemonClient | null;
@@ -377,7 +410,7 @@ function FilePanePresentation({
   isMobile: boolean;
   location: WorkspaceFileLocation;
   navigationRevision: number;
-  imagePreviewUri: string | null;
+  attachmentPreviewUri: string | null;
 }) {
   if (!client && readTarget) {
     return (
@@ -448,7 +481,7 @@ function FilePanePresentation({
         isMobile={isMobile}
         location={location}
         navigationRevision={navigationRevision}
-        imagePreviewUri={imagePreviewUri}
+        attachmentPreviewUri={attachmentPreviewUri}
       />
     </View>
   );
@@ -621,7 +654,7 @@ function EditableFilePane({
           isMobile={isMobile}
           location={location}
           navigationRevision={navigationRevision}
-          imagePreviewUri={null}
+          attachmentPreviewUri={null}
         />
       )}
     </View>

@@ -44,6 +44,15 @@ function hashString(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
+export function fingerprintBytes(bytes: Uint8Array): string {
+  let hash = 2166136261;
+  for (let index = 0; index < bytes.length; index += 1) {
+    hash ^= bytes[index]!;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export function parseImageDataUrl(
   uri: string,
 ): { mimeType: string; base64: string; cacheKey: string } | null {

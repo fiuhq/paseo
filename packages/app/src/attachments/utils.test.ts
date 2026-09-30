@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createImageSourceCacheKey,
   createPreviewAttachmentId,
+  fingerprintBytes,
   fileUriToPath,
   localFileSourceToPath,
   parseDataUrl,
@@ -110,6 +111,15 @@ describe("parseImageDataUrl", () => {
         contentLength: 512,
         contentKey: "second-content",
       }),
+    );
+  });
+
+  it("fingerprints equal-length bytes differently", () => {
+    expect(fingerprintBytes(new Uint8Array([1, 2, 3]))).not.toBe(
+      fingerprintBytes(new Uint8Array([1, 2, 4])),
+    );
+    expect(fingerprintBytes(new Uint8Array([1, 2, 3]))).toBe(
+      fingerprintBytes(new Uint8Array([1, 2, 3])),
     );
   });
 });

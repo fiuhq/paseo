@@ -703,6 +703,9 @@ async function createWindow(
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
+      // Chromium's built-in PDF viewer, which the file pane's PDF preview renders in.
+      // It is the only plugin Electron still ships.
+      plugins: true,
     },
   });
   applyDesktopWindowChromeMode({ win: mainWindow, mode: DESKTOP_WINDOW_CHROME_MODE });

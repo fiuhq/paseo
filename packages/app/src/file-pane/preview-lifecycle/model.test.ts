@@ -1,7 +1,21 @@
 import type { FileReadResult } from "@getpaseo/client/internal/daemon-client";
 import type { LiveFileSnapshot } from "../live-file/model";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/attachments/service", () => ({
+  persistAttachmentFromBytes: vi.fn(async (input: { id: string; mimeType: string }) => ({
+    id: input.id,
+    mimeType: input.mimeType,
+    storageType: "web-indexeddb",
+    storageKey: input.id,
+    fileName: null,
+    byteSize: 0,
+    createdAt: 0,
+  })),
+}));
+
 import {
+  createFilePanePreview,
   FilePreviewLifecycleModel,
   type FilePanePreview,
   type FilePreviewLifecycleSnapshot,
@@ -88,7 +102,7 @@ describe("FilePreviewLifecycleModel", () => {
     const model = new FilePreviewLifecycleModel(() => preparations.shift()!.promise);
     const preview: FilePanePreview = {
       file: previewFile("preview"),
-      imageAttachment: null,
+      attachment: null,
     };
 
     model.setSource(source("/workspace:file.ts", pending()));
@@ -134,12 +148,12 @@ describe("FilePreviewLifecycleModel", () => {
     );
     const nextPreview: FilePanePreview = {
       file: previewFile("two"),
-      imageAttachment: null,
+      attachment: null,
     };
 
     model.setSource(source("/workspace:file.ts", completed(file("one"))));
     model.setSource(source("/workspace:second.ts", completed(file("two", "second.ts"))));
-    first.resolve({ file: previewFile("one"), imageAttachment: null });
+    first.resolve({ file: previewFile("one"), attachment: null });
     await Promise.resolve();
     expect(model.getSnapshot()).toEqual({ status: "preparing" });
 
@@ -155,3 +169,50 @@ async function expectSnapshot(
   await new Promise<void>((resolve) => queueMicrotask(resolve));
   expect(model.getSnapshot()).toEqual(expected);
 }
+
+describe("createFilePanePreview attachment identity", () => {
+  const pdfBytes = (tail: string) => new TextEncoder().encode(`%PDF-1.7\n${tail}`);
+  const pngBytes = (tail: number) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, tail]);
+
+  function binaryRead(input: {
+    path: string;
+    kind: "image" | "binary";
+    mime: string;
+    bytes: Uint8Array;
+    revision?: string;
+  }): FileReadResult {
+    return {
+      ...input,
+      size: input.bytes.byteLength,
+      modifiedAt: "2026-08-20T00:00:00.000Z",
+    };
+  }
+
+  async function attachmentId(read: FileReadResult): Promise<string | undefined> {
+    return (await createFilePanePreview(read))?.attachment?.id;
+  }
+
+  it.each([
+    {
+      name: "pdf",
+      make: (bytes: Uint8Array, revision?: string) =>
+        binaryRead({ path: "a.pdf", kind: "binary", mime: "application/pdf", bytes, revision }),
+      first: pdfBytes("aaaa"),
+      second: pdfBytes("bbbb"),
+    },
+    {
+      name: "image",
+      make: (bytes: Uint8Array, revision?: string) =>
+        binaryRead({ path: "a.png", kind: "image", mime: "image/png", bytes, revision }),
+      first: pngBytes(1),
+      second: pngBytes(2),
+    },
+  ])("changes for $name reads with equal size and timestamp", async ({ make, first, second }) => {
+    const base = await attachmentId(make(first, "r1"));
+
+    expect(base).toBeDefined();
+    expect(await attachmentId(make(first, "r1"))).toBe(base);
+    expect(await attachmentId(make(second, "r1"))).not.toBe(base);
+    expect(await attachmentId(make(first, "r2"))).not.toBe(base);
+  });
+});

@@ -88,6 +88,10 @@ Native builds refuse every navigation after the initial document, so a link or m
 
 If you don't trust a page, read it in `Source`, which executes nothing. Source is available as an editable view on supported web hosts and a read-only view everywhere else.
 
+## PDF file preview
+
+On web and desktop, a PDF opens in the browser's built-in PDF viewer inside the file pane, the same viewer that opens a PDF in a browser tab. The frame is not sandboxed, because Chromium does not run its PDF viewer in a sandboxed frame. Its source is a `blob:` URL of the file's bytes created with the type `application/pdf`, so the browser always hands it to the viewer and never loads it as a page in Paseo's origin. The HTML preview's restrictions above are unchanged. iOS and Android show the file as an unpreviewable binary.
+
 ## Agent authentication
 
 Paseo wraps agent CLIs (Claude Code, Codex, OpenCode) but does not manage their authentication. Each agent provider handles its own credentials. Paseo never stores or transmits provider API keys. Agents run in your user context with your existing credentials.
