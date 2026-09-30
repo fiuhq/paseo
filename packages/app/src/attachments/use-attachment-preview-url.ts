@@ -2,6 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import type { AttachmentMetadata } from "@/attachments/types";
 import { releaseAttachmentPreviewUrl, resolveAttachmentPreviewUrl } from "@/attachments/service";
 
+export function attachmentPreviewIdentity(
+  attachment: Pick<AttachmentMetadata, "id" | "storageType" | "storageKey" | "mimeType"> | null | undefined,
+): string | null {
+  return attachment
+    ? JSON.stringify([attachment.id, attachment.storageType, attachment.storageKey, attachment.mimeType])
+    : null;
+}
+
+export function pairedPreviewUrl(
+  resolved: { identity: string; url: string } | null,
+  identity: string | null,
+): string | null {
+  return pairedPreviewUrl(resolved, identity);
+}
+
 export function useAttachmentPreviewUrl(
   attachment: AttachmentMetadata | null | undefined,
 ): string | null {
@@ -14,7 +29,7 @@ export function useAttachmentPreviewUrl(
   const storageType = attachment?.storageType;
   const storageKey = attachment?.storageKey;
   const mimeType = attachment?.mimeType;
-  const identity = attachment ? JSON.stringify([id, storageType, storageKey, mimeType]) : null;
+  const identity = attachmentPreviewIdentity(attachment);
 
   useEffect(() => {
     let disposed = false;
@@ -26,12 +41,7 @@ export function useAttachmentPreviewUrl(
       setResolved(null);
       return;
     }
-    const currentIdentity = JSON.stringify([
-      current.id,
-      current.storageType,
-      current.storageKey,
-      current.mimeType,
-    ]);
+    const currentIdentity = attachmentPreviewIdentity(current)!;
 
     void (async () => {
       try {
@@ -66,5 +76,5 @@ export function useAttachmentPreviewUrl(
     };
   }, [id, storageType, storageKey, mimeType]);
 
-  return resolved && resolved.identity === identity ? resolved.url : null;
+  return pairedPreviewUrl(resolved, identity);
 }

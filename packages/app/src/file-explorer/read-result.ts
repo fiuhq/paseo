@@ -9,7 +9,7 @@ export const PDF_MIME_TYPE = "application/pdf";
 const PDF_HEADER = [0x25, 0x50, 0x44, 0x46, 0x2d];
 
 export function explorerFileFromReadResult(file: FileReadResult): ExplorerFile {
-  const isPdf = file.kind !== "image" && hasPdfHeader(file.bytes);
+  const isPdf = hasPdfHeader(file.bytes);
   const isText = file.kind === "text" && !isPdf;
   return {
     path: file.path,

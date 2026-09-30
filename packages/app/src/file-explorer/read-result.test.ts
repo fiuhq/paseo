@@ -66,6 +66,20 @@ describe("explorerFileFromReadResult", () => {
     expect(file).toMatchObject({ kind: "pdf", mimeType: "application/pdf", content: undefined });
   });
 
+  it("classifies PDF bytes read under an image label as a PDF", () => {
+    const bytes = new TextEncoder().encode("%PDF-1.7\n%%EOF\n");
+    const file = explorerFileFromReadResult({
+      bytes,
+      mime: "image/png",
+      size: bytes.byteLength,
+      path: "report.png",
+      kind: "image",
+      modifiedAt: "2026-07-21T00:00:00.000Z",
+    });
+
+    expect(file).toMatchObject({ kind: "pdf", mimeType: "application/pdf" });
+  });
+
   it("leaves other binaries unpreviewable", () => {
     const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
     const file = explorerFileFromReadResult({
