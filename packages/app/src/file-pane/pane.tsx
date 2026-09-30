@@ -297,7 +297,11 @@ export function FilePane({
   useEffect(() => setPreviewMode("preview"), [targetKey]);
 
   const { file: preview, attachment } = resolveFilePreviewLifecycle(previewLifecycle);
-  const attachmentPreviewUri = useAttachmentPreviewUrl(attachment);
+  const resolvedPreviewUri = useAttachmentPreviewUrl(attachment);
+  const attachmentPreviewUri =
+    preview?.kind === "pdf" && attachment?.mimeType !== "application/pdf"
+      ? null
+      : resolvedPreviewUri;
   const isRenderable = isRenderablePreview(preview, location.path);
   const editable = isEditableTextFile({
     preview,

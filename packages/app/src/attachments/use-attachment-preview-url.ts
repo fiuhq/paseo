@@ -5,7 +5,7 @@ import { releaseAttachmentPreviewUrl, resolveAttachmentPreviewUrl } from "@/atta
 export function useAttachmentPreviewUrl(
   attachment: AttachmentMetadata | null | undefined,
 ): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+  const [resolved, setResolved] = useState<{ identity: string; url: string } | null>(null);
   const activeAttachmentRef = useRef<AttachmentMetadata | null>(null);
   const attachmentRef = useRef(attachment);
   attachmentRef.current = attachment;
@@ -14,6 +14,7 @@ export function useAttachmentPreviewUrl(
   const storageType = attachment?.storageType;
   const storageKey = attachment?.storageKey;
   const mimeType = attachment?.mimeType;
+  const identity = attachment ? JSON.stringify([id, storageType, storageKey, mimeType]) : null;
 
   useEffect(() => {
     let disposed = false;
@@ -22,26 +23,32 @@ export function useAttachmentPreviewUrl(
 
     activeAttachmentRef.current = current ?? null;
     if (!current) {
-      setUrl(null);
+      setResolved(null);
       return;
     }
+    const currentIdentity = JSON.stringify([
+      current.id,
+      current.storageType,
+      current.storageKey,
+      current.mimeType,
+    ]);
 
     void (async () => {
       try {
-        const resolved = await resolveAttachmentPreviewUrl(current);
+        const url = await resolveAttachmentPreviewUrl(current);
         if (disposed) {
-          await releaseAttachmentPreviewUrl({ attachment: current, url: resolved });
+          await releaseAttachmentPreviewUrl({ attachment: current, url });
           return;
         }
-        currentUrl = resolved;
-        setUrl(resolved);
+        currentUrl = url;
+        setResolved({ identity: currentIdentity, url });
       } catch (error) {
         console.error("[attachments] Failed to resolve preview URL", {
           attachmentId: current.id,
           error,
         });
         if (!disposed) {
-          setUrl(null);
+          setResolved(null);
         }
       }
     })();
@@ -59,5 +66,5 @@ export function useAttachmentPreviewUrl(
     };
   }, [id, storageType, storageKey, mimeType]);
 
-  return url;
+  return resolved && resolved.identity === identity ? resolved.url : null;
 }

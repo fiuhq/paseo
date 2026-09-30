@@ -1,7 +1,7 @@
 import type { FileReadResult } from "@getpaseo/client/internal/daemon-client";
 import type { AttachmentMetadata } from "@/attachments/types";
 import { persistAttachmentFromBytes } from "@/attachments/service";
-import { createPreviewAttachmentId, getFileNameFromPath } from "@/attachments/utils";
+import { createPreviewAttachmentId, fingerprintBytes, getFileNameFromPath } from "@/attachments/utils";
 import { explorerFileFromReadResult } from "@/file-explorer/read-result";
 import type { ExplorerFile } from "@/stores/session-store";
 import type { LiveFileSnapshot } from "../live-file/model";
@@ -39,6 +39,7 @@ export async function createFilePanePreview(file: FileReadResult): Promise<FileP
       size: file.size,
       modifiedAt: file.modifiedAt,
       contentLength: file.bytes.byteLength,
+      contentKey: `${file.revision ?? ""}:${fingerprintBytes(file.bytes)}`,
     }),
     bytes: file.bytes,
     mimeType,
