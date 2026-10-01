@@ -155,7 +155,7 @@ describe("HostPluginsPage", () => {
     runtime.client = null;
     // No dialog host renders here, so accept every confirmation as it opens.
     unsubscribeConfirm = useConfirmDialogStore.subscribe((state) => {
-      if (state.pending) state.answer(true);
+      if (state.pending) state.answer(state.pending.id, true);
     });
   });
 

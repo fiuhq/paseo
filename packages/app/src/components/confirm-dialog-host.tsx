@@ -11,8 +11,15 @@ export function ConfirmDialogHost() {
   const pending = useConfirmDialogStore((state) => state.pending);
   const answer = useConfirmDialogStore((state) => state.answer);
 
-  const cancel = useCallback(() => answer(false), [answer]);
-  const confirm = useCallback(() => answer(true), [answer]);
+  const pendingId = pending?.id;
+  // Bound to the request on screen, so a sheet still closing after a replacement
+  // cannot answer the newer request.
+  const cancel = useCallback(() => {
+    if (pendingId !== undefined) answer(pendingId, false);
+  }, [answer, pendingId]);
+  const confirm = useCallback(() => {
+    if (pendingId !== undefined) answer(pendingId, true);
+  }, [answer, pendingId]);
   const title = pending?.input.title ?? "";
   const header = useMemo<SheetHeader>(() => ({ title }), [title]);
 
@@ -21,7 +28,13 @@ export function ConfirmDialogHost() {
   const labels = resolveButtonLabels(input);
 
   return (
-    <AdaptiveModalSheet header={header} visible onClose={cancel} testID="confirm-dialog">
+    <AdaptiveModalSheet
+      key={pending.id}
+      header={header}
+      visible
+      onClose={cancel}
+      testID="confirm-dialog"
+    >
       <Text style={styles.message} testID="confirm-dialog-message">
         {input.message}
       </Text>

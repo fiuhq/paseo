@@ -11,7 +11,11 @@ export async function answerConfirmDialog(
 ): Promise<string> {
   const dialog = page.getByTestId("confirm-dialog");
   await expect(dialog).toBeVisible({ timeout: 10_000 });
-  const title = await dialog.innerText();
+  const title =
+    (await dialog.innerText())
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? "";
   const message = await page.getByTestId("confirm-dialog-message").innerText();
   const text = `${title}\n${message}`;
   await page
