@@ -11,7 +11,9 @@ export async function answerConfirmDialog(
 ): Promise<string> {
   const dialog = page.getByTestId("confirm-dialog");
   await expect(dialog).toBeVisible({ timeout: 10_000 });
-  const text = await dialog.innerText();
+  const title = await dialog.innerText();
+  const message = await page.getByTestId("confirm-dialog-message").innerText();
+  const text = `${title}\n${message}`;
   await page
     .getByTestId(answer === "accept" ? "confirm-dialog-confirm" : "confirm-dialog-cancel")
     .click();
