@@ -95,12 +95,13 @@ describe("confirmDialog", () => {
     });
 
     await vi.waitFor(() => expect(useConfirmDialogStore.getState().pending).not.toBeNull());
-    expect(useConfirmDialogStore.getState().pending?.input).toEqual({
+    const pending = useConfirmDialogStore.getState().pending;
+    expect(pending?.input).toEqual({
       title: "Archive workspace",
       message: "Archive this workspace?",
       destructive: true,
     });
-    useConfirmDialogStore.getState().answer(true);
+    useConfirmDialogStore.getState().answer(pending?.id ?? -1, true);
 
     await expect(result).resolves.toBe(true);
     expect(useConfirmDialogStore.getState().pending).toBeNull();
@@ -119,8 +120,27 @@ describe("confirmDialog", () => {
     await vi.waitFor(() =>
       expect(useConfirmDialogStore.getState().pending?.input.title).toBe("Second"),
     );
-    useConfirmDialogStore.getState().answer(false);
+    const replacement = useConfirmDialogStore.getState().pending;
+    useConfirmDialogStore.getState().answer(replacement?.id ?? -1, false);
     await expect(second).resolves.toBe(false);
+  });
+
+  it("ignores an answer meant for a confirmation that was already replaced", async () => {
+    const { confirmDialog } = await loadModuleForPlatform("web");
+    const { useConfirmDialogStore } = await import("./confirm-dialog-store");
+    const first = confirmDialog({ title: "First", message: "First?" });
+    await vi.waitFor(() => expect(useConfirmDialogStore.getState().pending).not.toBeNull());
+    const replacedId = useConfirmDialogStore.getState().pending?.id ?? -1;
+    const second = confirmDialog({ title: "Second", message: "Second?" });
+    await expect(first).resolves.toBe(false);
+
+    // The first sheet finishing its dismissal must not cancel the second.
+    useConfirmDialogStore.getState().answer(replacedId, false);
+    expect(useConfirmDialogStore.getState().pending?.input.title).toBe("Second");
+
+    const current = useConfirmDialogStore.getState().pending;
+    useConfirmDialogStore.getState().answer(current?.id ?? -1, true);
+    await expect(second).resolves.toBe(true);
   });
 
   it("uses native Alert on iOS/Android", async () => {
