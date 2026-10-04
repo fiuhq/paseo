@@ -280,6 +280,8 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
 }
 
 function renderContextWindowMeter(
+  serverId: string,
+  agentId: string,
   contextWindowMaxTokens: number | null,
   contextWindowUsedTokens: number | null,
   totalCostUsd: number | null,
@@ -293,6 +295,8 @@ function renderContextWindowMeter(
   }
   return (
     <ContextWindowMeter
+      serverId={serverId}
+      agentId={agentId}
       maxTokens={contextWindowMaxTokens}
       usedTokens={contextWindowUsedTokens}
       totalCostUsd={totalCostUsd}
@@ -2078,6 +2082,8 @@ function ComposerContentImpl({
   const contextWindowMeter = useMemo(
     () =>
       renderContextWindowMeter(
+        serverId,
+        agentId,
         contextWindowMaxTokens,
         contextWindowUsedTokens,
         agentState.totalCostUsd,
@@ -2086,6 +2092,8 @@ function ComposerContentImpl({
         contextWindowMeterGlyphSize,
       ),
     [
+      serverId,
+      agentId,
       contextWindowMaxTokens,
       contextWindowUsedTokens,
       agentState.totalCostUsd,
