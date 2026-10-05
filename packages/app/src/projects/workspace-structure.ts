@@ -103,13 +103,19 @@ export function buildWorkspaceStructureProjects(input: {
         .sort(compareWorkspaceStructureItems)
         .map((workspace) => workspace.workspaceKey),
     }))
-    .sort(
-      (left, right) =>
-        left.projectName.localeCompare(right.projectName, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }) || left.viewKey.localeCompare(right.viewKey),
-    );
+    .sort(compareProjectsByName);
+}
+
+export function compareProjectsByName(
+  left: { projectName: string; viewKey: string },
+  right: { projectName: string; viewKey: string },
+): number {
+  return (
+    left.projectName.localeCompare(right.projectName, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }) || left.viewKey.localeCompare(right.viewKey)
+  );
 }
 
 export function createProjectViewKey(

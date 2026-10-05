@@ -7,6 +7,7 @@ import {
   resolveInitialWorkspaceProject,
   type HostProjectListItem,
 } from "@/projects/host-projects";
+import { compareProjectsByName } from "@/projects/workspace-structure";
 import {
   createManualProjectSelectionContextKey,
   createProjectSelectionContextKey,
@@ -43,9 +44,11 @@ function projectOptionId(projectId: string): string {
   return `${PROJECT_OPTION_PREFIX}${projectId}`;
 }
 
+// `projects` arrives in the sidebar's drag order, which appends projects added
+// after the order was saved. The picker is scanned by name, so list it by name.
 function computeProjectOptionData(projects: readonly HostProjectListItem[]) {
   const projectByOptionId = new Map<string, HostProjectListItem>();
-  const options = projects.map((project) => {
+  const options = projects.toSorted(compareProjectsByName).map((project) => {
     const id = projectOptionId(project.viewKey);
     projectByOptionId.set(id, project);
     return { id, label: project.projectName };

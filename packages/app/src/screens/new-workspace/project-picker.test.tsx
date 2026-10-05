@@ -28,6 +28,36 @@ function project(input: {
 }
 
 describe("useNewWorkspaceProjectPicker", () => {
+  it("lists projects by name, not in the sidebar's drag order", () => {
+    const sidebarOrder = ["acme/web", "workspace", "zeta/api", "acme/api", "Beta/core"].map(
+      (projectName) =>
+        project({
+          viewKey: `remote:github.com/${projectName}`,
+          projectKey: `remote:github.com/${projectName}`,
+          projectId: projectName,
+          projectName,
+        }),
+    );
+    const { result } = renderHook(() =>
+      useNewWorkspaceProjectPicker({
+        selectedServerId: "host",
+        projects: sidebarOrder,
+        routeProject: null,
+        routeProjectContextViewKey: null,
+        lastActiveProject: null,
+        allowAllProjects: true,
+      }),
+    );
+
+    expect(result.current.projectPickerOptions.map((option) => option.label)).toEqual([
+      "acme/api",
+      "acme/web",
+      "Beta/core",
+      "workspace",
+      "zeta/api",
+    ]);
+  });
+
   it("preserves a manual choice when the routed project hydrates", () => {
     const routePlacement = project({
       viewKey: '["host","route-local"]',
