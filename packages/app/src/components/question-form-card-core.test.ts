@@ -170,6 +170,21 @@ describe("question form card core", () => {
           multiSelect: false,
         },
         {
+          question: "Which latency?",
+          header: "Latency",
+          options: [{ label: "Fast", preview: "< 10 ms\n+-----+\n| API |\n+-----+" }],
+          multiSelect: false,
+        },
+        {
+          question: "Which style?",
+          header: "Style",
+          options: [
+            { label: "Padded", preview: '<div style="padding:8px">Cards</div>' },
+            { label: "Inline", preview: "<span>x</span>" },
+          ],
+          multiSelect: false,
+        },
+        {
           question: "Ship it?",
           header: "Ship",
           options: [{ label: "Yes", preview: "   " }, { label: "No" }],
@@ -179,7 +194,7 @@ describe("question form card core", () => {
     });
 
     if (!questions) throw new Error("questions did not parse");
-    const [layout, box, ship] = questions;
+    const [layout, box, latency, style, ship] = questions;
     expect(layout?.previewFormat).toBe("html");
     expect(layout?.options.map((option) => option.preview)).toEqual([
       "\n  <div>Cards</div>",
@@ -188,6 +203,8 @@ describe("question form card core", () => {
     // ASCII art and Markdown do not open with a tag.
     expect(box?.previewFormat).toBe("markdown");
     expect(box?.options.map((option) => option.preview)).toEqual(["+------+", undefined]);
+    expect(latency?.previewFormat).toBe("markdown");
+    expect(style?.previewFormat).toBe("html");
     // A blank preview is no preview.
     expect(ship?.previewFormat).toBeUndefined();
     expect(ship?.options.map((option) => option.preview)).toEqual([undefined, undefined]);

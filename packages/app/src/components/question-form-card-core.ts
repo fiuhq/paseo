@@ -49,7 +49,7 @@ function parseQuestionOption(input: unknown): QuestionOption | null {
 function readPreviewFormat(options: QuestionOption[]): QuestionPreviewFormat | undefined {
   const preview = options.find((option) => option.preview !== undefined)?.preview;
   if (preview === undefined) return undefined;
-  return preview.trimStart().startsWith("<") ? "html" : "markdown";
+  return /^<[a-z][a-z0-9-]*(?=[\s/>])/i.test(preview.trimStart()) ? "html" : "markdown";
 }
 
 export function parseQuestionFormQuestions(input: unknown): QuestionFormQuestion[] | null {
