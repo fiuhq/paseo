@@ -183,7 +183,7 @@ describe("QuestionFormCard option previews", () => {
     const previewFrame = () => view.getByTitle<HTMLIFrameElement>(/^Preview: /);
     const currentQuestion = () => view.getByTestId("question-form-current-question").textContent;
     const pick = (label: string) => act(() => view.getByRole("radio", { name: label }).click());
-    return { view, previewFrame, currentQuestion, pick };
+    return { container, view, previewFrame, currentQuestion, pick };
   }
 
   it("shows the first option's preview, then the picked one's, without leaving the question", () => {
@@ -215,6 +215,23 @@ describe("QuestionFormCard option previews", () => {
     card.pick("Short");
 
     await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeLessThan(tall));
+  });
+
+  it("grows the frame when a narrower container rewraps the preview text", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [{ label: "Prose", preview: `<p>${"wrapping words ".repeat(40)}</p>` }],
+      },
+    ]);
+    card.container.style.width = "800px";
+    await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const wide = card.previewFrame().offsetHeight;
+
+    card.container.style.width = "300px";
+
+    await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeGreaterThan(wide));
   });
 
   it("draws the preview in a frame where no script can run and nothing can load", () => {
