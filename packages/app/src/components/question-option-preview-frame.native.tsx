@@ -12,7 +12,7 @@ const PREVIEW_HEIGHT = 240;
 export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPreviewFrameProps) {
   const source = useMemo(() => ({ html: buildQuestionPreviewDocument(html) }), [html]);
   const handleShouldStartLoad = useCallback(
-    (load: { url: string }) => load.url === "about:blank" || load.url.startsWith("data:"),
+    (load: { url: string }) => load.url === "about:blank",
     [],
   );
 
