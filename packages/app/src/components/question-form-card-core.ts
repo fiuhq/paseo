@@ -173,7 +173,7 @@ export function resolveDismissLabel(
 
 /**
  * The option whose preview the card shows: the latest pick that has one, or the first option
- * with one before anything is picked. A pick without a preview shows none.
+ * before anything is picked. Either shows none when it has no preview.
  */
 export function previewedOptionIndex(
   question: QuestionFormQuestion,
@@ -186,8 +186,7 @@ export function previewedOptionIndex(
     );
     return picked ?? null;
   }
-  const first = question.options.findIndex((option) => option.preview !== undefined);
-  return first === -1 ? null : first;
+  return question.options[0]?.preview !== undefined ? 0 : null;
 }
 
 /**

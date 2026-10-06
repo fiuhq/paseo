@@ -215,7 +215,13 @@ describe("question form card core", () => {
     if (!questions) throw new Error("questions did not parse");
     const [question] = questions;
     if (!question) throw new Error("question missing");
-    expect(previewedOptionIndex(question, new Set())).toBe(1);
+    expect(previewedOptionIndex(question, new Set())).toBeNull();
+    expect(
+      previewedOptionIndex(
+        { ...question, options: [{ label: "Cards", preview: "<div>Cards</div>" }] },
+        new Set(),
+      ),
+    ).toBe(0);
     expect(previewedOptionIndex(question, new Set([2]))).toBe(2);
     expect(previewedOptionIndex(question, new Set([2, 1]))).toBe(1);
     expect(previewedOptionIndex(question, new Set([0]))).toBeNull();

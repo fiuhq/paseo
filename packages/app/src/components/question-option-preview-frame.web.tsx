@@ -16,7 +16,7 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
   // `allow-same-origin` without `allow-scripts`: no script in the frame can run, and the card
   // can read the drawn height to fit the frame to the preview.
   const handleLoad = useCallback(() => {
-    const drawn = frameRef.current?.contentDocument?.documentElement.scrollHeight;
+    const drawn = frameRef.current?.contentDocument?.body.scrollHeight;
     if (drawn) setHeight(Math.min(drawn, MAX_PREVIEW_HEIGHT));
   }, []);
 

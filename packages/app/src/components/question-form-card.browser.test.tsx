@@ -199,6 +199,24 @@ describe("QuestionFormCard option previews", () => {
     expect(card.currentQuestion()).toBe("Which card layout?");
   });
 
+  it("fits the frame to a shorter preview after a taller one", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          { label: "Tall", preview: '<div style="height:300px">Tall</div>' },
+          { label: "Short", preview: '<div style="height:50px">Short</div>' },
+        ],
+      },
+    ]);
+    await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeGreaterThanOrEqual(300));
+    const tall = card.previewFrame().offsetHeight;
+
+    card.pick("Short");
+
+    await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeLessThan(tall));
+  });
+
   it("draws the preview in a frame where no script can run and nothing can load", () => {
     const card = mountQuestions([layoutQuestion]);
     const frame = card.previewFrame();
