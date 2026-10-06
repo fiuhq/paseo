@@ -25,10 +25,24 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
     if (!frame || !page || !body || !room) return;
     frame.style.width = `${room}px`;
     page.style.zoom = "";
-    // The box, or the overflow when positioned content draws outside it.
-    const box = body.getBoundingClientRect();
-    const width = Math.max(box.width, body.scrollWidth);
-    const height = Math.max(box.height, body.scrollHeight);
+    body.style.margin = "0";
+    // The body's box widened to every descendant, so content positioned outside it counts.
+    const origin = body.getBoundingClientRect();
+    let left = 0;
+    let top = 0;
+    let right = origin.width;
+    let bottom = origin.height;
+    for (const element of body.querySelectorAll("*")) {
+      const rect = element.getBoundingClientRect();
+      if (!rect.width && !rect.height) continue;
+      left = Math.min(left, rect.left - origin.left);
+      top = Math.min(top, rect.top - origin.top);
+      right = Math.max(right, rect.right - origin.left);
+      bottom = Math.max(bottom, rect.bottom - origin.top);
+    }
+    if (left < 0 || top < 0) body.style.margin = `${-Math.min(top, 0)}px 0 0 ${-Math.min(left, 0)}px`;
+    const width = right - left;
+    const height = bottom - top;
     if (!width || !height) return;
     const scale = Math.min(1, room / width, MAX_PREVIEW_HEIGHT / height);
     if (scale < 1) page.style.zoom = String(scale);

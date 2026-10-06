@@ -295,6 +295,27 @@ describe("QuestionFormCard option previews", () => {
     });
   });
 
+  it("measures positioned content drawn above and left of the page", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Negative",
+            preview:
+              '<div style="position:relative;width:200px;height:80px"><div style="position:absolute;left:-20px;top:-20px;width:240px;height:120px">x</div></div>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() => {
+      expect(card.pictureFrame("Negative").offsetHeight).toBe(120);
+      expect(card.pictureFrame("Negative").offsetWidth).toBe(240);
+    });
+  });
+
   it("grows the frame when a narrower container rewraps the preview text", async () => {
     const card = mountQuestions([
       {
