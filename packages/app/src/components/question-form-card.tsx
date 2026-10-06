@@ -15,12 +15,16 @@ import {
   buildQuestionFormAnswers,
   isQuestionAnswered,
   parseQuestionFormQuestions,
+  previewedOptionIndex,
+  questionAdvancesOnPick,
   questionShowsTextInput,
   resolveDismissLabel,
   shouldSubmitEmptyOnDismiss,
   type QuestionFormQuestion,
   type QuestionOption,
+  type QuestionPreviewFormat,
 } from "./question-form-card-core";
+import { QuestionOptionPreviewFrame } from "./question-option-preview-frame";
 
 interface QuestionFormCardProps {
   permission: PendingPermission;
@@ -136,6 +140,56 @@ function QuestionOptionRow({
         </View>
       </View>
     </Pressable>
+  );
+}
+
+interface QuestionOptionPreviewProps {
+  question: QuestionFormQuestion;
+  selected: ReadonlySet<number>;
+}
+
+/** The previewed option's picture, under the options, captioned with the option it shows. */
+function QuestionOptionPreview({ question, selected }: QuestionOptionPreviewProps) {
+  const { t } = useTranslation();
+  const index = previewedOptionIndex(question, selected);
+  const option = index === null ? undefined : question.options[index];
+  if (!option?.preview || !question.previewFormat) return null;
+  return (
+    <QuestionOptionPreviewSheet
+      caption={t("message.question.preview")}
+      label={option.label}
+      preview={option.preview}
+      format={question.previewFormat}
+    />
+  );
+}
+
+interface QuestionOptionPreviewSheetProps {
+  caption: string;
+  label: string;
+  preview: string;
+  format: QuestionPreviewFormat;
+}
+
+function QuestionOptionPreviewSheet({
+  caption,
+  label,
+  preview,
+  format,
+}: QuestionOptionPreviewSheetProps) {
+  return (
+    <View style={styles.previewBlock} testID="question-form-option-preview">
+      <Text style={styles.previewCaption} numberOfLines={1}>
+        {caption} · <Text style={styles.previewCaptionLabel}>{label}</Text>
+      </Text>
+      <View style={styles.previewSheet}>
+        {format === "html" ? (
+          <QuestionOptionPreviewFrame html={preview} title={`${caption}: ${label}`} />
+        ) : (
+          <Text style={styles.previewMarkdown}>{preview}</Text>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -368,8 +422,14 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
         otherInputRef.current?.replaceText("");
       }
 
-      if (!multiSelect && next.size > 0 && qIndex === activeQuestionIndex && questions) {
-        setActiveQuestionIndex(Math.min(qIndex + 1, questions.length - 1));
+      const question = questions?.[qIndex];
+      if (
+        question &&
+        questionAdvancesOnPick(question) &&
+        next.size > 0 &&
+        qIndex === activeQuestionIndex
+      ) {
+        setActiveQuestionIndex(Math.min(qIndex + 1, (questions?.length ?? 1) - 1));
       }
     },
     [activeQuestionIndex, otherTexts, questions, selections],
@@ -567,6 +627,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
               ))}
             </View>
           ) : null}
+          <QuestionOptionPreview question={activeQuestion} selected={selected} />
           {showTextInput ? (
             <QuestionOtherInput
               qIndex={resolvedActiveQuestionIndex}
@@ -653,6 +714,31 @@ const styles = StyleSheet.create((theme) => ({
   },
   optionsWrap: {
     gap: theme.spacing[1],
+  },
+  previewBlock: {
+    gap: theme.spacing[1],
+  },
+  previewCaption: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+  },
+  previewCaptionLabel: {
+    color: theme.colors.foreground,
+    fontWeight: theme.fontWeight.medium,
+  },
+  previewSheet: {
+    borderRadius: theme.spacing[2],
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    overflow: "hidden",
+  },
+  // Markdown previews are ASCII mockups and code, shown as written, as Claude Code's CLI does.
+  previewMarkdown: {
+    padding: theme.spacing[3],
+    fontFamily: theme.fontFamily.mono,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foreground,
+    backgroundColor: theme.colors.surface0,
   },
   questionNav: {
     flexDirection: "row",
