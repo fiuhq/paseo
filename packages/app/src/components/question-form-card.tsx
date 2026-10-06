@@ -15,8 +15,6 @@ import {
   buildQuestionFormAnswers,
   isQuestionAnswered,
   parseQuestionFormQuestions,
-  previewedOptionIndex,
-  questionAdvancesOnPick,
   questionShowsTextInput,
   resolveDismissLabel,
   shouldSubmitEmptyOnDismiss,
@@ -55,6 +53,8 @@ interface QuestionOptionRowProps {
   isSelected: boolean;
   multiSelect: boolean;
   isResponding: boolean;
+  /** How the question's option pictures are written; absent when no option has one. */
+  previewFormat?: QuestionPreviewFormat;
   onToggle: (qIndex: number, optIndex: number, multiSelect: boolean) => void;
 }
 
@@ -65,6 +65,7 @@ function QuestionOptionRow({
   isSelected,
   multiSelect,
   isResponding,
+  previewFormat,
   onToggle,
 }: QuestionOptionRowProps) {
   const { theme } = useUnistyles();
@@ -137,58 +138,38 @@ function QuestionOptionRow({
           {option.description ? (
             <Text style={optionDescriptionStyle}>{option.description}</Text>
           ) : null}
+          {option.preview && previewFormat ? (
+            <QuestionOptionPicture
+              label={option.label}
+              preview={option.preview}
+              format={previewFormat}
+            />
+          ) : null}
         </View>
       </View>
     </Pressable>
   );
 }
 
-interface QuestionOptionPreviewProps {
-  question: QuestionFormQuestion;
-  selected: ReadonlySet<number>;
-}
-
-/** The previewed option's picture, under the options, captioned with the option it shows. */
-function QuestionOptionPreview({ question, selected }: QuestionOptionPreviewProps) {
-  const { t } = useTranslation();
-  const index = previewedOptionIndex(question, selected);
-  const option = index === null ? undefined : question.options[index];
-  if (!option?.preview || !question.previewFormat) return null;
-  return (
-    <QuestionOptionPreviewSheet
-      caption={t("message.question.preview")}
-      label={option.label}
-      preview={option.preview}
-      format={question.previewFormat}
-    />
-  );
-}
-
-interface QuestionOptionPreviewSheetProps {
-  caption: string;
+interface QuestionOptionPictureProps {
   label: string;
   preview: string;
   format: QuestionPreviewFormat;
 }
 
-function QuestionOptionPreviewSheet({
-  caption,
-  label,
-  preview,
-  format,
-}: QuestionOptionPreviewSheetProps) {
+/** An option's picture, under its own text, so every option's picture shows at once. */
+function QuestionOptionPicture({ label, preview, format }: QuestionOptionPictureProps) {
+  const { t } = useTranslation();
   return (
-    <View style={styles.previewBlock} testID="question-form-option-preview">
-      <Text style={styles.previewCaption} numberOfLines={1}>
-        {caption} · <Text style={styles.previewCaptionLabel}>{label}</Text>
-      </Text>
-      <View style={styles.previewSheet}>
-        {format === "html" ? (
-          <QuestionOptionPreviewFrame html={preview} title={`${caption}: ${label}`} />
-        ) : (
-          <Text style={styles.previewMarkdown}>{preview}</Text>
-        )}
-      </View>
+    <View style={styles.optionPicture} testID="question-form-option-picture">
+      {format === "html" ? (
+        <QuestionOptionPreviewFrame
+          html={preview}
+          title={`${t("message.question.preview")}: ${label}`}
+        />
+      ) : (
+        <Text style={styles.optionPictureMarkdown}>{preview}</Text>
+      )}
     </View>
   );
 }
@@ -422,14 +403,8 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
         otherInputRef.current?.replaceText("");
       }
 
-      const question = questions?.[qIndex];
-      if (
-        question &&
-        questionAdvancesOnPick(question) &&
-        next.size > 0 &&
-        qIndex === activeQuestionIndex
-      ) {
-        setActiveQuestionIndex(Math.min(qIndex + 1, (questions?.length ?? 1) - 1));
+      if (!multiSelect && next.size > 0 && qIndex === activeQuestionIndex && questions) {
+        setActiveQuestionIndex(Math.min(qIndex + 1, questions.length - 1));
       }
     },
     [activeQuestionIndex, otherTexts, questions, selections],
@@ -622,12 +597,12 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
                   isSelected={selected.has(optIndex)}
                   multiSelect={activeQuestion.multiSelect}
                   isResponding={isResponding}
+                  previewFormat={activeQuestion.previewFormat}
                   onToggle={toggleOption}
                 />
               ))}
             </View>
           ) : null}
-          <QuestionOptionPreview question={activeQuestion} selected={selected} />
           {showTextInput ? (
             <QuestionOtherInput
               qIndex={resolvedActiveQuestionIndex}
@@ -715,26 +690,15 @@ const styles = StyleSheet.create((theme) => ({
   optionsWrap: {
     gap: theme.spacing[1],
   },
-  previewBlock: {
-    gap: theme.spacing[1],
+  optionPicture: {
+    marginTop: theme.spacing[1],
   },
-  previewCaption: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.foregroundMuted,
-  },
-  previewCaptionLabel: {
-    color: theme.colors.foreground,
-    fontWeight: theme.fontWeight.medium,
-  },
-  previewSheet: {
+  // Markdown previews are ASCII mockups and code, shown as written, as Claude Code's CLI does.
+  optionPictureMarkdown: {
+    padding: theme.spacing[3],
     borderRadius: theme.spacing[2],
     borderWidth: 1,
     borderColor: theme.colors.border,
-    overflow: "hidden",
-  },
-  // Markdown previews are ASCII mockups and code, shown as written, as Claude Code's CLI does.
-  previewMarkdown: {
-    padding: theme.spacing[3],
     fontFamily: theme.fontFamily.mono,
     fontSize: theme.fontSize.sm,
     color: theme.colors.foreground,

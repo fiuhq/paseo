@@ -179,41 +179,63 @@ describe("QuestionFormCard option previews", () => {
     );
     mounted.push({ root, container });
     const view = within(container);
-    const previewFrame = () => view.getByTitle<HTMLIFrameElement>(/^Preview: /);
+    const pictureFrame = (label: string) => view.getByTitle<HTMLIFrameElement>(`Preview: ${label}`);
     const currentQuestion = () => view.getByTestId("question-form-current-question").textContent;
     const pick = (label: string) => act(() => view.getByRole("radio", { name: label }).click());
-    return { container, view, previewFrame, currentQuestion, pick };
+    return { container, view, pictureFrame, currentQuestion, pick };
   }
 
-  it("shows the first option's preview, then the picked one's, without leaving the question", () => {
-    const card = mountQuestions([layoutQuestion, shipQuestion]);
+  it("shows every option's picture under its own option at once", () => {
+    const card = mountQuestions([layoutQuestion]);
 
-    expect(card.previewFrame().title).toBe("Preview: Compact");
-    expect(card.previewFrame().srcdoc).toContain("<body><div>Compact card</div></body>");
+    for (const [label, body] of [
+      ["Compact", "<div>Compact card</div>"],
+      ["Detailed", "<div>Detailed card</div>"],
+    ]) {
+      const frame = card.pictureFrame(label);
+      expect(frame.srcdoc).toContain(`<body>${body}</body>`);
+      expect(frame.closest('[role="radio"]')?.getAttribute("aria-label")).toBe(label);
+    }
+  });
+
+  it("moves on to the next question after a pick, as questions without pictures do", () => {
+    const card = mountQuestions([layoutQuestion, shipQuestion]);
 
     card.pick("Detailed");
 
-    expect(card.previewFrame().title).toBe("Preview: Detailed");
-    expect(card.previewFrame().srcdoc).toContain("<body><div>Detailed card</div></body>");
-    expect(card.currentQuestion()).toBe("Which card layout?");
+    expect(card.currentQuestion()).toBe("Ship it now?");
   });
 
-  it("fits the frame to a shorter preview after a taller one", async () => {
+  it("scales a picture drawn wider than its option down to fit", async () => {
     const card = mountQuestions([
       {
         ...layoutQuestion,
-        options: [
-          { label: "Tall", preview: '<div style="height:300px">Tall</div>' },
-          { label: "Short", preview: '<div style="height:50px">Short</div>' },
-        ],
+        options: [{ label: "Wide", preview: '<div style="width:600px;height:200px">Wide</div>' }],
       },
     ]);
-    await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeGreaterThanOrEqual(300));
-    const tall = card.previewFrame().offsetHeight;
+    card.container.style.width = "300px";
 
-    card.pick("Short");
+    await vi.waitFor(() => {
+      const zoom = Number(card.pictureFrame("Wide").contentDocument?.documentElement.style.zoom);
+      expect(zoom).toBeGreaterThan(0);
+      expect(zoom).toBeLessThan(1);
+    });
+    await vi.waitFor(() => expect(card.pictureFrame("Wide").offsetHeight).toBeLessThan(200));
+  });
 
-    await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeLessThan(tall));
+  it("sizes the frame to a picture narrower than its option", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [{ label: "Small", preview: '<div style="width:200px;height:80px">Small</div>' }],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() => {
+      expect(card.pictureFrame("Small").offsetWidth).toBe(200);
+      expect(card.pictureFrame("Small").offsetHeight).toBe(80);
+    });
   });
 
   it("grows the frame when a narrower container rewraps the preview text", async () => {
@@ -224,18 +246,18 @@ describe("QuestionFormCard option previews", () => {
       },
     ]);
     card.container.style.width = "800px";
-    await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(card.pictureFrame("Prose").offsetHeight).toBeGreaterThan(0));
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const wide = card.previewFrame().offsetHeight;
+    const wide = card.pictureFrame("Prose").offsetHeight;
 
     card.container.style.width = "300px";
 
-    await vi.waitFor(() => expect(card.previewFrame().offsetHeight).toBeGreaterThan(wide));
+    await vi.waitFor(() => expect(card.pictureFrame("Prose").offsetHeight).toBeGreaterThan(wide));
   });
 
   it("draws the preview in a frame where no script can run and nothing can load", () => {
     const card = mountQuestions([layoutQuestion]);
-    const frame = card.previewFrame();
+    const frame = card.pictureFrame("Compact");
 
     expect(frame.getAttribute("sandbox")).toBe("allow-same-origin");
     expect(frame.srcdoc).toContain(
@@ -246,7 +268,7 @@ describe("QuestionFormCard option previews", () => {
   it("still moves on after a pick when the question has no previews", () => {
     const card = mountQuestions([shipQuestion, layoutQuestion]);
 
-    expect(card.view.queryByTestId("question-form-option-preview")).toBeNull();
+    expect(card.view.queryByTestId("question-form-option-picture")).toBeNull();
     card.pick("Yes");
 
     expect(card.currentQuestion()).toBe("Which card layout?");

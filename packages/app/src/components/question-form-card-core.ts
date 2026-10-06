@@ -174,39 +174,13 @@ export function resolveDismissLabel(
   return questions.find((question) => question.dismissLabel)?.dismissLabel ?? fallbackLabel;
 }
 
-/**
- * The option whose preview the card shows: the latest pick that has one, or the first option
- * before anything is picked. Either shows none when it has no preview.
- */
-export function previewedOptionIndex(
-  question: QuestionFormQuestion,
-  selected: ReadonlySet<number>,
-): number | null {
-  if (!question.previewFormat) return null;
-  if (selected.size > 0) {
-    const picked = Array.from(selected).findLast(
-      (index) => question.options[index]?.preview !== undefined,
-    );
-    return picked ?? null;
-  }
-  return question.options[0]?.preview !== undefined ? 0 : null;
-}
-
-/**
- * A single-select pick moves on to the next question, unless the options carry previews:
- * picking is how they are compared, so the question stays until Next.
- */
-export function questionAdvancesOnPick(question: QuestionFormQuestion): boolean {
-  return !question.multiSelect && !question.previewFormat;
-}
-
 // No scripts, no network: a preview may only draw with inline styles and data: images.
 const QUESTION_PREVIEW_CSP =
   "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
 /**
  * The document a sandboxed frame shows for an HTML preview. Previews are written for a light
- * page (Claude's own examples assume one), so the sheet is white in every theme.
+ * page (Claude's own examples set no background), so the page is white in every theme.
  */
 export function buildQuestionPreviewDocument(fragment: string): string {
   return [
@@ -216,7 +190,9 @@ export function buildQuestionPreviewDocument(fragment: string): string {
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     "<style>html,body{margin:0;background:#fff;color:#111;",
     "font:13px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
-    "body{padding:12px;overflow-wrap:anywhere}</style>",
+    // The body takes the picture's own width (fit-content) and holds its children's margins
+    // (flow-root), so the card can size the frame to exactly the picture.
+    "body{width:fit-content;display:flow-root;overflow-wrap:anywhere}</style>",
     `</head><body>${fragment}</body></html>`,
   ].join("");
 }
