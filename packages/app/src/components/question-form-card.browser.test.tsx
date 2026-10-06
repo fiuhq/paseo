@@ -158,7 +158,6 @@ describe("QuestionFormCard option previews", () => {
     ],
     multiSelect: false,
     allowOther: true,
-    previewFormat: "html",
   };
   const shipQuestion = {
     question: "Ship it now?",

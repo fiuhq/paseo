@@ -1,4 +1,7 @@
-/** How an option's `preview` is written. Claude's AskUserQuestion defaults to Markdown. */
+/**
+ * How an option's `preview` is written. Claude's AskUserQuestion writes Markdown/ASCII by default and
+ * an HTML fragment when the agent runs with `CLAUDE_CODE_QUESTION_PREVIEW_FORMAT=html`.
+ */
 export type QuestionPreviewFormat = "html" | "markdown";
 
 export interface QuestionOption {
@@ -41,12 +44,12 @@ function parseQuestionOption(input: unknown): QuestionOption | null {
   };
 }
 
-function readPreviewFormat(
-  question: Record<string, unknown>,
-  options: QuestionOption[],
-): QuestionPreviewFormat | undefined {
-  if (!options.some((option) => option.preview !== undefined)) return undefined;
-  return question.previewFormat === "html" ? "html" : "markdown";
+// The tool input never says which format its previews are in: the agent process decides it from its
+// environment. An HTML fragment opens with a tag; Markdown and ASCII art do not.
+function readPreviewFormat(options: QuestionOption[]): QuestionPreviewFormat | undefined {
+  const preview = options.find((option) => option.preview !== undefined)?.preview;
+  if (preview === undefined) return undefined;
+  return preview.trimStart().startsWith("<") ? "html" : "markdown";
 }
 
 export function parseQuestionFormQuestions(input: unknown): QuestionFormQuestion[] | null {
@@ -80,7 +83,7 @@ export function parseQuestionFormQuestions(input: unknown): QuestionFormQuestion
       allowEmpty: q.allowEmpty === true,
       placeholder: readOptionalString(q, "placeholder"),
       dismissLabel: readOptionalString(q, "dismissLabel"),
-      previewFormat: readPreviewFormat(q, options),
+      previewFormat: readPreviewFormat(options),
     });
   }
   return questions.length > 0 ? questions : null;

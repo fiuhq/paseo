@@ -151,18 +151,17 @@ describe("question form card core", () => {
     });
   });
 
-  test("reads option previews and the format the provider declared", () => {
+  test("reads option previews and tells HTML from Markdown by their content", () => {
     const questions = parseQuestionFormQuestions({
       questions: [
         {
           question: "Which layout?",
           header: "Layout",
           options: [
-            { label: "Cards", preview: "<div>Cards</div>" },
+            { label: "Cards", preview: "\n  <div>Cards</div>" },
             { label: "List", preview: "<div>List</div>" },
           ],
           multiSelect: false,
-          previewFormat: "html",
         },
         {
           question: "Which box?",
@@ -175,7 +174,6 @@ describe("question form card core", () => {
           header: "Ship",
           options: [{ label: "Yes", preview: "   " }, { label: "No" }],
           multiSelect: false,
-          previewFormat: "html",
         },
       ],
     });
@@ -184,10 +182,10 @@ describe("question form card core", () => {
     const [layout, box, ship] = questions;
     expect(layout?.previewFormat).toBe("html");
     expect(layout?.options.map((option) => option.preview)).toEqual([
-      "<div>Cards</div>",
+      "\n  <div>Cards</div>",
       "<div>List</div>",
     ]);
-    // Without a declared format, a preview is the SDK's default Markdown.
+    // ASCII art and Markdown do not open with a tag.
     expect(box?.previewFormat).toBe("markdown");
     expect(box?.options.map((option) => option.preview)).toEqual(["+------+", undefined]);
     // A blank preview is no preview.
@@ -207,7 +205,6 @@ describe("question form card core", () => {
             { label: "List", preview: "<div>List</div>" },
           ],
           multiSelect: true,
-          previewFormat: "html",
         },
       ],
     });
@@ -235,7 +232,6 @@ describe("question form card core", () => {
           header: "Layout",
           options: [{ label: "Cards", preview: "<div>Cards</div>" }, { label: "List" }],
           multiSelect: false,
-          previewFormat: "html",
         },
         {
           question: "Which provider?",

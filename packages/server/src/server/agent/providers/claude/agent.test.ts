@@ -726,21 +726,6 @@ describe("ClaudeAgentSession features", () => {
     }
   });
 
-  test("asks Claude for HTML option previews on its questions", async () => {
-    const { queryFactory } = createQueryMock();
-    const session = await new ClaudeAgentClient({
-      logger,
-      queryFactory,
-      resolveBinary: async () => "/test/claude/bin",
-    }).createSession({ provider: "claude", cwd: process.cwd() });
-
-    await (session as unknown as { ensureQuery(): Promise<unknown> }).ensureQuery();
-    expect(queryFactory.mock.calls[0]?.[0].options.toolConfig).toEqual({
-      askUserQuestion: { previewFormat: "html" },
-    });
-    await session.close();
-  });
-
   test("passes exact configured Fable 5 IDs through to Claude Code", async () => {
     const { queryFactory, queryMock } = createQueryMock();
     const client = new ClaudeAgentClient({
@@ -1405,82 +1390,6 @@ describe("normalizeClaudeAskUserQuestionUpdatedInput", () => {
           allowOther: true,
         },
       ],
-    });
-  });
-
-  test("tags questions whose options carry previews with Paseo's HTML preview format", () => {
-    expect(
-      normalizeClaudeAskUserQuestionRequestInput("AskUserQuestion", {
-        questions: [
-          {
-            question: "Which card layout?",
-            header: "Layout",
-            options: [
-              { label: "Compact", description: "Title only", preview: "<div>Compact</div>" },
-              { label: "Detailed", description: "Title and chart" },
-            ],
-            multiSelect: false,
-          },
-          {
-            question: "Ship it now?",
-            header: "Ship",
-            options: [{ label: "Yes" }, { label: "No" }],
-            multiSelect: false,
-          },
-        ],
-      }),
-    ).toEqual({
-      questions: [
-        {
-          question: "Which card layout?",
-          header: "Layout",
-          options: [
-            { label: "Compact", description: "Title only", preview: "<div>Compact</div>" },
-            { label: "Detailed", description: "Title and chart" },
-          ],
-          multiSelect: false,
-          allowOther: true,
-          previewFormat: "html",
-        },
-        {
-          question: "Ship it now?",
-          header: "Ship",
-          options: [{ label: "Yes" }, { label: "No" }],
-          multiSelect: false,
-          allowOther: true,
-        },
-      ],
-    });
-  });
-
-  test("returns option previews to Claude without Paseo's question UI metadata", () => {
-    expect(
-      normalizeClaudeAskUserQuestionUpdatedInput(
-        {
-          questions: [
-            {
-              question: "Which card layout?",
-              header: "Layout",
-              options: [{ label: "Compact", preview: "<div>Compact</div>" }],
-              multiSelect: false,
-              allowOther: true,
-              previewFormat: "html",
-            },
-          ],
-          answers: { Layout: "Compact" },
-        },
-        undefined,
-      ),
-    ).toEqual({
-      questions: [
-        {
-          question: "Which card layout?",
-          header: "Layout",
-          options: [{ label: "Compact", preview: "<div>Compact</div>" }],
-          multiSelect: false,
-        },
-      ],
-      answers: { "Which card layout?": "Compact" },
     });
   });
 
