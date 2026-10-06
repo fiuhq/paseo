@@ -151,18 +151,17 @@ describe("question form card core", () => {
     });
   });
 
-  test("reads option previews and the format the provider declared", () => {
+  test("reads option previews and tells HTML from Markdown by their content", () => {
     const questions = parseQuestionFormQuestions({
       questions: [
         {
           question: "Which layout?",
           header: "Layout",
           options: [
-            { label: "Cards", preview: "<div>Cards</div>" },
+            { label: "Cards", preview: "\n  <div>Cards</div>" },
             { label: "List", preview: "<div>List</div>" },
           ],
           multiSelect: false,
-          previewFormat: "html",
         },
         {
           question: "Which box?",
@@ -171,25 +170,41 @@ describe("question form card core", () => {
           multiSelect: false,
         },
         {
+          question: "Which latency?",
+          header: "Latency",
+          options: [{ label: "Fast", preview: "< 10 ms\n+-----+\n| API |\n+-----+" }],
+          multiSelect: false,
+        },
+        {
+          question: "Which style?",
+          header: "Style",
+          options: [
+            { label: "Padded", preview: '<div style="padding:8px">Cards</div>' },
+            { label: "Inline", preview: "<span>x</span>" },
+          ],
+          multiSelect: false,
+        },
+        {
           question: "Ship it?",
           header: "Ship",
           options: [{ label: "Yes", preview: "   " }, { label: "No" }],
           multiSelect: false,
-          previewFormat: "html",
         },
       ],
     });
 
     if (!questions) throw new Error("questions did not parse");
-    const [layout, box, ship] = questions;
+    const [layout, box, latency, style, ship] = questions;
     expect(layout?.previewFormat).toBe("html");
     expect(layout?.options.map((option) => option.preview)).toEqual([
-      "<div>Cards</div>",
+      "\n  <div>Cards</div>",
       "<div>List</div>",
     ]);
-    // Without a declared format, a preview is the SDK's default Markdown.
+    // ASCII art and Markdown do not open with a tag.
     expect(box?.previewFormat).toBe("markdown");
     expect(box?.options.map((option) => option.preview)).toEqual(["+------+", undefined]);
+    expect(latency?.previewFormat).toBe("markdown");
+    expect(style?.previewFormat).toBe("html");
     // A blank preview is no preview.
     expect(ship?.previewFormat).toBeUndefined();
     expect(ship?.options.map((option) => option.preview)).toEqual([undefined, undefined]);
@@ -207,7 +222,6 @@ describe("question form card core", () => {
             { label: "List", preview: "<div>List</div>" },
           ],
           multiSelect: true,
-          previewFormat: "html",
         },
       ],
     });
@@ -235,7 +249,6 @@ describe("question form card core", () => {
           header: "Layout",
           options: [{ label: "Cards", preview: "<div>Cards</div>" }, { label: "List" }],
           multiSelect: false,
-          previewFormat: "html",
         },
         {
           question: "Which provider?",
