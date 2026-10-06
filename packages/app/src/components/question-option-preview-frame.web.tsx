@@ -5,6 +5,32 @@ import type { QuestionOptionPreviewFrameProps } from "./question-option-preview-
 // A picture taller than this is scaled down to it, as a wide one is to its option's width.
 const MAX_PREVIEW_HEIGHT = 360;
 
+// The body's box widened to every descendant's box and scrolled overflow, relative to the body's
+// own origin, so content positioned outside the body counts.
+function measureExtent(body: HTMLElement, origin: DOMRect) {
+  let left = 0;
+  let top = 0;
+  let right = Math.max(origin.width, body.scrollWidth);
+  let bottom = Math.max(origin.height, body.scrollHeight);
+  for (const element of body.querySelectorAll("*")) {
+    const rect = element.getBoundingClientRect();
+    if (!rect.width && !rect.height && !element.scrollWidth && !element.scrollHeight) continue;
+    left = Math.min(left, rect.left - origin.left);
+    top = Math.min(top, rect.top - origin.top);
+    right = Math.max(
+      right,
+      rect.right - origin.left,
+      rect.left - origin.left + element.scrollWidth,
+    );
+    bottom = Math.max(
+      bottom,
+      rect.bottom - origin.top,
+      rect.top - origin.top + element.scrollHeight,
+    );
+  }
+  return { left, top, right, bottom };
+}
+
 /**
  * An HTML option picture in a sandboxed iframe: nothing in it runs, nothing is fetched. The frame
  * takes the picture's own size, scaled down when the picture is wider than its option or taller
@@ -26,21 +52,10 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
     frame.style.width = `${room}px`;
     page.style.zoom = "";
     body.style.margin = "0";
-    // The body's box widened to every descendant, so content positioned outside it counts.
     const origin = body.getBoundingClientRect();
-    let left = 0;
-    let top = 0;
-    let right = Math.max(origin.width, body.scrollWidth);
-    let bottom = Math.max(origin.height, body.scrollHeight);
-    for (const element of body.querySelectorAll("*")) {
-      const rect = element.getBoundingClientRect();
-      if (!rect.width && !rect.height && !element.scrollWidth && !element.scrollHeight) continue;
-      left = Math.min(left, rect.left - origin.left);
-      top = Math.min(top, rect.top - origin.top);
-      right = Math.max(right, rect.right - origin.left, rect.left - origin.left + element.scrollWidth);
-      bottom = Math.max(bottom, rect.bottom - origin.top, rect.top - origin.top + element.scrollHeight);
-    }
-    if (left < 0 || top < 0) body.style.margin = `${-Math.min(top, 0)}px 0 0 ${-Math.min(left, 0)}px`;
+    const { left, top, right, bottom } = measureExtent(body, origin);
+    if (left < 0 || top < 0)
+      body.style.margin = `${-Math.min(top, 0)}px 0 0 ${-Math.min(left, 0)}px`;
     const width = right - left;
     const height = bottom - top;
     if (!width || !height) return;
