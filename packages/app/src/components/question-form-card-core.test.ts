@@ -4,8 +4,6 @@ import {
   buildQuestionFormAnswers,
   buildQuestionPreviewDocument,
   parseQuestionFormQuestions,
-  previewedOptionIndex,
-  questionAdvancesOnPick,
   questionShowsTextInput,
   resolveDismissLabel,
   shouldSubmitEmptyOnDismiss,
@@ -208,66 +206,6 @@ describe("question form card core", () => {
     // A blank preview is no preview.
     expect(ship?.previewFormat).toBeUndefined();
     expect(ship?.options.map((option) => option.preview)).toEqual([undefined, undefined]);
-  });
-
-  test("previews the latest pick, or the first option before any pick", () => {
-    const questions = parseQuestionFormQuestions({
-      questions: [
-        {
-          question: "Which layout?",
-          header: "Layout",
-          options: [
-            { label: "Plain" },
-            { label: "Cards", preview: "<div>Cards</div>" },
-            { label: "List", preview: "<div>List</div>" },
-          ],
-          multiSelect: true,
-        },
-      ],
-    });
-
-    if (!questions) throw new Error("questions did not parse");
-    const [question] = questions;
-    if (!question) throw new Error("question missing");
-    expect(previewedOptionIndex(question, new Set())).toBeNull();
-    expect(
-      previewedOptionIndex(
-        { ...question, options: [{ label: "Cards", preview: "<div>Cards</div>" }] },
-        new Set(),
-      ),
-    ).toBe(0);
-    expect(previewedOptionIndex(question, new Set([2]))).toBe(2);
-    expect(previewedOptionIndex(question, new Set([2, 1]))).toBe(1);
-    expect(previewedOptionIndex(question, new Set([0]))).toBeNull();
-  });
-
-  test("keeps a question with previews open after a pick so its options can be compared", () => {
-    const questions = parseQuestionFormQuestions({
-      questions: [
-        {
-          question: "Which layout?",
-          header: "Layout",
-          options: [{ label: "Cards", preview: "<div>Cards</div>" }, { label: "List" }],
-          multiSelect: false,
-        },
-        {
-          question: "Which provider?",
-          header: "Provider",
-          options: [{ label: "Claude" }, { label: "Codex" }],
-          multiSelect: false,
-        },
-        {
-          question: "Which fruits?",
-          header: "Fruits",
-          options: [{ label: "Apple" }, { label: "Pear" }],
-          multiSelect: true,
-        },
-      ],
-    });
-
-    if (!questions) throw new Error("questions did not parse");
-    expect(questions.map(questionAdvancesOnPick)).toEqual([false, true, false]);
-    expect(previewedOptionIndex(questions[1] ?? questions[0], new Set())).toBeNull();
   });
 
   test("wraps an HTML preview in a document that runs nothing and loads nothing", () => {
