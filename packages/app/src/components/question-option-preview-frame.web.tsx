@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { buildQuestionPreviewDocument } from "./question-form-card-core";
 import type { QuestionOptionPreviewFrameProps } from "./question-option-preview-frame-types";
 
-// ponytail: a taller picture is clipped at this height; let the frame scroll if one needs it.
+// A picture taller than this is scaled down to it, as a wide one is to its option's width.
 const MAX_PREVIEW_HEIGHT = 360;
 
 /**
  * An HTML option picture in a sandboxed iframe: nothing in it runs, nothing is fetched. The frame
- * takes the picture's own size, and a picture drawn wider than its option is scaled down to fit.
+ * takes the picture's own size, scaled down when the picture is wider than its option or taller
+ * than MAX_PREVIEW_HEIGHT, so the whole picture always shows.
  */
 export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPreviewFrameProps) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -24,11 +25,15 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
     if (!frame || !page || !body || !room) return;
     frame.style.width = `${room}px`;
     page.style.zoom = "";
-    const drawn = body.getBoundingClientRect();
-    const scale = Math.min(1, room / drawn.width);
+    // The box, or the overflow when positioned content draws outside it.
+    const box = body.getBoundingClientRect();
+    const width = Math.max(box.width, body.scrollWidth);
+    const height = Math.max(box.height, body.scrollHeight);
+    if (!width || !height) return;
+    const scale = Math.min(1, room / width, MAX_PREVIEW_HEIGHT / height);
     if (scale < 1) page.style.zoom = String(scale);
-    frame.style.width = `${Math.ceil(drawn.width * scale)}px`;
-    frame.style.height = `${Math.min(Math.ceil(drawn.height * scale), MAX_PREVIEW_HEIGHT)}px`;
+    frame.style.width = `${Math.ceil(width * scale)}px`;
+    frame.style.height = `${Math.ceil(height * scale)}px`;
   }, []);
 
   // Text rewraps and a picture's scale changes with the room its option gives it.

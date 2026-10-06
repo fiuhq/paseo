@@ -238,6 +238,42 @@ describe("QuestionFormCard option previews", () => {
     });
   });
 
+  it("scales a picture taller than the frame's limit down instead of clipping it", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [{ label: "Tall", preview: '<div style="width:200px;height:720px">Tall</div>' }],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() => {
+      expect(card.pictureFrame("Tall").offsetHeight).toBe(360);
+      expect(card.pictureFrame("Tall").offsetWidth).toBe(100);
+    });
+  });
+
+  it("measures a picture drawn by positioned content", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Positioned",
+            preview:
+              '<div style="position:relative;width:200px"><div style="position:absolute;width:200px;height:80px">Picture</div></div>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() => {
+      expect(card.pictureFrame("Positioned").offsetHeight).toBe(80);
+      expect(card.pictureFrame("Positioned").offsetWidth).toBe(200);
+    });
+  });
+
   it("grows the frame when a narrower container rewraps the preview text", async () => {
     const card = mountQuestions([
       {
