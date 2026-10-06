@@ -30,15 +30,15 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
     const origin = body.getBoundingClientRect();
     let left = 0;
     let top = 0;
-    let right = origin.width;
-    let bottom = origin.height;
+    let right = Math.max(origin.width, body.scrollWidth);
+    let bottom = Math.max(origin.height, body.scrollHeight);
     for (const element of body.querySelectorAll("*")) {
       const rect = element.getBoundingClientRect();
-      if (!rect.width && !rect.height) continue;
+      if (!rect.width && !rect.height && !element.scrollWidth && !element.scrollHeight) continue;
       left = Math.min(left, rect.left - origin.left);
       top = Math.min(top, rect.top - origin.top);
-      right = Math.max(right, rect.right - origin.left);
-      bottom = Math.max(bottom, rect.bottom - origin.top);
+      right = Math.max(right, rect.right - origin.left, rect.left - origin.left + element.scrollWidth);
+      bottom = Math.max(bottom, rect.bottom - origin.top, rect.top - origin.top + element.scrollHeight);
     }
     if (left < 0 || top < 0) body.style.margin = `${-Math.min(top, 0)}px 0 0 ${-Math.min(left, 0)}px`;
     const width = right - left;

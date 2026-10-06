@@ -316,6 +316,27 @@ describe("QuestionFormCard option previews", () => {
     });
   });
 
+  it("measures text that overflows its positioned box", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Overflow",
+            preview:
+              '<div style="position:absolute;left:0;top:0;width:200px;height:20px;white-space:pre;font:16px/20px monospace">Line 1\nLine 2\nLine 3</div>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() => {
+      expect(card.pictureFrame("Overflow").offsetHeight).toBeGreaterThanOrEqual(60);
+      expect(card.pictureFrame("Overflow").offsetWidth).toBeGreaterThanOrEqual(200);
+    });
+  });
+
   it("grows the frame when a narrower container rewraps the preview text", async () => {
     const card = mountQuestions([
       {
