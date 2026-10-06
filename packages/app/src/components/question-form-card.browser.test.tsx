@@ -274,6 +274,27 @@ describe("QuestionFormCard option previews", () => {
     });
   });
 
+  it("measures a picture whose only content is absolutely positioned", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Absolute",
+            preview:
+              '<div style="position:absolute;left:0;top:0;width:200px;height:80px">Picture</div>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() => {
+      expect(card.pictureFrame("Absolute").offsetHeight).toBe(80);
+      expect(card.pictureFrame("Absolute").offsetWidth).toBe(200);
+    });
+  });
+
   it("grows the frame when a narrower container rewraps the preview text", async () => {
     const card = mountQuestions([
       {

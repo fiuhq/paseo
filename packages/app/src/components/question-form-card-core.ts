@@ -191,8 +191,9 @@ export function buildQuestionPreviewDocument(fragment: string): string {
     "<style>html,body{margin:0;background:#fff;color:#111;",
     "font:13px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
     // The body takes the picture's own width (fit-content) and holds its children's margins
-    // (flow-root), so the card can size the frame to exactly the picture.
-    "body{width:fit-content;display:flow-root;overflow-wrap:anywhere}</style>",
+    // (flow-root), so the card can size the frame to exactly the picture. It is also the
+    // containing block for absolutely positioned content (relative), so its scroll size counts it.
+    "body{position:relative;width:fit-content;display:flow-root;overflow-wrap:anywhere}</style>",
     `</head><body>${fragment}</body></html>`,
   ].join("");
 }
