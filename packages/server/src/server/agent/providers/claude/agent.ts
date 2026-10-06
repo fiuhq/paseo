@@ -154,6 +154,17 @@ const CLAUDE_SETTING_SOURCES: NonNullable<ClaudeOptions["settingSources"]> = [
   "local",
 ];
 
+// Paseo's clients draw AskUserQuestion option previews in a sandboxed HTML frame, so ask
+// Claude for HTML fragments instead of the CLI's monospace Markdown.
+const CLAUDE_ASK_USER_QUESTION_PREVIEW_FORMAT = "html";
+
+function hasOptionPreview(question: AgentMetadata): boolean {
+  return (
+    Array.isArray(question.options) &&
+    question.options.some((option) => isMetadata(option) && typeof option.preview === "string")
+  );
+}
+
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
@@ -168,7 +179,7 @@ export function normalizeClaudeAskUserQuestionRequestInput(
 
   // Claude Code's AskUserQuestion schema says "Other" is host-provided, not a
   // model-supplied option. Paseo's shared question UI uses allowOther for that
-  // freeform answer path.
+  // freeform answer path, and previewFormat to know how to draw option previews.
   return {
     ...input,
     questions: input.questions.map((item) => {
@@ -178,6 +189,9 @@ export function normalizeClaudeAskUserQuestionRequestInput(
       return {
         ...item,
         allowOther: true,
+        ...(hasOptionPreview(item)
+          ? { previewFormat: CLAUDE_ASK_USER_QUESTION_PREVIEW_FORMAT }
+          : {}),
       };
     }),
   };
@@ -191,11 +205,12 @@ function stripClaudeAskUserQuestionUiMetadata(input: AgentMetadata): AgentMetada
   return {
     ...input,
     questions: input.questions.map((item) => {
-      if (!isMetadata(item) || !("allowOther" in item)) {
+      if (!isMetadata(item) || !("allowOther" in item || "previewFormat" in item)) {
         return item;
       }
       const itemForClaude: AgentMetadata = { ...item };
       delete itemForClaude.allowOther;
+      delete itemForClaude.previewFormat;
       return itemForClaude;
     }),
   };
@@ -3344,6 +3359,7 @@ class ClaudeAgentSession implements AgentSession {
         append: appendedSystemPrompt,
       },
       settingSources: CLAUDE_SETTING_SOURCES,
+      toolConfig: { askUserQuestion: { previewFormat: CLAUDE_ASK_USER_QUESTION_PREVIEW_FORMAT } },
       stderr: (data: string) => {
         this.captureStderr(data);
         this.logger.error({ stderr: data.trim() }, "Claude Agent SDK stderr");

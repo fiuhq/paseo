@@ -370,6 +370,7 @@ export const ar: TranslationResources = {
       next: "التالي",
       answerPlaceholder: "اكتب إجابتك...",
       otherPlaceholder: "آخر...",
+      preview: "معاينة",
     },
     todo: {
       title: "المهام",

@@ -147,3 +147,74 @@ describe("QuestionFormCard other answers", () => {
     expect(card.submittedAnswers()).toEqual({ Provider: "Codex" });
   });
 });
+
+describe("QuestionFormCard option previews", () => {
+  const layoutQuestion = {
+    question: "Which card layout?",
+    header: "Layout",
+    options: [
+      { label: "Compact", description: "Title only", preview: "<div>Compact card</div>" },
+      { label: "Detailed", description: "Title and chart", preview: "<div>Detailed card</div>" },
+    ],
+    multiSelect: false,
+    allowOther: true,
+    previewFormat: "html",
+  };
+  const shipQuestion = {
+    question: "Ship it now?",
+    header: "Ship",
+    options: [{ label: "Yes" }, { label: "No" }],
+    multiSelect: false,
+  };
+
+  function mountQuestions(questions: Record<string, unknown>[]) {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const permission = buildPermission(questions[0] ?? {});
+    permission.request.input = { questions };
+    act(() =>
+      root.render(
+        <QuestionFormCard permission={permission} onRespond={vi.fn()} isResponding={false} />,
+      ),
+    );
+    mounted.push({ root, container });
+    const view = within(container);
+    const previewFrame = () => view.getByTitle<HTMLIFrameElement>(/^Preview: /);
+    const currentQuestion = () => view.getByTestId("question-form-current-question").textContent;
+    const pick = (label: string) => act(() => view.getByRole("radio", { name: label }).click());
+    return { view, previewFrame, currentQuestion, pick };
+  }
+
+  it("shows the first option's preview, then the picked one's, without leaving the question", () => {
+    const card = mountQuestions([layoutQuestion, shipQuestion]);
+
+    expect(card.previewFrame().title).toBe("Preview: Compact");
+    expect(card.previewFrame().srcdoc).toContain("<body><div>Compact card</div></body>");
+
+    card.pick("Detailed");
+
+    expect(card.previewFrame().title).toBe("Preview: Detailed");
+    expect(card.previewFrame().srcdoc).toContain("<body><div>Detailed card</div></body>");
+    expect(card.currentQuestion()).toBe("Which card layout?");
+  });
+
+  it("draws the preview in a frame where no script can run and nothing can load", () => {
+    const card = mountQuestions([layoutQuestion]);
+    const frame = card.previewFrame();
+
+    expect(frame.getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(frame.srcdoc).toContain(
+      `content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:"`,
+    );
+  });
+
+  it("still moves on after a pick when the question has no previews", () => {
+    const card = mountQuestions([shipQuestion, layoutQuestion]);
+
+    expect(card.view.queryByTestId("question-form-option-preview")).toBeNull();
+    card.pick("Yes");
+
+    expect(card.currentQuestion()).toBe("Which card layout?");
+  });
+});

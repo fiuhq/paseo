@@ -370,6 +370,7 @@ export const zhCN: TranslationResources = {
       next: "下一步",
       answerPlaceholder: "输入你的回答...",
       otherPlaceholder: "其他...",
+      preview: "预览",
     },
     todo: {
       title: "任务",

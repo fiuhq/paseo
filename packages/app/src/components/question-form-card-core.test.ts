@@ -2,7 +2,10 @@ import { describe, expect, test } from "vitest";
 import {
   areQuestionsAnswered,
   buildQuestionFormAnswers,
+  buildQuestionPreviewDocument,
   parseQuestionFormQuestions,
+  previewedOptionIndex,
+  questionAdvancesOnPick,
   questionShowsTextInput,
   resolveDismissLabel,
   shouldSubmitEmptyOnDismiss,
@@ -146,5 +149,114 @@ describe("question form card core", () => {
     expect(buildQuestionFormAnswers(questions, {}, { 0: "custom" })).toEqual({
       Response: "custom",
     });
+  });
+
+  test("reads option previews and the format the provider declared", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Which layout?",
+          header: "Layout",
+          options: [
+            { label: "Cards", preview: "<div>Cards</div>" },
+            { label: "List", preview: "<div>List</div>" },
+          ],
+          multiSelect: false,
+          previewFormat: "html",
+        },
+        {
+          question: "Which box?",
+          header: "Box",
+          options: [{ label: "Wide", preview: "+------+" }, { label: "Narrow" }],
+          multiSelect: false,
+        },
+        {
+          question: "Ship it?",
+          header: "Ship",
+          options: [{ label: "Yes", preview: "   " }, { label: "No" }],
+          multiSelect: false,
+          previewFormat: "html",
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    const [layout, box, ship] = questions;
+    expect(layout?.previewFormat).toBe("html");
+    expect(layout?.options.map((option) => option.preview)).toEqual([
+      "<div>Cards</div>",
+      "<div>List</div>",
+    ]);
+    // Without a declared format, a preview is the SDK's default Markdown.
+    expect(box?.previewFormat).toBe("markdown");
+    expect(box?.options.map((option) => option.preview)).toEqual(["+------+", undefined]);
+    // A blank preview is no preview.
+    expect(ship?.previewFormat).toBeUndefined();
+    expect(ship?.options.map((option) => option.preview)).toEqual([undefined, undefined]);
+  });
+
+  test("previews the latest pick, or the first option before any pick", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Which layout?",
+          header: "Layout",
+          options: [
+            { label: "Plain" },
+            { label: "Cards", preview: "<div>Cards</div>" },
+            { label: "List", preview: "<div>List</div>" },
+          ],
+          multiSelect: true,
+          previewFormat: "html",
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    const [question] = questions;
+    if (!question) throw new Error("question missing");
+    expect(previewedOptionIndex(question, new Set())).toBe(1);
+    expect(previewedOptionIndex(question, new Set([2]))).toBe(2);
+    expect(previewedOptionIndex(question, new Set([2, 1]))).toBe(1);
+    expect(previewedOptionIndex(question, new Set([0]))).toBeNull();
+  });
+
+  test("keeps a question with previews open after a pick so its options can be compared", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Which layout?",
+          header: "Layout",
+          options: [{ label: "Cards", preview: "<div>Cards</div>" }, { label: "List" }],
+          multiSelect: false,
+          previewFormat: "html",
+        },
+        {
+          question: "Which provider?",
+          header: "Provider",
+          options: [{ label: "Claude" }, { label: "Codex" }],
+          multiSelect: false,
+        },
+        {
+          question: "Which fruits?",
+          header: "Fruits",
+          options: [{ label: "Apple" }, { label: "Pear" }],
+          multiSelect: true,
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    expect(questions.map(questionAdvancesOnPick)).toEqual([false, true, false]);
+    expect(previewedOptionIndex(questions[1] ?? questions[0], new Set())).toBeNull();
+  });
+
+  test("wraps an HTML preview in a document that runs nothing and loads nothing", () => {
+    const document = buildQuestionPreviewDocument('<div style="padding:8px">Cards</div>');
+
+    expect(document).toContain(
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:">`,
+    );
+    expect(document).toContain('<body><div style="padding:8px">Cards</div></body>');
   });
 });
