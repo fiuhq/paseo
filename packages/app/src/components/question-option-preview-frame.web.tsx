@@ -7,27 +7,18 @@ import { wheelZoomFactor } from "@/components/zoomable-viewport/geometry";
 import type { ZoomableViewportHandle } from "@/components/zoomable-viewport/types";
 import {
   buildQuestionPreviewDocument,
-  QUESTION_PREVIEW_MAX_HEIGHT,
+  measureQuestionPreviewLayout,
   questionPreviewBox,
   questionPreviewStateMessage,
   readQuestionPreviewFrameMessage,
+  startQuestionPreviewLayout,
+  type QuestionPreviewLayout,
   type QuestionPreviewSize,
 } from "./question-form-card-core";
 import type { QuestionOptionPreviewFrameProps } from "./question-option-preview-frame-types";
 
 // Until the frame reports its picture, the viewport has nothing to fit.
 const NOT_MEASURED: QuestionPreviewSize = { width: 1, height: 1 };
-
-// A picture measured for one option width. Text wraps to the frame it is laid out in, so a new
-// width is measured again with the frame laid out at that width.
-interface Measurement {
-  document: string;
-  room: number;
-  size: QuestionPreviewSize;
-}
-
-// The frame's width is a whole number of pixels; the option's may not be.
-const sameWidth = (a: number, b: number) => Math.abs(a - b) <= 1;
 
 // Which loads of the frame the card asked for. A load it did not ask for is the picture's page
 // navigating itself away: the card puts the picture back once, and stops a page that leaves again.
@@ -37,13 +28,25 @@ interface FrameLoads {
   restoring: boolean;
 }
 
+// Text wraps to the frame it is laid out in, so a new picture or a new option width is laid out
+// again from the option's width. Until it is measured there, the same picture's last measurement
+// draws it.
+function layoutFor(kept: QuestionPreviewLayout | null, document: string, room: number) {
+  const current = kept?.document === document && kept.room === room ? kept : null;
+  const layout = current ?? (room ? startQuestionPreviewLayout(document, room) : null);
+  const drawn = layout?.picture ?? (kept?.document === document ? kept.picture : null);
+  const box = drawn && room ? questionPreviewBox(drawn, room) : null;
+  const fit = drawn && box ? Math.min(box.width / drawn.width, box.height / drawn.height) : 1;
+  return { layout, drawn, box, fit };
+}
+
 /**
  * An HTML option picture, live: its own scripts run in a sandboxed frame with an opaque origin,
  * so it can be clicked through but cannot reach the app, and nothing is fetched. The picture is
  * fitted whole into its option; the viewport around it zooms (Ctrl/⌘ and the wheel, a pinch, and
  * the toolbar it shows while the picture is drawn smaller than its own size) and pans while zoomed
- * in (the wheel, a touch drag). The frame is laid out at the option's width, or at the picture's own
- * width when the picture is wider, and only drawn smaller or larger, so zooming never reflows it.
+ * in (the wheel, a touch drag). The frame is laid out as `measureQuestionPreviewLayout` decides and
+ * only drawn smaller or larger, so zooming never reflows the picture.
  */
 export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPreviewFrameProps) {
   const { t } = useTranslation();
@@ -52,17 +55,12 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const viewportRef = useRef<ZoomableViewportHandle | null>(null);
   const document = useMemo(() => buildQuestionPreviewDocument(html), [html]);
-  const [measurement, setMeasurement] = useState<Measurement | null>(null);
+  const [kept, setKept] = useState<QuestionPreviewLayout | null>(null);
   const [room, setRoom] = useState(0);
   const loadsRef = useRef<FrameLoads | null>(null);
+  const scaleRef = useRef(1);
   const [stopped, setStopped] = useState<string | null>(null);
-  // A new picture is fitted from its own size, never the previous picture's. Until it is measured
-  // for this width, the last measurement draws it, and the frame is laid out at the new width.
-  const drawn = measurement?.document === document ? measurement.size : null;
-  const picture = drawn && measurement && sameWidth(measurement.room, room) ? drawn : null;
-  // Never narrower than the option, so a picture that grows (a click opens a panel) has room to;
-  // wider when the picture is, so it is laid out at its own width and drawn smaller.
-  const layoutWidth = picture ? Math.max(room, picture.width) : room;
+  const { layout, drawn, box, fit } = layoutFor(kept, document, room);
 
   useEffect(() => {
     const element = roomRef.current;
@@ -80,12 +78,18 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
       const message = readQuestionPreviewFrameMessage(event.data);
       if (!message) return;
       if (message.type === "size") {
-        // Measured at the option's width, or a change while laid out at the picture's own width.
-        const forThisWidth =
-          sameWidth(message.viewport, room) ||
-          (picture && sameWidth(message.viewport, layoutWidth));
-        if (!forThisWidth) return;
-        setMeasurement({ document, room, size: { width: message.width, height: message.height } });
+        if (!room) return;
+        const size = { width: message.width, height: message.height };
+        const frameSize = { width: message.frameWidth, height: message.frameHeight };
+        setKept((previous) =>
+          measureQuestionPreviewLayout(
+            previous?.document === document && previous.room === room
+              ? previous
+              : startQuestionPreviewLayout(document, room),
+            size,
+            frameSize,
+          ),
+        );
         return;
       }
       if (message.type === "pan") {
@@ -108,18 +112,23 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
     }
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
-  }, [document, layoutWidth, picture, room]);
+  }, [document, room]);
 
+  // A page the card loaded starts unzoomed; it is told the viewport's scale as it stands.
   const handleLoad = useCallback(() => {
     const frame = frameRef.current;
     const loads = loadsRef.current;
     if (!frame) return;
+    const resend = () =>
+      frame.contentWindow?.postMessage(questionPreviewStateMessage(scaleRef.current > 1), "*");
     if (!loads || loads.document !== document) {
       loadsRef.current = { document, restored: false, restoring: false };
+      resend();
       return;
     }
     if (loads.restoring) {
       loads.restoring = false;
+      resend();
       return;
     }
     if (loads.restored) {
@@ -133,11 +142,10 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
 
   // While zoomed in, the frame hands the card its wheel and touch drags so they pan the picture.
   const tellFrame = useCallback((scale: number) => {
+    scaleRef.current = scale;
     frameRef.current?.contentWindow?.postMessage(questionPreviewStateMessage(scale > 1), "*");
   }, []);
 
-  const box = drawn && room ? questionPreviewBox(drawn, room) : null;
-  const fit = drawn && box ? Math.min(box.width / drawn.width, box.height / drawn.height) : 1;
   const viewportBoxStyle = useMemo<React.CSSProperties>(
     () => ({ ...viewportBoxDomStyle, width: box?.width ?? "100%", height: box?.height ?? 0 }),
     [box?.height, box?.width],
@@ -145,13 +153,11 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
   const frameStyle = useMemo<React.CSSProperties>(
     () => ({
       ...frameDomStyle,
-      width: layoutWidth || "100%",
-      // Before its first measurement the page gets a height to lay out in, so a picture sized by
-      // the frame (`100vh`) has one.
-      height: drawn?.height ?? QUESTION_PREVIEW_MAX_HEIGHT,
+      width: layout?.frame.width ?? "100%",
+      height: layout?.frame.height ?? 0,
       transform: `scale(${fit})`,
     }),
-    [drawn?.height, fit, layoutWidth],
+    [fit, layout?.frame.height, layout?.frame.width],
   );
 
   if (stopped === document) {

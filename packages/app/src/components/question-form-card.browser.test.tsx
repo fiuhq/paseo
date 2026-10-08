@@ -477,6 +477,66 @@ describe("QuestionFormCard option previews", () => {
     await vi.waitFor(() => expect(card.pictureBox("Viewport").height).toBeGreaterThan(0));
   });
 
+  it("settles a picture sized by its frame instead of following it", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          { label: "Half", preview: '<div style="width:600px;height:50vh;background:#09f"></div>' },
+          {
+            label: "Taller",
+            preview: '<div style="width:600px;height:calc(100vh + 20px);background:#09f"></div>',
+          },
+          {
+            label: "Wider",
+            preview: '<div style="width:120vw;height:100px;background:#09f"></div>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+    await vi.waitFor(() => {
+      for (const label of ["Half", "Taller", "Wider"]) {
+        expect(card.pictureBox(label).height).toBeGreaterThan(0);
+      }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const first = ["Half", "Taller", "Wider"].map((label) => card.pictureBox(label).height);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(["Half", "Taller", "Wider"].map((label) => card.pictureBox(label).height)).toEqual(
+      first,
+    );
+    expect(card.pictureBox("Half").height).toBeGreaterThan(100);
+  });
+
+  it("keeps a zoomed-in picture panning after its page is put back", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Wide",
+            preview:
+              '<div style="width:600px;height:200px">Wide</div><script>if (!window.name) { window.name = "left"; setTimeout(() => { location.href = "about:blank"; }, 600); }</script>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "300px";
+    await vi.waitFor(() => expect(card.pictureBox("Wide").height).toBeGreaterThan(0));
+    const fitted = card.pictureBox("Wide").width;
+    act(() => card.toolbarButton("Wide", "Zoom in").click());
+    await vi.waitFor(() => expect(card.drawnFrame("Wide").width).toBeCloseTo(fitted * 1.25, 0));
+    // The page leaves and is put back while the picture stays zoomed in.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const zoomedLeft = card.drawnFrame("Wide").left;
+
+    await userEvent.wheel(card.pictureFrame("Wide"), { delta: { x: 30 } });
+
+    await vi.waitFor(() => expect(card.drawnFrame("Wide").left).toBeLessThan(zoomedLeft - 20));
+  });
+
   it("puts the picture back when its page navigates away once", async () => {
     const card = mountQuestions([
       {
@@ -566,12 +626,37 @@ describe("question preview frame script", () => {
     return { win, doc, received, tell, settle };
   }
 
-  it("reports the picture's size with the width of the frame it was laid out in", async () => {
+  it("reports the picture's size with the size of the frame it was laid out in", async () => {
     const frame = await loadFrame('<div style="width:600px;height:200px">Wide</div>');
 
     await vi.waitFor(() =>
       expect(frame.received).toContainEqual(
-        expect.objectContaining({ type: "size", width: 600, height: 200, viewport: 400 }),
+        expect.objectContaining({
+          type: "size",
+          width: 600,
+          height: 200,
+          frameWidth: 400,
+          frameHeight: 300,
+        }),
+      ),
+    );
+  });
+
+  it("measures again when the page sets a style of its own on the body", async () => {
+    const frame = await loadFrame(
+      `<div style="position:relative;width:200px;height:80px"><div style="position:absolute;left:0;top:0;width:200px;height:var(--panel,80px)"></div></div>`,
+    );
+    await vi.waitFor(() =>
+      expect(frame.received).toContainEqual(
+        expect.objectContaining({ type: "size", width: 200, height: 80 }),
+      ),
+    );
+
+    frame.doc.body.style.setProperty("--panel", "200px");
+
+    await vi.waitFor(() =>
+      expect(frame.received).toContainEqual(
+        expect.objectContaining({ type: "size", width: 200, height: 200 }),
       ),
     );
   });

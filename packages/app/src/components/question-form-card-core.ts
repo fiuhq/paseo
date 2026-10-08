@@ -188,7 +188,7 @@ export const QUESTION_PREVIEW_MESSAGE_MARKER = "paseoQuestionPreview";
 /** A picture taller than this is fitted to it, as a wide one is to its option's width. */
 export const QUESTION_PREVIEW_MAX_HEIGHT = 360;
 
-// Runs first in every preview frame. It reports the picture's drawn size with the width of the
+// Runs first in every preview frame. It reports the picture's drawn size with the size of the
 // frame it was laid out in (a picture of text wraps to its frame), again whenever the page changes
 // (a click can open a positioned panel without resizing the body), and while the card has
 // the picture zoomed in it hands the card the wheel and touch drags the frame would otherwise
@@ -213,21 +213,31 @@ const QUESTION_PREVIEW_BOOTSTRAP = `(() => {
     }
     return { left, top, right, bottom };
   };
+  let observer = null;
+  // A write of this script's own is kept out of the page's changes; a page change already waiting
+  // still counts.
+  const own = (write) => {
+    const waiting = observer ? observer.takeRecords() : [];
+    write();
+    if (observer) observer.takeRecords();
+    if (waiting.length) schedule();
+  };
   let reported = "";
   const measure = () => {
     const body = document.body;
     if (!body) return;
-    body.style.margin = "0";
+    own(() => { body.style.margin = "0"; });
     const box = extent(body, body.getBoundingClientRect());
     if (box.left < 0 || box.top < 0)
-      body.style.margin = -Math.min(box.top, 0) + "px 0 0 " + -Math.min(box.left, 0) + "px";
+      own(() => { body.style.margin = -Math.min(box.top, 0) + "px 0 0 " + -Math.min(box.left, 0) + "px"; });
     const width = Math.ceil(box.right - box.left);
     const height = Math.ceil(box.bottom - box.top);
-    const viewport = window.innerWidth;
-    const key = width + "x" + height + "@" + viewport;
+    const frameWidth = window.innerWidth;
+    const frameHeight = window.innerHeight;
+    const key = width + "x" + height + "@" + frameWidth + "x" + frameHeight;
     if (!width || !height || key === reported) return;
     reported = key;
-    post({ type: "size", width, height, viewport });
+    post({ type: "size", width, height, frameWidth, frameHeight });
   };
   let scheduled = false;
   const schedule = () => {
@@ -238,15 +248,12 @@ const QUESTION_PREVIEW_BOOTSTRAP = `(() => {
       measure();
     }, 0);
   };
-  // The page's own changes, not the style this script writes on the page and its body.
-  const changed = (records) =>
-    records.some((record) => record.attributeName !== "style" || (record.target !== document.body && record.target !== document.documentElement));
   let zoomed = false;
   window.addEventListener("message", (event) => {
     const data = event.data;
     if (event.source !== window.parent || !data || data[marker] !== true || data.type !== "state") return;
     zoomed = data.zoomed === true;
-    document.documentElement.style.touchAction = zoomed ? "none" : "";
+    own(() => { document.documentElement.style.touchAction = zoomed ? "none" : ""; });
   });
   window.addEventListener("wheel", (event) => {
     const zoom = event.ctrlKey || event.metaKey;
@@ -291,9 +298,8 @@ const QUESTION_PREVIEW_BOOTSTRAP = `(() => {
   window.addEventListener("load", () => {
     measure();
     new ResizeObserver(measure).observe(document.body);
-    new MutationObserver((records) => {
-      if (changed(records)) schedule();
-    }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+    observer = new MutationObserver(schedule);
+    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
     window.addEventListener("resize", measure);
     window.addEventListener("transitionend", schedule, true);
     window.addEventListener("animationend", schedule, true);
@@ -327,11 +333,11 @@ export interface QuestionPreviewSize {
 }
 
 /**
- * What a preview frame tells the card. Positions are in the frame's own pixels; `viewport` is the
- * width of the frame the picture was laid out in when it was measured.
+ * What a preview frame tells the card. Positions are in the frame's own pixels; `frameWidth` and
+ * `frameHeight` are the size of the frame the picture was laid out in when it was measured.
  */
 export type QuestionPreviewFrameMessage =
-  | { type: "size"; width: number; height: number; viewport: number }
+  | { type: "size"; width: number; height: number; frameWidth: number; frameHeight: number }
   | { type: "wheel"; deltaX: number; deltaY: number; zoom: boolean; x: number; y: number }
   | { type: "pan"; dx: number; dy: number };
 
@@ -345,13 +351,14 @@ export function readQuestionPreviewFrameMessage(data: unknown): QuestionPreviewF
   const message = data as Record<string, unknown>;
   if (message[QUESTION_PREVIEW_MESSAGE_MARKER] !== true) return null;
   if (message.type === "size") {
-    const { width, height, viewport } = message;
+    const { width, height, frameWidth, frameHeight } = message;
     return isFiniteNumber(width) &&
       isFiniteNumber(height) &&
-      isFiniteNumber(viewport) &&
+      isFiniteNumber(frameWidth) &&
+      isFiniteNumber(frameHeight) &&
       width > 0 &&
       height > 0
-      ? { type: "size", width, height, viewport }
+      ? { type: "size", width, height, frameWidth, frameHeight }
       : null;
   }
   if (message.type === "wheel") {
@@ -385,4 +392,61 @@ export function questionPreviewBox(
     width: Math.max(1, Math.round(picture.width * scale)),
     height: Math.max(1, Math.round(picture.height * scale)),
   };
+}
+
+/**
+ * The frame a picture is laid out in, and what it showed. The frame starts at the option's width
+ * and the frame height limit, and is resized once to fit the picture. A picture that then changes
+ * with its frame is sized by the frame (`100vh`, `120vw`), so the frame stays as it is and the
+ * picture is what fits in it: following it would never stop.
+ */
+export interface QuestionPreviewLayout {
+  document: string;
+  room: number;
+  frame: QuestionPreviewSize;
+  /** The picture as last measured in this frame; null until the first measurement. */
+  picture: QuestionPreviewSize | null;
+  /** The frame was just resized for the picture; the next measurement answers that resize. */
+  resized: boolean;
+  /** The picture follows its frame, so the frame no longer follows the picture. */
+  settled: boolean;
+}
+
+// Frame sizes are whole pixels; an option's width may not be.
+const nearly = (a: QuestionPreviewSize, b: QuestionPreviewSize) =>
+  Math.abs(a.width - b.width) <= 1 && Math.abs(a.height - b.height) <= 1;
+const within = (size: QuestionPreviewSize, frame: QuestionPreviewSize): QuestionPreviewSize => ({
+  width: Math.min(size.width, frame.width),
+  height: Math.min(size.height, frame.height),
+});
+
+export function startQuestionPreviewLayout(document: string, room: number): QuestionPreviewLayout {
+  return {
+    document,
+    room,
+    frame: { width: room, height: QUESTION_PREVIEW_MAX_HEIGHT },
+    picture: null,
+    resized: false,
+    settled: false,
+  };
+}
+
+/** The layout after the frame measured `size` while laid out at `frame`; a stale measurement changes nothing. */
+export function measureQuestionPreviewLayout(
+  layout: QuestionPreviewLayout,
+  size: QuestionPreviewSize,
+  frame: QuestionPreviewSize,
+): QuestionPreviewLayout {
+  if (!nearly(frame, layout.frame)) return layout;
+  if (layout.resized && layout.picture && !nearly(size, layout.picture)) {
+    return { ...layout, picture: within(size, layout.frame), resized: false, settled: true };
+  }
+  const wanted = {
+    width: Math.max(layout.room, size.width),
+    height: Math.max(QUESTION_PREVIEW_MAX_HEIGHT, size.height),
+  };
+  if (layout.settled || nearly(wanted, layout.frame)) {
+    return { ...layout, picture: within(size, layout.frame), resized: false };
+  }
+  return { ...layout, frame: wanted, picture: size, resized: true };
 }

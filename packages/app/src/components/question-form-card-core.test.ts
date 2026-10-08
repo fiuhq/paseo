@@ -3,7 +3,9 @@ import {
   areQuestionsAnswered,
   buildQuestionFormAnswers,
   buildQuestionPreviewDocument,
+  measureQuestionPreviewLayout,
   parseQuestionFormQuestions,
+  startQuestionPreviewLayout,
   QUESTION_PREVIEW_MESSAGE_MARKER,
   questionPreviewBox,
   questionPreviewStateMessage,
@@ -231,9 +233,9 @@ describe("question form card core", () => {
 
     expect(
       readQuestionPreviewFrameMessage(
-        marked({ type: "size", width: 600, height: 200, viewport: 400 }),
+        marked({ type: "size", width: 600, height: 200, frameWidth: 400, frameHeight: 360 }),
       ),
-    ).toEqual({ type: "size", width: 600, height: 200, viewport: 400 });
+    ).toEqual({ type: "size", width: 600, height: 200, frameWidth: 400, frameHeight: 360 });
     expect(
       readQuestionPreviewFrameMessage(
         marked({ type: "wheel", deltaX: 1, deltaY: -2, zoom: true, x: 3, y: 4 }),
@@ -245,11 +247,22 @@ describe("question form card core", () => {
       dy: 6,
     });
     expect(
-      readQuestionPreviewFrameMessage({ type: "size", width: 600, height: 200, viewport: 400 }),
+      readQuestionPreviewFrameMessage({
+        type: "size",
+        width: 600,
+        height: 200,
+        frameWidth: 400,
+        frameHeight: 360,
+      }),
     ).toBeNull();
     expect(
       readQuestionPreviewFrameMessage(
-        marked({ type: "size", width: 0, height: 200, viewport: 400 }),
+        marked({ type: "size", width: 0, height: 200, frameWidth: 400, frameHeight: 360 }),
+      ),
+    ).toBeNull();
+    expect(
+      readQuestionPreviewFrameMessage(
+        marked({ type: "size", width: 600, height: 200, frameWidth: 400 }),
       ),
     ).toBeNull();
     expect(readQuestionPreviewFrameMessage(marked({ type: "pan", dx: "5", dy: 6 }))).toBeNull();
@@ -279,5 +292,71 @@ describe("question form card core", () => {
       width: 568,
       height: 360,
     });
+  });
+});
+
+// Lays a picture out the way its frame would draw it: `measure` is the page, sized by the frame
+// it is laid out in; each step measures in the frame the layout asks for, as the card does.
+function settle(
+  room: number,
+  measure: (frame: { width: number; height: number }) => { width: number; height: number },
+) {
+  let layout = startQuestionPreviewLayout("doc", room);
+  let resizes = 0;
+  for (let step = 0; step < 10; step += 1) {
+    const next = measureQuestionPreviewLayout(layout, measure(layout.frame), layout.frame);
+    if (JSON.stringify(next.frame) !== JSON.stringify(layout.frame)) resizes += 1;
+    const same = JSON.stringify(next) === JSON.stringify(layout);
+    layout = next;
+    if (same) break;
+  }
+  return { layout, resizes };
+}
+
+describe("question preview layout", () => {
+  test("lays a fixed picture out at its own size, once", () => {
+    const { layout, resizes } = settle(700, () => ({ width: 1500, height: 955 }));
+    expect(layout.frame).toEqual({ width: 1500, height: 955 });
+    expect(layout.picture).toEqual({ width: 1500, height: 955 });
+    expect(resizes).toBe(1);
+  });
+
+  test("keeps a picture smaller than the frame in the frame it started in", () => {
+    const { layout, resizes } = settle(700, () => ({ width: 200, height: 80 }));
+    expect(layout.frame).toEqual({ width: 700, height: 360 });
+    expect(layout.picture).toEqual({ width: 200, height: 80 });
+    expect(resizes).toBe(0);
+  });
+
+  test("does not shrink the frame of a picture sized by half its height", () => {
+    const { layout } = settle(700, (frame) => ({ width: 600, height: frame.height / 2 }));
+    expect(layout.frame.height).toBe(360);
+    expect(layout.picture).toEqual({ width: 600, height: 180 });
+  });
+
+  test("stops following a picture that grows with its frame", () => {
+    const tall = settle(700, (frame) => ({ width: 600, height: frame.height + 20 }));
+    expect(tall.resizes).toBe(1);
+    expect(tall.layout.settled).toBe(true);
+    expect(tall.layout.picture).toEqual({ width: 600, height: tall.layout.frame.height });
+
+    const wide = settle(700, (frame) => ({ width: frame.width * 1.2, height: 100 }));
+    expect(wide.resizes).toBe(1);
+    expect(wide.layout.picture?.width).toBe(wide.layout.frame.width);
+  });
+
+  test("ignores a measurement taken in a frame it has since resized", () => {
+    const layout = startQuestionPreviewLayout("doc", 700);
+
+    expect(
+      measureQuestionPreviewLayout(layout, { width: 50, height: 50 }, { width: 300, height: 360 }),
+    ).toBe(layout);
+  });
+
+  test("follows a picture that grows later, when a click opens a panel", () => {
+    let { layout } = settle(700, () => ({ width: 600, height: 400 }));
+    layout = measureQuestionPreviewLayout(layout, { width: 600, height: 700 }, layout.frame);
+
+    expect(layout.frame).toEqual({ width: 700, height: 700 });
   });
 });
