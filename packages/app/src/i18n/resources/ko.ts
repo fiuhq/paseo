@@ -372,6 +372,7 @@ export const ko: TranslationResources = {
       answerPlaceholder: "답변을 입력하세요...",
       otherPlaceholder: "기타...",
       preview: "미리보기",
+      previewStopped: "이 미리보기가 다른 페이지를 열려고 해서 중지되었습니다.",
     },
     todo: {
       title: "작업",

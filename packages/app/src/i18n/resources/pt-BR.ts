@@ -375,6 +375,7 @@ export const ptBR: TranslationResources = {
       answerPlaceholder: "Digite sua resposta...",
       otherPlaceholder: "Outro...",
       preview: "Pré-visualização",
+      previewStopped: "Esta pré-visualização tentou abrir outra página, por isso foi interrompida.",
     },
     todo: {
       title: "Tarefas",

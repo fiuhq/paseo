@@ -376,6 +376,7 @@ export const ja: TranslationResources = {
       answerPlaceholder: "回答を入力...",
       otherPlaceholder: "その他...",
       preview: "プレビュー",
+      previewStopped: "このプレビューは別のページを開こうとしたため、停止しました。",
     },
     todo: {
       title: "タスク",

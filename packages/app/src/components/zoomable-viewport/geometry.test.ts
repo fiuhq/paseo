@@ -6,6 +6,7 @@ import {
   isActivePinchUpdate,
   isPointInsideTransformedContent,
   panContent,
+  wheelZoomFactor,
   zoomContentAtPoint,
 } from "./geometry";
 
@@ -13,6 +14,14 @@ const viewport = { width: 800, height: 600 };
 const fittedContent = { width: 800, height: 400 };
 
 describe("zoomable viewport geometry", () => {
+  it("zooms a little per wheel tick, toward the reader for an upward wheel, within one step", () => {
+    expect(wheelZoomFactor(0)).toBe(1);
+    expect(wheelZoomFactor(-10)).toBeGreaterThan(1);
+    expect(wheelZoomFactor(10)).toBeLessThan(1);
+    expect(wheelZoomFactor(-1000)).toBe(1.25);
+    expect(wheelZoomFactor(1000)).toBe(0.8);
+  });
+
   it("rejects Android's terminal pinch update after a touch has lifted", () => {
     expect(isActivePinchUpdate(1, 2)).toBe(false);
     expect(isActivePinchUpdate(2, 2)).toBe(true);

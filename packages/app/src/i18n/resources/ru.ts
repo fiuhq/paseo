@@ -375,6 +375,7 @@ export const ru: TranslationResources = {
       answerPlaceholder: "Введите ответ...",
       otherPlaceholder: "Другой ответ...",
       preview: "Предпросмотр",
+      previewStopped: "Этот предпросмотр попытался открыть другую страницу, поэтому он остановлен.",
     },
     todo: {
       title: "Задачи",

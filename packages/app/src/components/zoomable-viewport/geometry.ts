@@ -27,6 +27,11 @@ export interface ViewportFitOptions {
 
 export const FIT_TRANSFORM: ViewportTransform = { scale: 1, x: 0, y: 0 };
 
+/** How far one wheel tick zooms: a trackpad pinch arrives as many small ticks, a mouse wheel as a few large ones. */
+export function wheelZoomFactor(deltaY: number): number {
+  return Math.min(1.25, Math.max(0.8, Math.exp(-deltaY * 0.01)));
+}
+
 export function isActivePinchUpdate(activeTouches: number, reportedPointers: number): boolean {
   "worklet";
   return activeTouches >= 2 && reportedPointers >= 2;
