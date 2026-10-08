@@ -353,6 +353,28 @@ describe("question preview layout", () => {
     ).toBe(layout);
   });
 
+  test("grows a settled picture's frame again for a panel a click opens, and settles again", () => {
+    // A picture 20px taller than its frame, and from the click on a panel 900 by 800.
+    let panel = false;
+    const page = (frame: { width: number; height: number }) => ({
+      width: panel ? 900 : 600,
+      height: Math.max(frame.height + 20, panel ? 800 : 0),
+    });
+    let { layout } = settle(700, page);
+    expect(layout.settled).toBe(true);
+    // Measured again in the same frame: nothing moves.
+    expect(measureQuestionPreviewLayout(layout, page(layout.frame), layout.frame)).toBe(layout);
+
+    panel = true;
+    layout = measureQuestionPreviewLayout(layout, page(layout.frame), layout.frame);
+    expect(layout.frame).toEqual({ width: 900, height: 800 });
+    layout = measureQuestionPreviewLayout(layout, page(layout.frame), layout.frame);
+
+    expect(layout.settled).toBe(true);
+    expect(layout.frame).toEqual({ width: 900, height: 800 });
+    expect(layout.picture).toEqual({ width: 900, height: 800 });
+  });
+
   test("follows a picture that grows later, when a click opens a panel", () => {
     let { layout } = settle(700, () => ({ width: 600, height: 400 }));
     layout = measureQuestionPreviewLayout(layout, { width: 600, height: 700 }, layout.frame);

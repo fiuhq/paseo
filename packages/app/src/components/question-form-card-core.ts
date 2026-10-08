@@ -404,11 +404,16 @@ export interface QuestionPreviewLayout {
   document: string;
   room: number;
   frame: QuestionPreviewSize;
-  /** The picture as last measured in this frame; null until the first measurement. */
+  /** The picture as last measured in this frame, before it is cut to the frame; null until then. */
+  measured: QuestionPreviewSize | null;
+  /** What of the picture the frame shows: the measurement, cut to the frame. */
   picture: QuestionPreviewSize | null;
   /** The frame was just resized for the picture; the next measurement answers that resize. */
   resized: boolean;
-  /** The picture follows its frame, so the frame no longer follows the picture. */
+  /**
+   * The picture follows its frame, so measuring it again in this frame changes nothing. A different
+   * measurement is the page changing (a click opens a panel), and the frame may grow for it again.
+   */
   settled: boolean;
 }
 
@@ -425,6 +430,7 @@ export function startQuestionPreviewLayout(document: string, room: number): Ques
     document,
     room,
     frame: { width: room, height: QUESTION_PREVIEW_MAX_HEIGHT },
+    measured: null,
     picture: null,
     resized: false,
     settled: false,
@@ -438,15 +444,23 @@ export function measureQuestionPreviewLayout(
   frame: QuestionPreviewSize,
 ): QuestionPreviewLayout {
   if (!nearly(frame, layout.frame)) return layout;
-  if (layout.resized && layout.picture && !nearly(size, layout.picture)) {
-    return { ...layout, picture: within(size, layout.frame), resized: false, settled: true };
+  const measured = layout.measured;
+  if (layout.resized && measured && !nearly(size, measured)) {
+    return {
+      ...layout,
+      measured: size,
+      picture: within(size, layout.frame),
+      resized: false,
+      settled: true,
+    };
   }
+  if (layout.settled && measured && nearly(size, measured)) return layout;
   const wanted = {
     width: Math.max(layout.room, size.width),
     height: Math.max(QUESTION_PREVIEW_MAX_HEIGHT, size.height),
   };
-  if (layout.settled || nearly(wanted, layout.frame)) {
-    return { ...layout, picture: within(size, layout.frame), resized: false };
+  if (nearly(wanted, layout.frame)) {
+    return { ...layout, measured: size, picture: within(size, layout.frame), resized: false };
   }
-  return { ...layout, frame: wanted, picture: size, resized: true };
+  return { ...layout, frame: wanted, measured: size, picture: size, resized: true, settled: false };
 }

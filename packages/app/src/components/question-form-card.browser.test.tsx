@@ -510,6 +510,35 @@ describe("QuestionFormCard option previews", () => {
     expect(card.pictureBox("Half").height).toBeGreaterThan(100);
   });
 
+  it("grows a picture sized by its frame for a panel a click opens", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Grows",
+            preview:
+              '<div style="position:relative;width:600px;height:calc(100vh + 20px);background:#09f"><button onclick="document.getElementById(\'panel\').style.display=\'block\'">Open</button><div id="panel" style="display:none;position:absolute;left:0;top:0;width:900px;height:800px;background:#f90"></div></div>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+    await vi.waitFor(() => expect(card.pictureBox("Grows").height).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const settled = card.pictureBox("Grows");
+    const frame = page.frameLocator(page.elementLocator(card.pictureFrame("Grows")));
+
+    await frame.getByRole("button", { name: "Open" }).click();
+
+    // Before, the picture is 600 wide by its frame's height; after, it holds the 900 by 800 panel.
+    expect(settled.width / settled.height).toBeGreaterThan(1.4);
+    await vi.waitFor(() => {
+      const box = card.pictureBox("Grows");
+      expect(box.width / box.height).toBeLessThan(1.3);
+    });
+  });
+
   it("keeps a zoomed-in picture panning after its page is put back", async () => {
     const card = mountQuestions([
       {
