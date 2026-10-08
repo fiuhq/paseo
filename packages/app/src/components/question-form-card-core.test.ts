@@ -4,6 +4,10 @@ import {
   buildQuestionFormAnswers,
   buildQuestionPreviewDocument,
   parseQuestionFormQuestions,
+  QUESTION_PREVIEW_MESSAGE_MARKER,
+  questionPreviewBox,
+  questionPreviewStateMessage,
+  readQuestionPreviewFrameMessage,
   questionShowsTextInput,
   resolveDismissLabel,
   shouldSubmitEmptyOnDismiss,
@@ -208,12 +212,72 @@ describe("question form card core", () => {
     expect(ship?.options.map((option) => option.preview)).toEqual([undefined, undefined]);
   });
 
-  test("wraps an HTML preview in a document that runs nothing and loads nothing", () => {
+  test("wraps an HTML preview in a document that runs its own scripts and loads nothing", () => {
     const document = buildQuestionPreviewDocument('<div style="padding:8px">Cards</div>');
 
     expect(document).toContain(
-      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:">`,
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:">`,
     );
     expect(document).toContain('<body><div style="padding:8px">Cards</div></body>');
+    // The card's own script runs before anything the picture brings.
+    expect(document.indexOf("<script>")).toBeLessThan(document.indexOf("<body>"));
+  });
+
+  test("reads only well-formed preview frame messages", () => {
+    const marked = (message: Record<string, unknown>) => ({
+      [QUESTION_PREVIEW_MESSAGE_MARKER]: true,
+      ...message,
+    });
+
+    expect(
+      readQuestionPreviewFrameMessage(
+        marked({ type: "size", width: 600, height: 200, viewport: 400 }),
+      ),
+    ).toEqual({ type: "size", width: 600, height: 200, viewport: 400 });
+    expect(
+      readQuestionPreviewFrameMessage(
+        marked({ type: "wheel", deltaX: 1, deltaY: -2, zoom: true, x: 3, y: 4 }),
+      ),
+    ).toEqual({ type: "wheel", deltaX: 1, deltaY: -2, zoom: true, x: 3, y: 4 });
+    expect(readQuestionPreviewFrameMessage(marked({ type: "pan", dx: 5, dy: 6 }))).toEqual({
+      type: "pan",
+      dx: 5,
+      dy: 6,
+    });
+    expect(
+      readQuestionPreviewFrameMessage({ type: "size", width: 600, height: 200, viewport: 400 }),
+    ).toBeNull();
+    expect(
+      readQuestionPreviewFrameMessage(
+        marked({ type: "size", width: 0, height: 200, viewport: 400 }),
+      ),
+    ).toBeNull();
+    expect(readQuestionPreviewFrameMessage(marked({ type: "pan", dx: "5", dy: 6 }))).toBeNull();
+    expect(readQuestionPreviewFrameMessage(marked({ type: "state", zoomed: true }))).toBeNull();
+    expect(readQuestionPreviewFrameMessage("size")).toBeNull();
+  });
+
+  test("tells the frame whether the picture is zoomed in", () => {
+    expect(questionPreviewStateMessage(true)).toEqual({
+      [QUESTION_PREVIEW_MESSAGE_MARKER]: true,
+      type: "state",
+      zoomed: true,
+    });
+  });
+
+  test("fits a picture to its option's width and the height limit, never enlarging it", () => {
+    expect(questionPreviewBox({ width: 200, height: 80 }, 800)).toEqual({ width: 200, height: 80 });
+    expect(questionPreviewBox({ width: 600, height: 200 }, 300)).toEqual({
+      width: 300,
+      height: 100,
+    });
+    expect(questionPreviewBox({ width: 200, height: 720 }, 800)).toEqual({
+      width: 100,
+      height: 360,
+    });
+    expect(questionPreviewBox({ width: 1506, height: 955 }, 700)).toEqual({
+      width: 568,
+      height: 360,
+    });
   });
 });

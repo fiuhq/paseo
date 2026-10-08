@@ -1,104 +1,157 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { buildQuestionPreviewDocument } from "./question-form-card-core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ZoomableViewport } from "@/components/zoomable-viewport";
+import { wheelZoomFactor } from "@/components/zoomable-viewport/geometry";
+import type { ZoomableViewportHandle } from "@/components/zoomable-viewport/types";
+import {
+  buildQuestionPreviewDocument,
+  questionPreviewBox,
+  questionPreviewStateMessage,
+  readQuestionPreviewFrameMessage,
+  type QuestionPreviewSize,
+} from "./question-form-card-core";
 import type { QuestionOptionPreviewFrameProps } from "./question-option-preview-frame-types";
 
-// A picture taller than this is scaled down to it, as a wide one is to its option's width.
-const MAX_PREVIEW_HEIGHT = 360;
+// Until the frame reports its picture, the viewport has nothing to fit.
+const NOT_MEASURED: QuestionPreviewSize = { width: 1, height: 1 };
 
-// The body's box widened to every descendant's box and scrolled overflow, relative to the body's
-// own origin, so content positioned outside the body counts.
-function measureExtent(body: HTMLElement, origin: DOMRect) {
-  let left = 0;
-  let top = 0;
-  let right = Math.max(origin.width, body.scrollWidth);
-  let bottom = Math.max(origin.height, body.scrollHeight);
-  for (const element of body.querySelectorAll("*")) {
-    const rect = element.getBoundingClientRect();
-    if (!rect.width && !rect.height && !element.scrollWidth && !element.scrollHeight) continue;
-    left = Math.min(left, rect.left - origin.left);
-    top = Math.min(top, rect.top - origin.top);
-    right = Math.max(
-      right,
-      rect.right - origin.left,
-      rect.left - origin.left + element.scrollWidth,
-    );
-    bottom = Math.max(
-      bottom,
-      rect.bottom - origin.top,
-      rect.top - origin.top + element.scrollHeight,
-    );
-  }
-  return { left, top, right, bottom };
+// A picture measured for one option width. Text wraps to the frame it is laid out in, so a new
+// width is measured again with the frame laid out at that width.
+interface Measurement {
+  document: string;
+  room: number;
+  size: QuestionPreviewSize;
 }
 
+// The frame's width is a whole number of pixels; the option's may not be.
+const sameWidth = (a: number, b: number) => Math.abs(a - b) <= 1;
+
 /**
- * An HTML option picture in a sandboxed iframe: nothing in it runs, nothing is fetched. The frame
- * takes the picture's own size, scaled down when the picture is wider than its option or taller
- * than MAX_PREVIEW_HEIGHT, so the whole picture always shows.
+ * An HTML option picture, live: its own scripts run in a sandboxed frame with an opaque origin,
+ * so it can be clicked through but cannot reach the app, and nothing is fetched. The picture is
+ * fitted whole into its option; the viewport around it zooms (Ctrl/⌘ and the wheel, a pinch, and
+ * the toolbar it shows while the picture is drawn smaller than its own size) and pans while zoomed
+ * in (the wheel, a touch drag). The frame is laid out at the option's width, or at the picture's own
+ * width when the picture is wider, and only drawn smaller or larger, so zooming never reflows it.
  */
 export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPreviewFrameProps) {
+  const roomRef = useRef<HTMLDivElement | null>(null);
+  const viewportBoxRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const viewportRef = useRef<ZoomableViewportHandle | null>(null);
   const document = useMemo(() => buildQuestionPreviewDocument(html), [html]);
+  const [measurement, setMeasurement] = useState<Measurement | null>(null);
+  const [room, setRoom] = useState(0);
+  // A new picture is fitted from its own size, never the previous picture's. Until it is measured
+  // for this width, the last measurement draws it, and the frame is laid out at the new width.
+  const drawn = measurement?.document === document ? measurement.size : null;
+  const picture = drawn && measurement && sameWidth(measurement.room, room) ? drawn : null;
+  // Never narrower than the option, so a picture that grows (a click opens a panel) has room to;
+  // wider when the picture is, so it is laid out at its own width and drawn smaller.
+  const layoutWidth = picture ? Math.max(room, picture.width) : room;
 
-  // `allow-same-origin` without `allow-scripts`: no script in the frame can run, and the card
-  // can read the picture's drawn size and scale it. The frame's size is set here, not through
-  // React state, because laying the picture out across the whole row resizes the frame first.
-  const measure = useCallback(() => {
-    const frame = frameRef.current;
-    const page = frame?.contentDocument?.documentElement;
-    const body = frame?.contentDocument?.body;
-    const room = frame?.parentElement?.clientWidth;
-    if (!frame || !page || !body || !room) return;
-    frame.style.width = `${room}px`;
-    page.style.zoom = "";
-    body.style.margin = "0";
-    const origin = body.getBoundingClientRect();
-    const { left, top, right, bottom } = measureExtent(body, origin);
-    if (left < 0 || top < 0)
-      body.style.margin = `${-Math.min(top, 0)}px 0 0 ${-Math.min(left, 0)}px`;
-    const width = right - left;
-    const height = bottom - top;
-    if (!width || !height) return;
-    const scale = Math.min(1, room / width, MAX_PREVIEW_HEIGHT / height);
-    if (scale < 1) page.style.zoom = String(scale);
-    frame.style.width = `${Math.ceil(width * scale)}px`;
-    frame.style.height = `${Math.ceil(height * scale)}px`;
+  useEffect(() => {
+    const element = roomRef.current;
+    if (!element) return undefined;
+    setRoom(element.clientWidth);
+    const observer = new ResizeObserver(() => setRoom(element.clientWidth));
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
-  // Text rewraps and a picture's scale changes with the room its option gives it.
   useEffect(() => {
-    const row = frameRef.current?.parentElement;
-    if (!row) return undefined;
-    let lastRoom = row.clientWidth;
-    const observer = new ResizeObserver(() => {
-      if (row.clientWidth === lastRoom) return;
-      lastRoom = row.clientWidth;
-      measure();
-    });
-    observer.observe(row);
-    return () => observer.disconnect();
-  }, [measure]);
+    function receive(event: MessageEvent) {
+      const frame = frameRef.current;
+      if (!frame || event.source !== frame.contentWindow) return;
+      const message = readQuestionPreviewFrameMessage(event.data);
+      if (!message) return;
+      if (message.type === "size") {
+        // Measured at the option's width, or a change while laid out at the picture's own width.
+        const forThisWidth =
+          sameWidth(message.viewport, room) ||
+          (picture && sameWidth(message.viewport, layoutWidth));
+        if (!forThisWidth) return;
+        setMeasurement({ document, room, size: { width: message.width, height: message.height } });
+        return;
+      }
+      if (message.type === "pan") {
+        viewportRef.current?.panBy({ x: message.dx, y: message.dy });
+        return;
+      }
+      if (!message.zoom) {
+        viewportRef.current?.panBy({ x: -message.deltaX, y: -message.deltaY });
+        return;
+      }
+      // The frame reports its pointer in the picture's own pixels; the frame is drawn at a scale.
+      const onScreen = frame.getBoundingClientRect();
+      const viewportBox = viewportBoxRef.current?.getBoundingClientRect();
+      if (!viewportBox || !frame.offsetWidth) return;
+      const scale = onScreen.width / frame.offsetWidth;
+      viewportRef.current?.zoomBy(wheelZoomFactor(message.deltaY), {
+        x: onScreen.left - viewportBox.left + message.x * scale,
+        y: onScreen.top - viewportBox.top + message.y * scale,
+      });
+    }
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
+  }, [document, layoutWidth, picture, room]);
+
+  // While zoomed in, the frame hands the card its wheel and touch drags so they pan the picture.
+  const tellFrame = useCallback((scale: number) => {
+    frameRef.current?.contentWindow?.postMessage(questionPreviewStateMessage(scale > 1), "*");
+  }, []);
+
+  const box = drawn && room ? questionPreviewBox(drawn, room) : null;
+  const fit = drawn && box ? Math.min(box.width / drawn.width, box.height / drawn.height) : 1;
+  const viewportBoxStyle = useMemo<React.CSSProperties>(
+    () => ({ ...viewportBoxDomStyle, width: box?.width ?? "100%", height: box?.height ?? 0 }),
+    [box?.height, box?.width],
+  );
+  const frameStyle = useMemo<React.CSSProperties>(
+    () => ({
+      ...frameDomStyle,
+      width: layoutWidth || "100%",
+      height: drawn?.height ?? 0,
+      transform: `scale(${fit})`,
+    }),
+    [drawn?.height, fit, layoutWidth],
+  );
 
   return (
-    <iframe
-      ref={frameRef}
-      title={title}
-      sandbox="allow-same-origin"
-      srcDoc={document}
-      onLoad={measure}
-      tabIndex={-1}
-      style={frameStyle}
-    />
+    <div ref={roomRef} style={roomDomStyle}>
+      <div ref={viewportBoxRef} style={viewportBoxStyle}>
+        <ZoomableViewport
+          ref={viewportRef}
+          contentSize={drawn ?? NOT_MEASURED}
+          minScale={1}
+          onScaleChange={tellFrame}
+          testID="question-option-preview"
+          toolbarPlacement="bottom"
+          toolbarVisibility={fit < 1 ? "always" : "hidden"}
+        >
+          <iframe
+            ref={frameRef}
+            title={title}
+            sandbox="allow-scripts"
+            srcDoc={document}
+            style={frameStyle}
+          />
+        </ZoomableViewport>
+      </div>
+    </div>
   );
 }
 
-// A picture, not a page: the option rows take every tap, so links in a picture go nowhere.
-const frameStyle: React.CSSProperties = {
-  display: "block",
-  width: "100%",
-  height: 0,
-  border: 0,
+const roomDomStyle: React.CSSProperties = { width: "100%" };
+const viewportBoxDomStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
   borderRadius: 8,
-  pointerEvents: "none",
+  overflow: "hidden",
+  background: "#fff",
+};
+const frameDomStyle: React.CSSProperties = {
+  display: "block",
+  border: 0,
   background: "transparent",
+  transformOrigin: "0 0",
 };

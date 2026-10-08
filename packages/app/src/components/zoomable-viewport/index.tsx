@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
@@ -8,8 +8,10 @@ import {
   fitContentSize,
   isActivePinchUpdate,
   isPointInsideTransformedContent,
+  panContent,
   zoomContentAtPoint,
   type ViewportSize,
+  type ViewportTransform,
 } from "./geometry";
 import { ViewportToolbar } from "./toolbar";
 import type { ZoomableViewportProps } from "./types";
@@ -28,6 +30,10 @@ export function ZoomableViewport({
   onPressOutsideContent,
   style,
   testID,
+  toolbarPlacement = "top",
+  toolbarVisibility,
+  onScaleChange,
+  ref,
 }: ZoomableViewportProps) {
   const [viewport, setViewport] = useState<ViewportSize | null>(null);
   const [toolbarScale, setToolbarScale] = useState(1);
@@ -45,6 +51,8 @@ export function ZoomableViewport({
     () => (viewport ? fitContentSize(contentSize, viewport, fit) : null),
     [contentSize, fit, viewport],
   );
+
+  useEffect(() => onScaleChange?.(toolbarScale), [onScaleChange, toolbarScale]);
 
   const reset = useCallback(() => {
     scale.value = FIT_TRANSFORM.scale;
@@ -171,26 +179,70 @@ export function ZoomableViewport({
     [tapGesture, transformGesture],
   );
 
-  const zoomFromCenter = useCallback(
-    (factor: number) => {
-      if (!fittedContent || !viewport) return;
-      const next = zoomContentAtPoint({
-        transform: { scale: scale.value, x: translateX.value, y: translateY.value },
-        scale: scale.value * factor,
-        focalPoint: { x: viewport.width / 2, y: viewport.height / 2 },
-        fittedContent,
-        viewport,
-        limits: { minScale, maxScale },
-      });
+  const applyTransform = useCallback(
+    (next: ViewportTransform) => {
       scale.value = next.scale;
       translateX.value = next.x;
       translateY.value = next.y;
       setToolbarScale(next.scale);
     },
-    [fittedContent, maxScale, minScale, scale, translateX, translateY, viewport],
+    [scale, translateX, translateY],
+  );
+  const zoomAtPoint = useCallback(
+    (factor: number, focalPoint: { x: number; y: number }) => {
+      if (!fittedContent || !viewport) return;
+      applyTransform(
+        zoomContentAtPoint({
+          transform: { scale: scale.value, x: translateX.value, y: translateY.value },
+          scale: scale.value * factor,
+          focalPoint,
+          fittedContent,
+          viewport,
+          limits: { minScale, maxScale },
+        }),
+      );
+    },
+    [applyTransform, fittedContent, maxScale, minScale, scale, translateX, translateY, viewport],
+  );
+  const zoomFromCenter = useCallback(
+    (factor: number) => {
+      if (!viewport) return;
+      zoomAtPoint(factor, { x: viewport.width / 2, y: viewport.height / 2 });
+    },
+    [viewport, zoomAtPoint],
   );
   const zoomIn = useCallback(() => zoomFromCenter(1.25), [zoomFromCenter]);
   const zoomOut = useCallback(() => zoomFromCenter(0.8), [zoomFromCenter]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      panBy(delta) {
+        if (!fittedContent || !viewport) return;
+        applyTransform(
+          panContent({
+            transform: { scale: scale.value, x: translateX.value, y: translateY.value },
+            delta,
+            fittedContent,
+            viewport,
+            limits: { minScale, maxScale },
+          }),
+        );
+      },
+      zoomBy: zoomAtPoint,
+    }),
+    [
+      applyTransform,
+      fittedContent,
+      maxScale,
+      minScale,
+      scale,
+      translateX,
+      translateY,
+      viewport,
+      zoomAtPoint,
+    ],
+  );
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width > 0 && height > 0) setViewport({ width, height });
@@ -225,16 +277,20 @@ export function ZoomableViewport({
           ) : null}
         </View>
       </GestureDetector>
-      <ViewportToolbar
-        actions={actions}
-        maxScale={maxScale}
-        minScale={minScale}
-        onReset={reset}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-        scale={toolbarScale}
-        visible
-      />
+      {/* No hover on touch screens: the controls are up unless left out. */}
+      {toolbarVisibility === "hidden" ? null : (
+        <ViewportToolbar
+          actions={actions}
+          maxScale={maxScale}
+          minScale={minScale}
+          onReset={reset}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          placement={toolbarPlacement}
+          scale={toolbarScale}
+          visible
+        />
+      )}
     </View>
   );
 }

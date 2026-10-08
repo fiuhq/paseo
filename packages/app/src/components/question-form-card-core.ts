@@ -174,9 +174,106 @@ export function resolveDismissLabel(
   return questions.find((question) => question.dismissLabel)?.dismissLabel ?? fallbackLabel;
 }
 
-// No scripts, no network: a preview may only draw with inline styles and data: images.
+// No network: a preview draws with inline styles and data: images, and its inline scripts run in
+// the frame's own opaque origin (the frame never gets `allow-same-origin`), so they cannot reach
+// the app, its storage or the daemon.
 const QUESTION_PREVIEW_CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:";
+
+/** Marks every message between the card and a preview frame, both ways. */
+export const QUESTION_PREVIEW_MESSAGE_MARKER = "paseoQuestionPreview";
+
+/** A picture taller than this is fitted to it, as a wide one is to its option's width. */
+export const QUESTION_PREVIEW_MAX_HEIGHT = 360;
+
+// Runs first in every preview frame. It reports the picture's drawn size with the width of the
+// frame it was laid out in (a picture of text wraps to its frame), and while the card has
+// the picture zoomed in it hands the card the wheel and touch drags the frame would otherwise
+// swallow, so they pan the picture. At the fitted size the wheel is left alone and scrolls the
+// conversation. A plain string, so nothing a bundler adds to functions ends up in the frame.
+const QUESTION_PREVIEW_BOOTSTRAP = `(() => {
+  const marker = "${QUESTION_PREVIEW_MESSAGE_MARKER}";
+  const post = (message) => window.parent.postMessage({ [marker]: true, ...message }, "*");
+  const extent = (body, origin) => {
+    let left = 0;
+    let top = 0;
+    let right = Math.max(origin.width, body.scrollWidth);
+    let bottom = Math.max(origin.height, body.scrollHeight);
+    for (const element of body.querySelectorAll("*")) {
+      const rect = element.getBoundingClientRect();
+      if (!rect.width && !rect.height && !element.scrollWidth && !element.scrollHeight) continue;
+      left = Math.min(left, rect.left - origin.left);
+      top = Math.min(top, rect.top - origin.top);
+      right = Math.max(right, rect.right - origin.left, rect.left - origin.left + element.scrollWidth);
+      bottom = Math.max(bottom, rect.bottom - origin.top, rect.top - origin.top + element.scrollHeight);
+    }
+    return { left, top, right, bottom };
+  };
+  let reported = "";
+  const measure = () => {
+    const body = document.body;
+    if (!body) return;
+    body.style.margin = "0";
+    const box = extent(body, body.getBoundingClientRect());
+    if (box.left < 0 || box.top < 0)
+      body.style.margin = -Math.min(box.top, 0) + "px 0 0 " + -Math.min(box.left, 0) + "px";
+    const width = Math.ceil(box.right - box.left);
+    const height = Math.ceil(box.bottom - box.top);
+    const viewport = window.innerWidth;
+    const key = width + "x" + height + "@" + viewport;
+    if (!width || !height || key === reported) return;
+    reported = key;
+    post({ type: "size", width, height, viewport });
+  };
+  let zoomed = false;
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (event.source !== window.parent || !data || data[marker] !== true || data.type !== "state") return;
+    zoomed = data.zoomed === true;
+    document.documentElement.style.touchAction = zoomed ? "none" : "";
+  });
+  window.addEventListener("wheel", (event) => {
+    const zoom = event.ctrlKey || event.metaKey;
+    if (!zoomed && !zoom) return;
+    event.preventDefault();
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+    post({ type: "wheel", deltaX: event.deltaX * unit, deltaY: event.deltaY * unit, zoom, x: event.clientX, y: event.clientY });
+  }, { passive: false });
+  let drag = null;
+  let dragged = false;
+  window.addEventListener("pointerdown", (event) => {
+    if (!zoomed || event.pointerType === "mouse" || !event.isPrimary) return;
+    drag = { id: event.pointerId, x: event.screenX, y: event.screenY, moved: false };
+  }, true);
+  window.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.screenX - drag.x;
+    const dy = event.screenY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true;
+    drag.x = event.screenX;
+    drag.y = event.screenY;
+    post({ type: "pan", dx, dy });
+  }, true);
+  const endDrag = (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    dragged = drag.moved;
+    drag = null;
+  };
+  window.addEventListener("pointerup", endDrag, true);
+  window.addEventListener("pointercancel", endDrag, true);
+  window.addEventListener("click", (event) => {
+    if (!dragged) return;
+    dragged = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+  window.addEventListener("load", () => {
+    measure();
+    new ResizeObserver(measure).observe(document.body);
+    window.addEventListener("resize", measure);
+  });
+})();`;
 
 /**
  * The document a sandboxed frame shows for an HTML preview. Previews are written for a light
@@ -188,6 +285,7 @@ export function buildQuestionPreviewDocument(fragment: string): string {
     '<meta charset="utf-8">',
     `<meta http-equiv="Content-Security-Policy" content="${QUESTION_PREVIEW_CSP}">`,
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<script>${QUESTION_PREVIEW_BOOTSTRAP}</script>`,
     "<style>html,body{margin:0;background:#fff;color:#111;",
     "font:13px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
     // The body takes the picture's own width (fit-content) and holds its children's margins
@@ -196,4 +294,70 @@ export function buildQuestionPreviewDocument(fragment: string): string {
     "body{position:relative;width:fit-content;display:flow-root;overflow-wrap:anywhere}</style>",
     `</head><body>${fragment}</body></html>`,
   ].join("");
+}
+
+export interface QuestionPreviewSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * What a preview frame tells the card. Positions are in the frame's own pixels; `viewport` is the
+ * width of the frame the picture was laid out in when it was measured.
+ */
+export type QuestionPreviewFrameMessage =
+  | { type: "size"; width: number; height: number; viewport: number }
+  | { type: "wheel"; deltaX: number; deltaY: number; zoom: boolean; x: number; y: number }
+  | { type: "pan"; dx: number; dy: number };
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/** A preview frame's message, or null for anything else the page receives. */
+export function readQuestionPreviewFrameMessage(data: unknown): QuestionPreviewFrameMessage | null {
+  if (!data || typeof data !== "object") return null;
+  const message = data as Record<string, unknown>;
+  if (message[QUESTION_PREVIEW_MESSAGE_MARKER] !== true) return null;
+  if (message.type === "size") {
+    const { width, height, viewport } = message;
+    return isFiniteNumber(width) &&
+      isFiniteNumber(height) &&
+      isFiniteNumber(viewport) &&
+      width > 0 &&
+      height > 0
+      ? { type: "size", width, height, viewport }
+      : null;
+  }
+  if (message.type === "wheel") {
+    const { deltaX, deltaY, x, y } = message;
+    return isFiniteNumber(deltaX) &&
+      isFiniteNumber(deltaY) &&
+      isFiniteNumber(x) &&
+      isFiniteNumber(y)
+      ? { type: "wheel", deltaX, deltaY, zoom: message.zoom === true, x, y }
+      : null;
+  }
+  if (message.type === "pan") {
+    const { dx, dy } = message;
+    return isFiniteNumber(dx) && isFiniteNumber(dy) ? { type: "pan", dx, dy } : null;
+  }
+  return null;
+}
+
+/** Tells a preview frame whether the card has its picture zoomed in past the fitted size. */
+export function questionPreviewStateMessage(zoomed: boolean) {
+  return { [QUESTION_PREVIEW_MESSAGE_MARKER]: true, type: "state", zoomed };
+}
+
+/** The box a picture is fitted into: its own size, scaled down to the option's width and the height limit. */
+export function questionPreviewBox(
+  picture: QuestionPreviewSize,
+  room: number,
+): QuestionPreviewSize {
+  const scale = Math.min(1, room / picture.width, QUESTION_PREVIEW_MAX_HEIGHT / picture.height);
+  return {
+    width: Math.max(1, Math.round(picture.width * scale)),
+    height: Math.max(1, Math.round(picture.height * scale)),
+  };
 }

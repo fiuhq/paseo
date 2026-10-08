@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import {
@@ -6,6 +6,7 @@ import {
   fitContentSize,
   isPointInsideTransformedContent,
   panContent,
+  wheelZoomFactor,
   zoomContentAtPoint,
   type ViewportPoint,
   type ViewportSize,
@@ -55,6 +56,10 @@ export function ZoomableViewport({
   style,
   testID,
   wheelActivation = "modifier",
+  toolbarVisibility = "hover",
+  toolbarPlacement = "top",
+  onScaleChange,
+  ref,
 }: ZoomableViewportProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const pointersRef = useRef(new Map<number, ViewportPoint>());
@@ -77,6 +82,7 @@ export function ZoomableViewport({
     transformRef.current = next;
     setTransform(next);
   }, []);
+  useEffect(() => onScaleChange?.(transform.scale), [onScaleChange, transform.scale]);
   const reset = useCallback(() => commitTransform(FIT_TRANSFORM), [commitTransform]);
 
   useEffect(() => {
@@ -121,6 +127,22 @@ export function ZoomableViewport({
   const zoomIn = useCallback(() => zoomFromCenter(1.25), [zoomFromCenter]);
   const zoomOut = useCallback(() => zoomFromCenter(0.8), [zoomFromCenter]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      panBy(delta) {
+        if (!fittedContent || !viewport) return;
+        commitTransform(
+          panContent({ transform: transformRef.current, delta, fittedContent, viewport, limits }),
+        );
+      },
+      zoomBy(factor, point) {
+        zoomAt(transformRef.current.scale * factor, point);
+      },
+    }),
+    [commitTransform, fittedContent, limits, viewport, zoomAt],
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -130,8 +152,7 @@ export function ZoomableViewport({
       if (wheelActivation === "modifier" && !hasModifier) return;
       event.preventDefault();
       const bounds = activeCanvas.getBoundingClientRect();
-      const factor = Math.min(1.25, Math.max(0.8, Math.exp(-event.deltaY * 0.01)));
-      zoomAt(transformRef.current.scale * factor, {
+      zoomAt(transformRef.current.scale * wheelZoomFactor(event.deltaY), {
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       });
@@ -273,7 +294,17 @@ export function ZoomableViewport({
     }),
     [fittedContent, transform],
   );
-  const controlsVisible = isHovered || isFocusWithin || hasTouchInput;
+  const controlsVisible =
+    toolbarVisibility === "always" || isHovered || isFocusWithin || hasTouchInput;
+  // The strip around the buttons catches the hover that reveals them; controls that are always up
+  // need no hover, so the strip lets the pointer through to the content under it.
+  const toolbarStripStyle = useMemo<React.CSSProperties>(
+    () => ({
+      ...(toolbarPlacement === "bottom" ? bottomToolbarDomStyle : toolbarDomStyle),
+      pointerEvents: toolbarVisibility === "always" ? "none" : undefined,
+    }),
+    [toolbarPlacement, toolbarVisibility],
+  );
   const handleFocus = useCallback(() => setIsFocusWithin(true), []);
   const handleBlur = useCallback(() => setIsFocusWithin(false), []);
   const handleMouseEnter = useCallback(() => setIsHovered(true), []);
@@ -300,24 +331,27 @@ export function ZoomableViewport({
       >
         <div style={renderedContentStyle}>{children}</div>
       </div>
-      <div
-        onBlurCapture={handleBlur}
-        onFocusCapture={handleFocus}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        style={toolbarDomStyle}
-      >
-        <ViewportToolbar
-          actions={actions}
-          maxScale={maxScale}
-          minScale={minScale}
-          onReset={reset}
-          onZoomIn={zoomIn}
-          onZoomOut={zoomOut}
-          scale={transform.scale}
-          visible={controlsVisible}
-        />
-      </div>
+      {toolbarVisibility === "hidden" ? null : (
+        <div
+          onBlurCapture={handleBlur}
+          onFocusCapture={handleFocus}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          style={toolbarStripStyle}
+        >
+          <ViewportToolbar
+            actions={actions}
+            maxScale={maxScale}
+            minScale={minScale}
+            onReset={reset}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            placement={toolbarPlacement}
+            scale={transform.scale}
+            visible={controlsVisible}
+          />
+        </div>
+      )}
     </View>
   );
 }
@@ -347,4 +381,9 @@ const toolbarDomStyle: React.CSSProperties = {
   width: 200,
   height: 48,
   zIndex: 1,
+};
+const bottomToolbarDomStyle: React.CSSProperties = {
+  ...toolbarDomStyle,
+  top: undefined,
+  bottom: 0,
 };

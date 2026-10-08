@@ -1,11 +1,17 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { within } from "@testing-library/dom";
+import { page, userEvent } from "@vitest/browser/context";
 import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n as testI18n } from "@/i18n/i18next";
 import type { PendingPermission } from "@/types/shared";
 import { QuestionFormCard } from "./question-form-card";
+import {
+  buildQuestionPreviewDocument,
+  QUESTION_PREVIEW_MESSAGE_MARKER,
+  questionPreviewStateMessage,
+} from "./question-form-card-core";
 
 // Load translations so controls expose their real accessible names.
 void testI18n;
@@ -180,9 +186,30 @@ describe("QuestionFormCard option previews", () => {
     mounted.push({ root, container });
     const view = within(container);
     const pictureFrame = (label: string) => view.getByTitle<HTMLIFrameElement>(`Preview: ${label}`);
+    const pictureViewport = (label: string) => {
+      const viewport = pictureFrame(label).closest<HTMLElement>(
+        '[data-testid="question-option-preview"]',
+      );
+      if (!viewport) throw new Error(`no preview viewport for ${label}`);
+      return viewport;
+    };
+    // The box the picture is fitted into, and the frame as it is drawn (scaled) inside it.
+    const pictureBox = (label: string) => pictureViewport(label).getBoundingClientRect();
+    const drawnFrame = (label: string) => pictureFrame(label).getBoundingClientRect();
+    const toolbarButton = (label: string, name: string) =>
+      within(pictureViewport(label)).getByRole("button", { name });
     const currentQuestion = () => view.getByTestId("question-form-current-question").textContent;
     const pick = (label: string) => act(() => view.getByRole("radio", { name: label }).click());
-    return { container, view, pictureFrame, currentQuestion, pick };
+    return {
+      container,
+      view,
+      pictureFrame,
+      pictureBox,
+      drawnFrame,
+      toolbarButton,
+      currentQuestion,
+      pick,
+    };
   }
 
   it("shows every option's picture under its own option at once", () => {
@@ -206,21 +233,23 @@ describe("QuestionFormCard option previews", () => {
     expect(card.currentQuestion()).toBe("Ship it now?");
   });
 
-  it("scales a picture drawn wider than its option down to fit", async () => {
-    const card = mountQuestions([
-      {
-        ...layoutQuestion,
-        options: [{ label: "Wide", preview: '<div style="width:600px;height:200px">Wide</div>' }],
-      },
-    ]);
+  const widePicture = {
+    ...layoutQuestion,
+    options: [{ label: "Wide", preview: '<div style="width:600px;height:200px">Wide</div>' }],
+  };
+
+  it("fits a picture drawn wider than its option into it whole, laid out at its own width", async () => {
+    const card = mountQuestions([widePicture]);
     card.container.style.width = "300px";
 
     await vi.waitFor(() => {
-      const zoom = Number(card.pictureFrame("Wide").contentDocument?.documentElement.style.zoom);
-      expect(zoom).toBeGreaterThan(0);
-      expect(zoom).toBeLessThan(1);
+      const box = card.pictureBox("Wide");
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.width).toBeLessThan(300);
+      expect(box.width / box.height).toBeCloseTo(3, 1);
+      expect(card.drawnFrame("Wide").width).toBeCloseTo(box.width, 0);
+      expect(card.pictureFrame("Wide").offsetWidth).toBe(600);
     });
-    await vi.waitFor(() => expect(card.pictureFrame("Wide").offsetHeight).toBeLessThan(200));
   });
 
   it("sizes the frame to a picture narrower than its option", async () => {
@@ -233,12 +262,12 @@ describe("QuestionFormCard option previews", () => {
     card.container.style.width = "800px";
 
     await vi.waitFor(() => {
-      expect(card.pictureFrame("Small").offsetWidth).toBe(200);
-      expect(card.pictureFrame("Small").offsetHeight).toBe(80);
+      expect(card.pictureBox("Small").width).toBe(200);
+      expect(card.pictureBox("Small").height).toBe(80);
     });
   });
 
-  it("scales a picture taller than the frame's limit down instead of clipping it", async () => {
+  it("fits a picture taller than the frame's limit into it instead of clipping it", async () => {
     const card = mountQuestions([
       {
         ...layoutQuestion,
@@ -248,8 +277,8 @@ describe("QuestionFormCard option previews", () => {
     card.container.style.width = "800px";
 
     await vi.waitFor(() => {
-      expect(card.pictureFrame("Tall").offsetHeight).toBe(360);
-      expect(card.pictureFrame("Tall").offsetWidth).toBe(100);
+      expect(card.pictureBox("Tall").height).toBe(360);
+      expect(card.pictureBox("Tall").width).toBe(100);
     });
   });
 
@@ -269,8 +298,8 @@ describe("QuestionFormCard option previews", () => {
     card.container.style.width = "800px";
 
     await vi.waitFor(() => {
-      expect(card.pictureFrame("Positioned").offsetHeight).toBe(80);
-      expect(card.pictureFrame("Positioned").offsetWidth).toBe(200);
+      expect(card.pictureBox("Positioned").height).toBe(80);
+      expect(card.pictureBox("Positioned").width).toBe(200);
     });
   });
 
@@ -290,8 +319,8 @@ describe("QuestionFormCard option previews", () => {
     card.container.style.width = "800px";
 
     await vi.waitFor(() => {
-      expect(card.pictureFrame("Absolute").offsetHeight).toBe(80);
-      expect(card.pictureFrame("Absolute").offsetWidth).toBe(200);
+      expect(card.pictureBox("Absolute").height).toBe(80);
+      expect(card.pictureBox("Absolute").width).toBe(200);
     });
   });
 
@@ -311,8 +340,8 @@ describe("QuestionFormCard option previews", () => {
     card.container.style.width = "800px";
 
     await vi.waitFor(() => {
-      expect(card.pictureFrame("Negative").offsetHeight).toBe(120);
-      expect(card.pictureFrame("Negative").offsetWidth).toBe(240);
+      expect(card.pictureBox("Negative").height).toBe(120);
+      expect(card.pictureBox("Negative").width).toBe(240);
     });
   });
 
@@ -332,8 +361,8 @@ describe("QuestionFormCard option previews", () => {
     card.container.style.width = "800px";
 
     await vi.waitFor(() => {
-      expect(card.pictureFrame("Overflow").offsetHeight).toBeGreaterThanOrEqual(60);
-      expect(card.pictureFrame("Overflow").offsetWidth).toBeGreaterThanOrEqual(200);
+      expect(card.pictureBox("Overflow").height).toBeGreaterThanOrEqual(60);
+      expect(card.pictureBox("Overflow").width).toBeGreaterThanOrEqual(200);
     });
   });
 
@@ -345,23 +374,90 @@ describe("QuestionFormCard option previews", () => {
       },
     ]);
     card.container.style.width = "800px";
-    await vi.waitFor(() => expect(card.pictureFrame("Prose").offsetHeight).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(card.pictureBox("Prose").height).toBeGreaterThan(0));
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const wide = card.pictureFrame("Prose").offsetHeight;
+    const wide = card.pictureBox("Prose").height;
 
     card.container.style.width = "300px";
 
-    await vi.waitFor(() => expect(card.pictureFrame("Prose").offsetHeight).toBeGreaterThan(wide));
+    await vi.waitFor(() => expect(card.pictureBox("Prose").height).toBeGreaterThan(wide));
   });
 
-  it("draws the preview in a frame where no script can run and nothing can load", () => {
+  it("draws the preview in a frame of its own origin where nothing can load", () => {
     const card = mountQuestions([layoutQuestion]);
     const frame = card.pictureFrame("Compact");
 
-    expect(frame.getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
     expect(frame.srcdoc).toContain(
-      `content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:"`,
+      `content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:"`,
     );
+  });
+
+  it("runs the picture's own scripts, so it can be clicked through without picking the option", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Live",
+            preview: `<button onclick="this.textContent='Clicked'">Press</button>`,
+          },
+          { label: "Other" },
+        ],
+      },
+      shipQuestion,
+    ]);
+    card.container.style.width = "800px";
+    await vi.waitFor(() => expect(card.pictureBox("Live").height).toBeGreaterThan(0));
+    const pressed = card.pictureBox("Live").width;
+    const frame = page.frameLocator(page.elementLocator(card.pictureFrame("Live")));
+
+    await frame.getByRole("button", { name: "Press" }).click();
+
+    // The frame's page is out of the test's reach (its own origin); its new, wider label shows
+    // as the picture growing.
+    await vi.waitFor(() => expect(card.pictureBox("Live").width).toBeGreaterThan(pressed));
+    expect(card.currentQuestion()).toBe("Which card layout?");
+  });
+
+  it("zooms the picture from its toolbar and back to the fitted size, without picking the option", async () => {
+    const card = mountQuestions([widePicture, shipQuestion]);
+    card.container.style.width = "300px";
+    await vi.waitFor(() => expect(card.pictureBox("Wide").height).toBeGreaterThan(0));
+    const fitted = card.pictureBox("Wide").width;
+    await vi.waitFor(() => expect(card.drawnFrame("Wide").width).toBeCloseTo(fitted, 0));
+    expect(card.toolbarButton("Wide", "Zoom out").getAttribute("aria-disabled")).toBe("true");
+
+    act(() => card.toolbarButton("Wide", "Zoom in").click());
+
+    await vi.waitFor(() => expect(card.drawnFrame("Wide").width).toBeCloseTo(fitted * 1.25, 0));
+    expect(card.pictureBox("Wide").width).toBe(fitted);
+    expect(card.currentQuestion()).toBe("Which card layout?");
+
+    act(() => card.toolbarButton("Wide", "Reset view").click());
+
+    await vi.waitFor(() => expect(card.drawnFrame("Wide").width).toBeCloseTo(fitted, 0));
+  });
+
+  it("pans a zoomed-in picture with the wheel, and leaves the wheel alone while it is fitted", async () => {
+    const card = mountQuestions([widePicture]);
+    card.container.style.width = "300px";
+    await vi.waitFor(() => expect(card.pictureBox("Wide").height).toBeGreaterThan(0));
+    const fitted = card.pictureBox("Wide").width;
+    await vi.waitFor(() => expect(card.drawnFrame("Wide").width).toBeCloseTo(fitted, 0));
+    const fittedLeft = card.drawnFrame("Wide").left;
+
+    await userEvent.wheel(card.pictureFrame("Wide"), { delta: { x: 60 } });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(card.drawnFrame("Wide").left).toBe(fittedLeft);
+
+    act(() => card.toolbarButton("Wide", "Zoom in").click());
+    await vi.waitFor(() => expect(card.drawnFrame("Wide").width).toBeCloseTo(fitted * 1.25, 0));
+    const zoomedLeft = card.drawnFrame("Wide").left;
+
+    await userEvent.wheel(card.pictureFrame("Wide"), { delta: { x: 30 } });
+
+    await vi.waitFor(() => expect(card.drawnFrame("Wide").left).toBeLessThan(zoomedLeft - 20));
   });
 
   it("still moves on after a pick when the question has no previews", () => {
@@ -371,5 +467,102 @@ describe("QuestionFormCard option previews", () => {
     card.pick("Yes");
 
     expect(card.currentQuestion()).toBe("Which card layout?");
+  });
+});
+
+describe("question preview frame script", () => {
+  const frames: HTMLIFrameElement[] = [];
+  afterEach(() => {
+    for (const frame of frames.splice(0)) frame.remove();
+  });
+
+  // The card's frame has an opaque origin; this one shares the test's origin only so the test can
+  // dispatch input into it. The document and its script are the card's own.
+  async function loadFrame(fragment: string) {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    frame.style.cssText = "width:400px;height:300px;border:0";
+    const received: Record<string, unknown>[] = [];
+    window.addEventListener("message", (event) => {
+      if (event.source === frame.contentWindow && event.data?.[QUESTION_PREVIEW_MESSAGE_MARKER]) {
+        received.push(event.data);
+      }
+    });
+    const loaded = new Promise((resolve) =>
+      frame.addEventListener("load", resolve, { once: true }),
+    );
+    frame.srcdoc = buildQuestionPreviewDocument(fragment);
+    document.body.appendChild(frame);
+    frames.push(frame);
+    await loaded;
+    // The frame's own event constructors, so dispatched input belongs to its realm.
+    const win = frame.contentWindow as Window & typeof globalThis;
+    const doc = frame.contentDocument!;
+    const tell = (zoomed: boolean) => win.postMessage(questionPreviewStateMessage(zoomed), "*");
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+    return { win, doc, received, tell, settle };
+  }
+
+  it("reports the picture's size with the width of the frame it was laid out in", async () => {
+    const frame = await loadFrame('<div style="width:600px;height:200px">Wide</div>');
+
+    await vi.waitFor(() =>
+      expect(frame.received).toContainEqual(
+        expect.objectContaining({ type: "size", width: 600, height: 200, viewport: 400 }),
+      ),
+    );
+  });
+
+  it("forwards the wheel only while zoomed in, or with Ctrl/Cmd held", async () => {
+    const frame = await loadFrame('<div style="width:600px;height:200px">Wide</div>');
+    const wheel = (init: WheelEventInit) => {
+      const event = new frame.win.WheelEvent("wheel", { bubbles: true, cancelable: true, ...init });
+      frame.doc.body.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(wheel({ deltaY: 40 })).toBe(false);
+    expect(wheel({ deltaY: 40, ctrlKey: true })).toBe(true);
+    frame.tell(true);
+    await frame.settle();
+    expect(wheel({ deltaX: 25, deltaY: 10 })).toBe(true);
+    await frame.settle();
+
+    const wheels = frame.received.filter((message) => message.type === "wheel");
+    expect(wheels).toEqual([
+      expect.objectContaining({ zoom: true, deltaY: 40 }),
+      expect.objectContaining({ zoom: false, deltaX: 25, deltaY: 10 }),
+    ]);
+  });
+
+  it("turns a touch drag into a pan while zoomed in, and the drag does not click", async () => {
+    const frame = await loadFrame(
+      `<button style="width:300px;height:100px" onclick="window.clicked=true">Press</button>`,
+    );
+    frame.tell(true);
+    await frame.settle();
+    const button = frame.doc.querySelector("button")!;
+    const pointer = (type: string, screenX: number) =>
+      button.dispatchEvent(
+        new frame.win.PointerEvent(type, {
+          bubbles: true,
+          pointerId: 7,
+          pointerType: "touch",
+          isPrimary: true,
+          screenX,
+          screenY: 50,
+        }),
+      );
+
+    pointer("pointerdown", 100);
+    pointer("pointermove", 130);
+    pointer("pointerup", 130);
+    button.dispatchEvent(new frame.win.MouseEvent("click", { bubbles: true, cancelable: true }));
+    await frame.settle();
+
+    expect(frame.received.filter((message) => message.type === "pan")).toEqual([
+      expect.objectContaining({ dx: 30, dy: 0 }),
+    ]);
+    expect(Reflect.get(frame.win, "clicked")).toBeUndefined();
   });
 });
