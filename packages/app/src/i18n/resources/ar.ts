@@ -371,6 +371,7 @@ export const ar: TranslationResources = {
       answerPlaceholder: "اكتب إجابتك...",
       otherPlaceholder: "آخر...",
       preview: "معاينة",
+      previewStopped: "حاولت هذه المعاينة فتح صفحة أخرى، فتم إيقافها.",
     },
     todo: {
       title: "المهام",

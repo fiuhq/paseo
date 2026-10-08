@@ -377,6 +377,7 @@ export const fr: TranslationResources = {
       answerPlaceholder: "Tapez votre réponse...",
       otherPlaceholder: "Autre...",
       preview: "Aperçu",
+      previewStopped: "Cet aperçu a tenté d’ouvrir une autre page, il a donc été arrêté.",
     },
     todo: {
       title: "Tâches",

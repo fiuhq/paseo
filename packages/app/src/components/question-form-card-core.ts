@@ -174,9 +174,11 @@ export function resolveDismissLabel(
   return questions.find((question) => question.dismissLabel)?.dismissLabel ?? fallbackLabel;
 }
 
-// No network: a preview draws with inline styles and data: images, and its inline scripts run in
-// the frame's own opaque origin (the frame never gets `allow-same-origin`), so they cannot reach
-// the app, its storage or the daemon.
+// Nothing the page asks for is fetched: a preview draws with inline styles and data: images, and
+// its inline scripts run in the frame's own opaque origin (the frame never gets
+// `allow-same-origin`), so they cannot reach the app, its storage or the daemon. A policy cannot
+// stop a page navigating itself away; the frame's script cancels link clicks and the card undoes
+// a navigation (see the web preview frame), but the navigation's own request can still leave.
 const QUESTION_PREVIEW_CSP =
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
@@ -187,10 +189,12 @@ export const QUESTION_PREVIEW_MESSAGE_MARKER = "paseoQuestionPreview";
 export const QUESTION_PREVIEW_MAX_HEIGHT = 360;
 
 // Runs first in every preview frame. It reports the picture's drawn size with the width of the
-// frame it was laid out in (a picture of text wraps to its frame), and while the card has
+// frame it was laid out in (a picture of text wraps to its frame), again whenever the page changes
+// (a click can open a positioned panel without resizing the body), and while the card has
 // the picture zoomed in it hands the card the wheel and touch drags the frame would otherwise
 // swallow, so they pan the picture. At the fitted size the wheel is left alone and scrolls the
-// conversation. A plain string, so nothing a bundler adds to functions ends up in the frame.
+// conversation. Clicks on links are cancelled, so the picture stays where it is. A plain string,
+// so nothing a bundler adds to functions ends up in the frame.
 const QUESTION_PREVIEW_BOOTSTRAP = `(() => {
   const marker = "${QUESTION_PREVIEW_MESSAGE_MARKER}";
   const post = (message) => window.parent.postMessage({ [marker]: true, ...message }, "*");
@@ -225,6 +229,18 @@ const QUESTION_PREVIEW_BOOTSTRAP = `(() => {
     reported = key;
     post({ type: "size", width, height, viewport });
   };
+  let scheduled = false;
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    setTimeout(() => {
+      scheduled = false;
+      measure();
+    }, 0);
+  };
+  // The page's own changes, not the style this script writes on the page and its body.
+  const changed = (records) =>
+    records.some((record) => record.attributeName !== "style" || (record.target !== document.body && record.target !== document.documentElement));
   let zoomed = false;
   window.addEventListener("message", (event) => {
     const data = event.data;
@@ -268,10 +284,19 @@ const QUESTION_PREVIEW_BOOTSTRAP = `(() => {
     event.preventDefault();
     event.stopPropagation();
   }, true);
+  window.addEventListener("click", (event) => {
+    const link = event.target instanceof Element ? event.target.closest("a[href], area[href]") : null;
+    if (link && !(link.getAttribute("href") || "").startsWith("#")) event.preventDefault();
+  }, true);
   window.addEventListener("load", () => {
     measure();
     new ResizeObserver(measure).observe(document.body);
+    new MutationObserver((records) => {
+      if (changed(records)) schedule();
+    }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
     window.addEventListener("resize", measure);
+    window.addEventListener("transitionend", schedule, true);
+    window.addEventListener("animationend", schedule, true);
   });
 })();`;
 

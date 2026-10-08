@@ -371,6 +371,7 @@ export const zhCN: TranslationResources = {
       answerPlaceholder: "输入你的回答...",
       otherPlaceholder: "其他...",
       preview: "预览",
+      previewStopped: "此预览试图打开另一个页面，因此已停止。",
     },
     todo: {
       title: "任务",

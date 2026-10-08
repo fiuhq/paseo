@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Text } from "react-native";
+import { useTranslation } from "react-i18next";
+import { StyleSheet } from "react-native-unistyles";
 import { ZoomableViewport } from "@/components/zoomable-viewport";
 import { wheelZoomFactor } from "@/components/zoomable-viewport/geometry";
 import type { ZoomableViewportHandle } from "@/components/zoomable-viewport/types";
 import {
   buildQuestionPreviewDocument,
+  QUESTION_PREVIEW_MAX_HEIGHT,
   questionPreviewBox,
   questionPreviewStateMessage,
   readQuestionPreviewFrameMessage,
@@ -25,6 +29,14 @@ interface Measurement {
 // The frame's width is a whole number of pixels; the option's may not be.
 const sameWidth = (a: number, b: number) => Math.abs(a - b) <= 1;
 
+// Which loads of the frame the card asked for. A load it did not ask for is the picture's page
+// navigating itself away: the card puts the picture back once, and stops a page that leaves again.
+interface FrameLoads {
+  document: string;
+  restored: boolean;
+  restoring: boolean;
+}
+
 /**
  * An HTML option picture, live: its own scripts run in a sandboxed frame with an opaque origin,
  * so it can be clicked through but cannot reach the app, and nothing is fetched. The picture is
@@ -34,6 +46,7 @@ const sameWidth = (a: number, b: number) => Math.abs(a - b) <= 1;
  * width when the picture is wider, and only drawn smaller or larger, so zooming never reflows it.
  */
 export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPreviewFrameProps) {
+  const { t } = useTranslation();
   const roomRef = useRef<HTMLDivElement | null>(null);
   const viewportBoxRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -41,6 +54,8 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
   const document = useMemo(() => buildQuestionPreviewDocument(html), [html]);
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
   const [room, setRoom] = useState(0);
+  const loadsRef = useRef<FrameLoads | null>(null);
+  const [stopped, setStopped] = useState<string | null>(null);
   // A new picture is fitted from its own size, never the previous picture's. Until it is measured
   // for this width, the last measurement draws it, and the frame is laid out at the new width.
   const drawn = measurement?.document === document ? measurement.size : null;
@@ -95,6 +110,27 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
     return () => window.removeEventListener("message", receive);
   }, [document, layoutWidth, picture, room]);
 
+  const handleLoad = useCallback(() => {
+    const frame = frameRef.current;
+    const loads = loadsRef.current;
+    if (!frame) return;
+    if (!loads || loads.document !== document) {
+      loadsRef.current = { document, restored: false, restoring: false };
+      return;
+    }
+    if (loads.restoring) {
+      loads.restoring = false;
+      return;
+    }
+    if (loads.restored) {
+      setStopped(document);
+      return;
+    }
+    loads.restored = true;
+    loads.restoring = true;
+    frame.setAttribute("srcdoc", document);
+  }, [document]);
+
   // While zoomed in, the frame hands the card its wheel and touch drags so they pan the picture.
   const tellFrame = useCallback((scale: number) => {
     frameRef.current?.contentWindow?.postMessage(questionPreviewStateMessage(scale > 1), "*");
@@ -110,11 +146,17 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
     () => ({
       ...frameDomStyle,
       width: layoutWidth || "100%",
-      height: drawn?.height ?? 0,
+      // Before its first measurement the page gets a height to lay out in, so a picture sized by
+      // the frame (`100vh`) has one.
+      height: drawn?.height ?? QUESTION_PREVIEW_MAX_HEIGHT,
       transform: `scale(${fit})`,
     }),
     [drawn?.height, fit, layoutWidth],
   );
+
+  if (stopped === document) {
+    return <Text style={styles.stopped}>{t("message.question.previewStopped")}</Text>;
+  }
 
   return (
     <div ref={roomRef} style={roomDomStyle}>
@@ -133,6 +175,7 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
             title={title}
             sandbox="allow-scripts"
             srcDoc={document}
+            onLoad={handleLoad}
             style={frameStyle}
           />
         </ZoomableViewport>
@@ -140,6 +183,13 @@ export function QuestionOptionPreviewFrame({ html, title }: QuestionOptionPrevie
     </div>
   );
 }
+
+const styles = StyleSheet.create((theme) => ({
+  stopped: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+  },
+}));
 
 const roomDomStyle: React.CSSProperties = { width: "100%" };
 const viewportBoxDomStyle: React.CSSProperties = {

@@ -368,6 +368,7 @@ export const en = {
       answerPlaceholder: "Type your answer...",
       otherPlaceholder: "Other...",
       preview: "Preview",
+      previewStopped: "This preview tried to open another page, so it was stopped.",
     },
     todo: {
       title: "Tasks",

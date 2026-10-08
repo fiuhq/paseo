@@ -376,6 +376,7 @@ export const es: TranslationResources = {
       answerPlaceholder: "Escribe tu respuesta...",
       otherPlaceholder: "Otro...",
       preview: "Vista previa",
+      previewStopped: "Esta vista previa intentó abrir otra página, así que se detuvo.",
     },
     todo: {
       title: "Tareas",

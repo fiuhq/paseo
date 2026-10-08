@@ -460,6 +460,69 @@ describe("QuestionFormCard option previews", () => {
     await vi.waitFor(() => expect(card.drawnFrame("Wide").left).toBeLessThan(zoomedLeft - 20));
   });
 
+  it("gives a picture sized by its frame a height to be drawn at", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Viewport",
+            preview: '<div style="width:600px;height:100vh;background:#09f"></div>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() => expect(card.pictureBox("Viewport").height).toBeGreaterThan(0));
+  });
+
+  it("puts the picture back when its page navigates away once", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Leaves once",
+            // The frame's name outlives its page: the first page leaves, the restored one stays
+            // and draws itself taller, which only a page that runs again can report.
+            preview:
+              '<div id="picture" style="width:120px;height:40px">Picture</div><script>if (!window.name) { window.name = "left"; setTimeout(() => { location.href = "about:blank"; }, 20); } else { document.getElementById("picture").style.height = "60px"; }</script>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() => expect(card.pictureBox("Leaves once").height).toBe(60));
+    expect(
+      card.view.queryByText("This preview tried to open another page, so it was stopped."),
+    ).toBeNull();
+  });
+
+  it("stops a picture whose page keeps navigating away", async () => {
+    const card = mountQuestions([
+      {
+        ...layoutQuestion,
+        options: [
+          {
+            label: "Leaves",
+            preview:
+              '<div style="width:120px;height:40px">Picture</div><script>setTimeout(() => { location.href = "about:blank"; }, 20);</script>',
+          },
+        ],
+      },
+    ]);
+    card.container.style.width = "800px";
+
+    await vi.waitFor(() =>
+      expect(
+        card.view.getByText("This preview tried to open another page, so it was stopped."),
+      ).toBeTruthy(),
+    );
+    expect(card.view.queryByTitle("Preview: Leaves")).toBeNull();
+  });
+
   it("still moves on after a pick when the question has no previews", () => {
     const card = mountQuestions([shipQuestion, layoutQuestion]);
 
@@ -564,5 +627,38 @@ describe("question preview frame script", () => {
       expect.objectContaining({ dx: 30, dy: 0 }),
     ]);
     expect(Reflect.get(frame.win, "clicked")).toBeUndefined();
+  });
+
+  it("measures again when a click opens positioned content that leaves the body's box as it was", async () => {
+    const frame = await loadFrame(
+      `<div style="position:relative;width:200px;height:80px"><button onclick="document.getElementById('panel').style.display='block'">Open</button><div id="panel" style="display:none;position:absolute;left:0;top:60px;width:300px;height:200px"></div></div>`,
+    );
+    await vi.waitFor(() =>
+      expect(frame.received).toContainEqual(
+        expect.objectContaining({ type: "size", width: 200, height: 80 }),
+      ),
+    );
+
+    frame.doc.querySelector("button")!.click();
+
+    await vi.waitFor(() =>
+      expect(frame.received).toContainEqual(
+        expect.objectContaining({ type: "size", width: 300, height: 260 }),
+      ),
+    );
+  });
+
+  it("cancels a click on a link that would take the page away, and keeps links within the page", async () => {
+    const frame = await loadFrame(
+      '<a href="https://example.com/">Away</a> <a href="#here">Here</a>',
+    );
+    const click = (index: number) => {
+      const event = new frame.win.MouseEvent("click", { bubbles: true, cancelable: true });
+      frame.doc.querySelectorAll("a")[index]!.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(click(0)).toBe(true);
+    expect(click(1)).toBe(false);
   });
 });
