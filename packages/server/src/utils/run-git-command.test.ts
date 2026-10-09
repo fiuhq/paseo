@@ -213,6 +213,11 @@ vi.mock("node:child_process", async () => {
   };
 });
 
+// The fake children carry made-up pids: a real tree kill could signal an unrelated process.
+vi.mock("./kill-process-tree.js", () => ({
+  killProcessTree: (child: FakeChildProcess) => child.kill("SIGKILL"),
+}));
+
 function enqueueSpawnBehaviors(...behaviors: FakeSpawnBehavior[]): void {
   fakeSpawnController.queue.push(...behaviors);
 }

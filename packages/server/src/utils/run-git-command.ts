@@ -12,6 +12,7 @@ import {
   startGitCommandTrace,
   submitGitCommandTrace,
 } from "./git-command-trace.js";
+import { killProcessTree } from "./kill-process-tree.js";
 import { spawnProcess } from "./spawn.js";
 import {
   GitProcessScheduler,
@@ -415,14 +416,14 @@ function executeGitCommand<Output>(
       const stdout = child.stdout;
       const stderr = child.stderr;
       if (!stdout || !stderr) {
-        child.kill("SIGKILL");
+        killProcessTree(child);
         rejectSpawnFailure(new Error("Git process did not expose piped stdout and stderr"));
         return;
       }
 
       timer = setTimeout(() => {
         timeoutError = new Error(`Git command timed out after ${timeout}ms: ${command}`);
-        child.kill("SIGKILL");
+        killProcessTree(child);
         settle(() => reject(timeoutError));
         if (processExit) {
           settleTimeoutTrace(processExit.exitCode, processExit.signal);
@@ -437,7 +438,7 @@ function executeGitCommand<Output>(
 
         if (remainingBytes <= 0) {
           truncated = true;
-          child.kill("SIGKILL");
+          killProcessTree(child);
           return;
         }
 
@@ -445,7 +446,7 @@ function executeGitCommand<Output>(
           stdoutChunks.push(buffer.subarray(0, remainingBytes));
           stdoutBytes += remainingBytes;
           truncated = true;
-          child.kill("SIGKILL");
+          killProcessTree(child);
           return;
         }
 
@@ -488,7 +489,7 @@ function executeGitCommand<Output>(
           // A command may close stdin when it exits or reaches the output limit.
           if (error.code !== "EPIPE") {
             processError = error;
-            child.kill("SIGKILL");
+            killProcessTree(child);
           }
         });
         child.stdin!.end(options.input);

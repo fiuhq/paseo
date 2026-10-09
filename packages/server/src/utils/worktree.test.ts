@@ -56,7 +56,11 @@ function createLegacyWorktreeForTest(
 // A remote that accepts connections and never answers, like a VPN-only host while off the VPN.
 async function startSilentRemote(): Promise<{ url: string; close: () => Promise<void> }> {
   const connections = new Set<Socket>();
-  const server = createServer((socket) => connections.add(socket));
+  const server = createServer((socket) => {
+    connections.add(socket);
+    // The killed git resets its end on Windows; nothing here cares.
+    socket.on("error", () => {});
+  });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   return {
