@@ -112,6 +112,39 @@ test("switching one login preserves a different login still using the original a
   ]);
 });
 
+test("a discovery that finishes after a newer one cannot rebind the login back", async () => {
+  let account = "personal";
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let holdGlobal = false;
+  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, {
+    hasAgent: () => true,
+    usageSession: () => ({ provider: "claude", env: {}, sessionKey: "launch" }),
+  });
+  registry.register({
+    id: "claude",
+    label: "Claude",
+    discover: async (scope) => {
+      const seen = account;
+      if (scope.kind === "global" && holdGlobal) await held;
+      return [{ key: seen, label: `${seen}@example.test`, input: { path: "shared-login" } }];
+    },
+    fetch: async () => ({ status: "available", windows: [], planLabel: account }),
+  });
+  await registry.listReports({ agentId: "agent" });
+  holdGlobal = true;
+  const olderHost = registry.listReports({ forceRefresh: true });
+  account = "team";
+  const agent = await registry.listReports({ agentId: "agent", forceRefresh: true });
+  expect(agent.map((entry) => entry.id)).toEqual(["claude:team"]);
+  release();
+  expect((await olderHost).map((entry) => entry.id)).toEqual(["claude:team"]);
+  const reused = await registry.listReports({ agentId: "agent" });
+  expect(reused.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:team", "team@example.test"],
+  ]);
+});
+
 test("coalesces per account, caches errors, and refreshes only requested IDs", async () => {
   let now = 0;
   const counts = new Map<string, number>();

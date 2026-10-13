@@ -33,6 +33,8 @@ interface KnownReport {
 interface LoginIdentity {
   id: string;
   label?: string;
+  /** The discovery that saw it; a discovery that started earlier never replaces it. */
+  generation: number;
 }
 
 export interface AgentUsageLookup {
@@ -62,6 +64,8 @@ export class UsageSourceRegistry {
   private readonly byAgent = new Map<string, AgentReports>();
   private readonly cache = new Map<string, { at: number; entry: UsageReportEntry }>();
   private readonly pending = new Map<string, Promise<UsageReportEntry>>();
+  private readonly identities = new Map<string, LoginIdentity>();
+  private discoveries = 0;
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -87,6 +91,8 @@ export class UsageSourceRegistry {
     for (const key of this.known.keys()) if (key.startsWith(`${id}:`)) this.known.delete(key);
     for (const key of this.cache.keys()) if (key.startsWith(`${id}:`)) this.cache.delete(key);
     for (const key of this.pending.keys()) if (key.startsWith(`${id}:`)) this.pending.delete(key);
+    for (const key of this.identities.keys())
+      if (key.startsWith(`${id}:`)) this.identities.delete(key);
   }
 
   async listReports(options: ListUsageReportsOptions = {}): Promise<UsageReportEntry[]> {
@@ -101,8 +107,9 @@ export class UsageSourceRegistry {
     } else if (options.reportIds !== undefined) {
       ids = options.reportIds;
     } else {
+      const generation = ++this.discoveries;
       this.defaults = await this.discover({ kind: "global" });
-      this.rebindLogins(this.defaults);
+      this.rebindLogins(this.defaults, generation);
       this.mergeKnown();
       ids = [...this.known.keys()];
     }
@@ -137,6 +144,7 @@ export class UsageSourceRegistry {
       previous.provider === session.provider &&
       previous.model === session.model;
     if (sameScope && !forceRefresh) return [...previous.reports.keys()];
+    const generation = ++this.discoveries;
     const reports = await this.discover({
       kind: "session",
       provider: session.provider,
@@ -151,24 +159,29 @@ export class UsageSourceRegistry {
       model: session.model,
       reports,
     });
-    this.rebindLogins(reports);
+    this.rebindLogins(reports, generation);
     this.mergeKnown();
     return [...reports.keys()];
   }
 
-  private rebindLogins(fresh: Map<string, KnownReport>): void {
-    // A shared login store changes identity for every scope when its account switches.
-    const identities = new Map<string, LoginIdentity>();
+  private rebindLogins(fresh: Map<string, KnownReport>, generation: number): void {
+    // A shared login store changes identity for every scope when its account switches. The
+    // newest-started discovery decides, so one that finishes late cannot undo a switch.
     for (const [id, report] of fresh) {
-      for (const login of report.logins)
-        identities.set(`${report.source.id}:${loginKey(login)}`, { id, label: report.label });
+      for (const login of report.logins) {
+        const key = `${report.source.id}:${loginKey(login)}`;
+        if ((this.identities.get(key)?.generation ?? 0) <= generation)
+          this.identities.set(key, { id, label: report.label, generation });
+      }
     }
     for (const reports of [this.defaults, ...[...this.byAgent.values()].map((a) => a.reports)]) {
-      if (reports === fresh) continue;
       const rebound = new Map<string, KnownReport>();
       for (const [id, report] of reports) {
         for (const login of report.logins) {
-          const identity = identities.get(`${report.source.id}:${loginKey(login)}`);
+          const owner = this.identities.get(`${report.source.id}:${loginKey(login)}`);
+          // A discovery keeps its own accounts unless a newer one has since claimed the login.
+          const identity =
+            reports === fresh && (owner?.generation ?? 0) <= generation ? undefined : owner;
           const currentId = identity?.id ?? id;
           const current = rebound.get(currentId);
           if (current) current.logins.push(login);
