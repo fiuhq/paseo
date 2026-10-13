@@ -107,6 +107,8 @@ function onLogin(report: UsageReportEntry, login: string): UsageReportEntry {
 export function expiredLogin(report: UsageReportEntry): UsageReportEntry {
   return {
     ...report,
+    // A refresh is a new fetch; the app keeps whichever copy of a report was fetched later.
+    fetchedAt: new Date().toISOString(),
     report: {
       status: "unavailable",
       problem: {
