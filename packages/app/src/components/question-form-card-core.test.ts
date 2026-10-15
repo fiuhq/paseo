@@ -293,6 +293,33 @@ describe("question form card core", () => {
       height: 360,
     });
   });
+
+  test("keeps option previews so options can be compared", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Which layout?",
+          header: "Layout",
+          options: [
+            {
+              label: "Tabs",
+              description: "One tab per section",
+              preview: "<Tabs>\n  <Tab />\n</Tabs>",
+            },
+            { label: "Single page" },
+          ],
+          multiSelect: false,
+        },
+      ],
+    });
+
+    expect(questions?.[0]?.options).toEqual([
+      { label: "Tabs", description: "One tab per section", preview: "<Tabs>\n  <Tab />\n</Tabs>" },
+      { label: "Single page", description: undefined, preview: undefined },
+    ]);
+    // A component in code is not an HTML fragment: HTML elements are written in lowercase.
+    expect(questions?.[0]?.previewFormat).toBe("markdown");
+  });
 });
 
 // Lays a picture out the way its frame would draw it: `measure` is the page, sized by the frame

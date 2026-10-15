@@ -10,6 +10,7 @@ import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import { isWeb } from "@/constants/platform";
 import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import type { EditingTextInputHandle } from "@/components/ui/text-input/types";
+import { ScrollableCodeSurface } from "@/components/ui/scrollable-code-surface";
 import {
   areQuestionsAnswered,
   buildQuestionFormAnswers,
@@ -31,6 +32,9 @@ interface QuestionFormCardProps {
 }
 
 const IS_WEB = isWeb;
+// Native previews are uncapped: inside the option's Pressable, Android never hands a
+// drag to the preview's nested scroll, so lines past a cap would be unreachable.
+const OPTION_PREVIEW_MAX_HEIGHT = IS_WEB ? 240 : undefined;
 
 function getQuestionInputPlaceholder({
   question,
@@ -138,7 +142,7 @@ function QuestionOptionRow({
           {option.description ? (
             <Text style={optionDescriptionStyle}>{option.description}</Text>
           ) : null}
-          {option.preview && previewFormat ? (
+          {option.preview ? (
             <QuestionOptionPicture
               label={option.label}
               preview={option.preview}
@@ -154,23 +158,34 @@ function QuestionOptionRow({
 interface QuestionOptionPictureProps {
   label: string;
   preview: string;
-  format: QuestionPreviewFormat;
+  format: QuestionPreviewFormat | undefined;
 }
 
 /** An option's picture, under its own text, so every option's picture shows at once. */
 function QuestionOptionPicture({ label, preview, format }: QuestionOptionPictureProps) {
   const { t } = useTranslation();
-  return (
-    <View style={styles.optionPicture} testID="question-form-option-picture">
-      {format === "html" ? (
+  if (format === "html") {
+    return (
+      <View style={styles.optionPicture} testID="question-form-option-picture">
         <QuestionOptionPreviewFrame
           html={preview}
           title={`${t("message.question.preview")}: ${label}`}
         />
-      ) : (
-        <Text style={styles.optionPictureMarkdown}>{preview}</Text>
-      )}
-    </View>
+      </View>
+    );
+  }
+  // Long lines wrap, as in Claude Code, since most previews are prose.
+  return (
+    <ScrollableCodeSurface
+      tone="surface0"
+      maxHeight={OPTION_PREVIEW_MAX_HEIGHT}
+      horizontal={false}
+      selectable={false}
+      textStyle={styles.optionPreviewText}
+      testID="question-form-option-preview"
+    >
+      {preview}
+    </ScrollableCodeSurface>
   );
 }
 
@@ -693,17 +708,6 @@ const styles = StyleSheet.create((theme) => ({
   optionPicture: {
     marginTop: theme.spacing[1],
   },
-  // Markdown previews are ASCII mockups and code, shown as written, as Claude Code's CLI does.
-  optionPictureMarkdown: {
-    padding: theme.spacing[3],
-    borderRadius: theme.spacing[2],
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    fontFamily: theme.fontFamily.mono,
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.foreground,
-    backgroundColor: theme.colors.surface0,
-  },
   questionNav: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -753,6 +757,10 @@ const styles = StyleSheet.create((theme) => ({
   optionDescription: {
     fontSize: theme.fontSize.base,
     lineHeight: 20,
+  },
+  optionPreviewText: {
+    lineHeight: 20,
+    ...(isWeb ? { whiteSpace: "pre-wrap", overflowWrap: "break-word" } : null),
   },
   selectionControl: {
     width: 18,
