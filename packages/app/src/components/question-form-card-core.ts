@@ -45,11 +45,12 @@ function parseQuestionOption(input: unknown): QuestionOption | null {
 }
 
 // The tool input never says which format its previews are in: the agent process decides it from its
-// environment. An HTML fragment opens with a tag; Markdown and ASCII art do not.
+// environment. An HTML fragment opens with a lowercase tag; Markdown, ASCII art and code that
+// opens with a component such as `<Tabs>` do not.
 function readPreviewFormat(options: QuestionOption[]): QuestionPreviewFormat | undefined {
   const preview = options.find((option) => option.preview !== undefined)?.preview;
   if (preview === undefined) return undefined;
-  return /^<[a-z][a-z0-9-]*(?=[\s/>])/i.test(preview.trimStart()) ? "html" : "markdown";
+  return /^<[a-z][a-z0-9-]*(?=[\s/>])/.test(preview.trimStart()) ? "html" : "markdown";
 }
 
 export function parseQuestionFormQuestions(input: unknown): QuestionFormQuestion[] | null {
