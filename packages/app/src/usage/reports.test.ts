@@ -41,7 +41,7 @@ test.each([
     agentId: "agent",
     key: agentKey,
     refreshed: [team, codex],
-    expected: [team, codex],
+    expected: [codex, team],
     request: { agentId: "agent", forceRefresh: true },
     invalidateHost: true,
   },
