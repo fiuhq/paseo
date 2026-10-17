@@ -369,6 +369,7 @@ export const ar: TranslationResources = {
       failedRetry: "فشل الإملاء. اضغط على إعادة المحاولة.",
     },
     question: {
+      responseFailed: "تعذر إرسال ردك. حاول مرة أخرى.",
       submit: "يُقدِّم",
       next: "التالي",
       answerPlaceholder: "اكتب إجابتك...",
@@ -731,6 +732,7 @@ export const ar: TranslationResources = {
     header: {
       actions: {
         workspaceActions: "إجراءات Workspace",
+        workspaceActionsUnhealthy: "إجراءات Workspace، توجد خدمة غير سليمة",
         newAgent: "وكيل جديد",
         newTerminal: "محطة جديدة",
         newBrowser: "علامة تبويب متصفح جديدة",
@@ -778,6 +780,8 @@ export const ar: TranslationResources = {
         exitCode: "الخروج من{{code}}",
         startFailed: "فشل بدء تشغيل{{scriptName}}",
         stopFailed: "فشل إيقاف{{scriptName}}",
+        running: "قيد التشغيل",
+        runningCount: "{{count}} قيد التشغيل",
       },
     },
     tree: {
