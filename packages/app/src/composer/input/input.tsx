@@ -28,6 +28,7 @@ import { useTranslation } from "react-i18next";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { ArrowUp, Mic, MicOff, CornerDownLeft, Plus, Square } from "lucide-react-native";
 import { useDictation } from "@/hooks/use-dictation";
+import { hasFinePointer, useHasFinePointer } from "@/hooks/use-fine-pointer";
 import { DictationOverlay } from "@/components/dictation-controls";
 import { RealtimeVoiceOverlay } from "@/components/realtime-voice-overlay";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
@@ -57,7 +58,6 @@ import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
 import { isWeb } from "@/constants/platform";
-import { useHasFinePointer } from "@/hooks/use-fine-pointer";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { RenderProfile } from "@/utils/render-profiler";
@@ -498,7 +498,7 @@ function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
 
 interface KeyboardImagesEffectArgs {
   textarea: HTMLElement | null;
-  hasFinePointer: boolean;
+  finePointer: boolean;
   onAddImages: ((images: ImageAttachment[]) => void) | undefined;
   isConnected: boolean;
   disabled: boolean;
@@ -515,7 +515,7 @@ interface KeyboardImagesEffectArgs {
 function useKeyboardImagesEffect(args: KeyboardImagesEffectArgs): void {
   const {
     textarea,
-    hasFinePointer,
+    finePointer,
     onAddImages,
     isConnected,
     disabled,
@@ -526,7 +526,7 @@ function useKeyboardImagesEffect(args: KeyboardImagesEffectArgs): void {
   useEffect(() => {
     if (
       !isWeb ||
-      hasFinePointer ||
+      finePointer ||
       !onAddImages ||
       !isConnected ||
       disabled ||
@@ -543,7 +543,7 @@ function useKeyboardImagesEffect(args: KeyboardImagesEffectArgs): void {
     };
   }, [
     textarea,
-    hasFinePointer,
+    finePointer,
     onAddImages,
     isConnected,
     disabled,
@@ -1301,7 +1301,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const mode = resolveComposerInputMode(inputMode);
     const { t } = useTranslation();
     const isCompact = useIsCompactFormFactor();
-    const hasFinePointer = useHasFinePointer();
+    const finePointer = useHasFinePointer();
     const { height: windowHeight } = useWindowDimensions();
     const editingSession = useComposerEditingSession(inputMode, props.editingSession);
     const isFullscreen = useComposerFullscreen(editingSession);
@@ -1347,12 +1347,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       webTextareaRef.current = element;
       setWebTextArea(element);
     }, []);
-    // Focus intent outlives a blur only while the pane is not the user's pane (a retained
-    // tab hidden, a sheet over it); the pane coming back restores focus. A blur while the
-    // pane is theirs drops it, whatever the layout mode: the user dismissed the keyboard,
-    // or a compact overlay panel did on their behalf, and nothing later refocuses.
+    // Only mouse-driven UIs restore editing focus on navigation. Touch users return
+    // to the conversation; replaying old focus would reopen their software keyboard.
+    // Read pointer capability when restoring, without making a pointer change itself
+    // a focus trigger.
     useLayoutEffect(() => {
-      if (isPaneFocused && focusIntentRef.current) textInputRef.current?.focus();
+      if (isPaneFocused && focusIntentRef.current && hasFinePointer()) {
+        textInputRef.current?.focus();
+      }
     }, [isPaneFocused]);
     // The compact and desktop screens mount the editor in different trees, so a
     // viewport that crosses the breakpoint remounts it. The draft owner brings the
@@ -1369,7 +1371,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         retainedSelectionRef.current = retained.selection;
         selectionRef.current = selection;
         textInputRef.current?.setSelection(selection);
-        if (retained.focused) {
+        if (retained.focused && hasFinePointer()) {
           focusIntentRef.current = true;
           if (paneFocusedRef.current) textInputRef.current?.focus();
         }
@@ -1762,7 +1764,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     useKeyboardImagesEffect({
       textarea: webTextArea,
-      hasFinePointer,
+      finePointer,
       onAddImages,
       isConnected,
       disabled,
@@ -1886,6 +1888,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     }, [onFocusChange]);
 
     const handleInputBlur = useCallback(() => {
+      // A blur in the active pane is a dismissal; only hiding the pane preserves intent.
       if (paneFocusedRef.current) focusIntentRef.current = false;
       isInputFocusedRef.current = false;
       setIsInputFocused(false);
@@ -1926,11 +1929,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const inputWrapperCombinedStyle = useMemo(
       () => [
         styles.inputWrapper,
+        isCompact && !isFullscreen && styles.inputWrapperCompact,
         readOnly && styles.inputWrapperReadOnly,
         inputWrapperStyle,
         { opacity: surfacePresentation.input.opacity },
       ],
-      [inputWrapperStyle, readOnly, surfacePresentation.input.opacity],
+      [inputWrapperStyle, isCompact, isFullscreen, readOnly, surfacePresentation.input.opacity],
     );
     // `withUnistyles` maps this component's `style` into a `.hash > *` child
     // rule, which ties on specificity with react-native-web's own
@@ -2286,6 +2290,10 @@ const styles = StyleSheet.create((theme: Theme) => ({
           transitionTimingFunction: "ease-in-out",
         }
       : {}),
+  },
+  // Lifts the composer off the chat it sits under on phones.
+  inputWrapperCompact: {
+    boxShadow: "0px 4px 16px rgba(0, 0, 0, 0.2)",
   },
   // Dotted says "this surface is the same box, but there is nothing to type
   // into it" without swapping the border colour, which reads as an error state.

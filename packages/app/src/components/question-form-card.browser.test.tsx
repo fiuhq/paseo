@@ -64,6 +64,7 @@ function mountCard(question: Record<string, unknown>) {
         permission={buildPermission(question)}
         onRespond={onRespond}
         isResponding={false}
+        responseError={null}
       />,
     ),
   );
@@ -180,7 +181,12 @@ describe("QuestionFormCard option previews", () => {
     permission.request.input = { questions };
     act(() =>
       root.render(
-        <QuestionFormCard permission={permission} onRespond={vi.fn()} isResponding={false} />,
+        <QuestionFormCard
+          permission={permission}
+          onRespond={vi.fn()}
+          isResponding={false}
+          responseError={null}
+        />,
       ),
     );
     mounted.push({ root, container });
