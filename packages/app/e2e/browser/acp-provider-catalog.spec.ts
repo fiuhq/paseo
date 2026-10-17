@@ -116,10 +116,8 @@ for (const theme of ["light", "dark"] as const) {
 
 async function removeHoplite(page: import("@playwright/test").Page): Promise<void> {
   await page.getByTestId("provider-actions-hoplite").click();
-  page.once("dialog", (dialog) => {
-    void dialog.accept();
-  });
   await page.getByTestId("provider-remove-hoplite").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
 }
 
 test("unsupported host asks for an update without writing Hoplite config", async ({

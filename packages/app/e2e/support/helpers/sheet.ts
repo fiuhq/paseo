@@ -89,11 +89,8 @@ export async function expectDeclinedDiscardPrompt(
   page: Page,
   close: () => Promise<void>,
 ): Promise<void> {
-  const prompt = page.waitForEvent("dialog").then(async (dialog) => {
-    const message = dialog.message();
-    await dialog.dismiss();
-    return message;
-  });
   await close();
-  expect(await prompt).toContain("discard the draft");
+  await expect(page.getByTestId("confirm-dialog-message")).toContainText("discard the draft");
+  await page.getByTestId("confirm-dialog-cancel").click();
+  await expect(page.getByTestId("confirm-dialog")).toHaveCount(0);
 }
