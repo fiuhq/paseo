@@ -188,6 +188,66 @@ test("failed global discovery cannot undo a pending agent account switch", async
   ]);
 });
 
+test("failed global discovery preserves an agent account switch completed while another source waits", async () => {
+  let account = "personal";
+  let discoveryFails = false;
+  let releaseAgent: () => void = () => {};
+  const heldAgent = new Promise<void>((resolve) => (releaseAgent = resolve));
+  let releaseGlobal: () => void = () => {};
+  const heldGlobal = new Promise<void>((resolve) => (releaseGlobal = resolve));
+  let signalFailure: () => void = () => {};
+  const globalFailed = new Promise<void>((resolve) => (signalFailure = resolve));
+  const registry = new UsageSourceRegistry(
+    () => 0,
+    300_000,
+    { warn: () => signalFailure() },
+    {
+      hasAgent: () => true,
+      usageSession: () => ({ provider: "claude", env: {}, sessionKey: "launch" }),
+    },
+  );
+  registry.register({
+    id: "claude",
+    label: "Claude",
+    discover: async (scope) => {
+      const seen = account;
+      if (scope.kind === "session") await heldAgent;
+      else if (discoveryFails) throw new Error("Login store temporarily unavailable");
+      return [{ key: seen, label: `${seen}@example.test`, input: { path: "shared-login" } }];
+    },
+    fetch: async () => ({ status: "available", windows: [], planLabel: account }),
+  });
+  registry.register({
+    id: "other",
+    label: "Other",
+    discover: async (scope) => {
+      if (scope.kind === "global" && discoveryFails) await heldGlobal;
+      return [];
+    },
+    fetch: async () => ({ status: "available", windows: [] }),
+  });
+  const initial = await registry.listReports();
+  expect(initial.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:personal", "personal@example.test"],
+  ]);
+  account = "team";
+  const pendingAgent = registry.listReports({ agentId: "agent" });
+  discoveryFails = true;
+  const pendingGlobal = registry.listReports();
+  await globalFailed;
+  releaseAgent();
+  const agent = await pendingAgent;
+  expect(agent.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:team", "team@example.test"],
+  ]);
+  releaseGlobal();
+  await pendingGlobal;
+  const reused = await registry.listReports({ agentId: "agent" });
+  expect(reused.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:team", "team@example.test"],
+  ]);
+});
+
 test("coalesces per account, caches errors, and refreshes only requested IDs", async () => {
   let now = 0;
   const counts = new Map<string, number>();

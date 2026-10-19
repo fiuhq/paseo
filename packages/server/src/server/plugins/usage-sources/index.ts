@@ -111,7 +111,7 @@ export class UsageSourceRegistry {
       ids = options.reportIds;
     } else {
       const generation = ++this.discoveries;
-      const previous = this.defaults;
+      const previous = new Map(this.defaults);
       this.defaults = await this.discover({ kind: "global" }, previous);
       const retained = new Set(
         [...this.defaults]
