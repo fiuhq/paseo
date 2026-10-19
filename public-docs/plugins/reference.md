@@ -432,7 +432,8 @@ The host-wide Usage modal groups logins with the same key into one account card 
 concurrently, preferring the discovery order when selecting a result. If any login returns
 `available`, it shows usage with no errors. If all fail, it shows
 every login's error on a separate line with its harness label and its own remedy.
-Discovery failures are logged by the daemon and produce no card.
+Discovery failures are logged by the daemon. Failed global discovery retains the source's known
+reports; failed session discovery produces no card for that source.
 
 Window names must come from provider data: an explicit duration, a named API field such as
 `five_hour` or `weekly`, or the provider's own period name. Response slots and reset countdowns
@@ -458,7 +459,7 @@ an explicit empty selection stays empty.
 Re-read the selected store in `fetch()` so the CLI's token rotations take effect. Never redeem
 refresh tokens or write credential stores: refreshing elsewhere can invalidate the CLI's copy,
 and rewriting parsed files can discard fields you do not model. If the store disappeared after
-discovery, throw; the card shows the error until the next discovery removes it.
+discovery, throw so the card can show the fetch error.
 
 Use `unavailable(problem)` to explain why an existing login cannot supply quota. It requires a
 problem; there is no zero-argument form. `expiresAt` is an ISO timestamp. A rejected login carries

@@ -145,6 +145,109 @@ test("a discovery that finishes after a newer one cannot rebind the login back",
   ]);
 });
 
+test("failed global discovery cannot undo a pending agent account switch", async () => {
+  let account = "personal";
+  let discoveryFails = false;
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const registry = new UsageSourceRegistry(
+    () => 0,
+    300_000,
+    { warn: () => {} },
+    {
+      hasAgent: () => true,
+      usageSession: () => ({ provider: "claude", env: {}, sessionKey: "launch" }),
+    },
+  );
+  registry.register({
+    id: "claude",
+    label: "Claude",
+    discover: async (scope) => {
+      const seen = account;
+      if (scope.kind === "session") await held;
+      else if (discoveryFails) throw new Error("Login store temporarily unavailable");
+      return [{ key: seen, label: `${seen}@example.test`, input: { path: "shared-login" } }];
+    },
+    fetch: async () => ({ status: "available", windows: [], planLabel: account }),
+  });
+  const initial = await registry.listReports();
+  expect(initial.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:personal", "personal@example.test"],
+  ]);
+  account = "team";
+  const pendingAgent = registry.listReports({ agentId: "agent" });
+  discoveryFails = true;
+  const retained = await registry.listReports();
+  release();
+  const agent = await pendingAgent;
+  expect(retained.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:personal", "personal@example.test"],
+  ]);
+  expect(agent.map((entry) => [entry.id, entry.account.label, entry.report.planLabel])).toEqual([
+    ["claude:team", "team@example.test", "team"],
+  ]);
+});
+
+test("failed global discovery preserves an agent account switch completed while another source waits", async () => {
+  let account = "personal";
+  let discoveryFails = false;
+  let releaseAgent: () => void = () => {};
+  const heldAgent = new Promise<void>((resolve) => (releaseAgent = resolve));
+  let releaseGlobal: () => void = () => {};
+  const heldGlobal = new Promise<void>((resolve) => (releaseGlobal = resolve));
+  let signalFailure: () => void = () => {};
+  const globalFailed = new Promise<void>((resolve) => (signalFailure = resolve));
+  const registry = new UsageSourceRegistry(
+    () => 0,
+    300_000,
+    { warn: () => signalFailure() },
+    {
+      hasAgent: () => true,
+      usageSession: () => ({ provider: "claude", env: {}, sessionKey: "launch" }),
+    },
+  );
+  registry.register({
+    id: "claude",
+    label: "Claude",
+    discover: async (scope) => {
+      const seen = account;
+      if (scope.kind === "session") await heldAgent;
+      else if (discoveryFails) throw new Error("Login store temporarily unavailable");
+      return [{ key: seen, label: `${seen}@example.test`, input: { path: "shared-login" } }];
+    },
+    fetch: async () => ({ status: "available", windows: [], planLabel: account }),
+  });
+  registry.register({
+    id: "other",
+    label: "Other",
+    discover: async (scope) => {
+      if (scope.kind === "global" && discoveryFails) await heldGlobal;
+      return [];
+    },
+    fetch: async () => ({ status: "available", windows: [] }),
+  });
+  const initial = await registry.listReports();
+  expect(initial.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:personal", "personal@example.test"],
+  ]);
+  account = "team";
+  const pendingAgent = registry.listReports({ agentId: "agent" });
+  discoveryFails = true;
+  const pendingGlobal = registry.listReports();
+  await globalFailed;
+  releaseAgent();
+  const agent = await pendingAgent;
+  expect(agent.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:team", "team@example.test"],
+  ]);
+  releaseGlobal();
+  await pendingGlobal;
+  const reused = await registry.listReports({ agentId: "agent" });
+  expect(reused.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:team", "team@example.test"],
+  ]);
+});
+
 test("coalesces per account, caches errors, and refreshes only requested IDs", async () => {
   let now = 0;
   const counts = new Map<string, number>();
@@ -664,4 +767,209 @@ test("a hung login records its own timeout and still tries the next login", asyn
     { harness: "Codex", report: { status: "error", error: "Usage fetch timed out" } },
     { harness: "OpenCode", report: { status: "error", error: "Login rejected" } },
   ]);
+});
+
+test("retains the last successful poll across failures, cache expiry, and recovery", async () => {
+  let now = 0;
+  let report: unknown = {
+    status: "available",
+    windows: [{ id: "week", label: "Weekly", usedPct: 42 }],
+  };
+  const registry = new UsageSourceRegistry(() => now);
+  registry.register(
+    source({
+      id: "quota",
+      discover: async () => [{ key: "account", input: {} }],
+      fetch: async () => report,
+    }),
+  );
+  registry.register(source({ id: "other", discover: async () => [{ key: "account", input: {} }] }));
+  const [success] = await registry.listReports();
+  now = 360_000;
+  // An unrelated write evicts the expired fetch result, but must not discard its snapshot.
+  await registry.listReports({ reportIds: ["other:account"], forceRefresh: true });
+  report = { status: "error", error: "Rate limited" };
+  const [failure] = await registry.listReports({ reportIds: ["quota:account"] });
+  expect(failure).toMatchObject({
+    fetchedAt: new Date(now).toISOString(),
+    report,
+    lastSuccessful: { fetchedAt: success!.fetchedAt, report: success!.report },
+  });
+  now += 360_000;
+  const [repeated] = await registry.listReports({ reportIds: ["quota:account"] });
+  expect(repeated?.lastSuccessful).toEqual(failure?.lastSuccessful);
+  report = { status: "unavailable", problem: { kind: "no_quota", detail: "No quota" } };
+  const [unavailable] = await registry.listReports({
+    reportIds: ["quota:account"],
+    forceRefresh: true,
+  });
+  expect(unavailable?.lastSuccessful).toEqual(failure?.lastSuccessful);
+  now += 1000;
+  report = { status: "available", windows: [{ id: "week", label: "Weekly", usedPct: 43 }] };
+  const [recovered] = await registry.listReports({
+    reportIds: ["quota:account"],
+    forceRefresh: true,
+  });
+  expect(recovered?.report).toEqual(report);
+  expect(recovered?.lastSuccessful).toBeUndefined();
+  expect(recovered?.fetchedAt).toBe(new Date(now).toISOString());
+});
+
+test("successful history is isolated by login set and pruned when identities retire", async () => {
+  let login = "old";
+  let present = true;
+  let available = true;
+  const registry = new UsageSourceRegistry();
+  const fixture = source({
+    id: "source",
+    discover: async () => (present ? [{ key: "same", input: login }] : []),
+    fetch: async () =>
+      available ? { status: "available", windows: [] } : { status: "error", error: "failed" },
+  });
+  registry.register(fixture);
+  await registry.listReports();
+  available = false;
+  login = "new";
+  expect((await registry.listReports({ forceRefresh: true }))[0]?.lastSuccessful).toBeUndefined();
+  login = "old";
+  expect((await registry.listReports({ forceRefresh: true }))[0]?.lastSuccessful).toBeUndefined();
+  available = true;
+  await registry.listReports({ forceRefresh: true });
+  present = false;
+  expect(await registry.listReports()).toEqual([]);
+  present = true;
+  available = false;
+  expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
+  available = true;
+  await registry.listReports({ forceRefresh: true });
+  registry.unregister("source");
+  registry.register(fixture);
+  available = false;
+  expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
+});
+
+test("host fallback history never supplies an agent's failed login, and removed agents lose history", async () => {
+  const sessions = new Map([["agent", { provider: "codex", env: {}, sessionKey: "one" }]]);
+  let available = true;
+  const registry = new UsageSourceRegistry(Date.now, 300_000, undefined, {
+    hasAgent: (id) => sessions.has(id),
+    usageSession: (id) => sessions.get(id) ?? null,
+  });
+  registry.register({
+    id: "source",
+    label: "Source",
+    discover: async (scope) =>
+      (scope.kind === "global" ? ["host", "agent"] : ["agent"]).map((input) => ({
+        key: "same",
+        input,
+      })),
+    fetch: async () =>
+      available ? { status: "available", windows: [] } : { status: "error", error: "failed" },
+  });
+  await registry.listReports();
+  available = false;
+  expect((await registry.listReports({ agentId: "agent" }))[0]?.lastSuccessful).toBeUndefined();
+  available = true;
+  const [success] = await registry.listReports({ agentId: "agent", forceRefresh: true });
+  available = false;
+  expect(
+    (await registry.listReports({ agentId: "agent", forceRefresh: true }))[0]?.lastSuccessful
+      ?.report,
+  ).toEqual(success?.report);
+  sessions.delete("agent");
+  await registry.listReports();
+  sessions.set("agent", { provider: "codex", env: {}, sessionKey: "two" });
+  expect((await registry.listReports({ agentId: "agent" }))[0]?.lastSuccessful).toBeUndefined();
+});
+
+test("a timed out poll retains successful values and late completion cannot replace the failure", async () => {
+  let now = 1000;
+  let finish!: (value: unknown) => void;
+  let slow = false;
+  const registry = new UsageSourceRegistry(() => now, 300_000, undefined, undefined, 10);
+  registry.register(
+    source({
+      id: "source",
+      discover: async () => [{ key: "same", input: {} }],
+      fetch: async () =>
+        slow
+          ? new Promise((resolve) => {
+              finish = resolve;
+            })
+          : { status: "available", windows: [] },
+    }),
+  );
+  const [success] = await registry.listReports();
+  now = 2000;
+  slow = true;
+  const [failure] = await registry.listReports({ forceRefresh: true });
+  expect(failure?.report).toEqual({ status: "error", error: "Usage fetch timed out" });
+  expect(failure?.lastSuccessful).toEqual({
+    fetchedAt: success?.fetchedAt,
+    report: success?.report,
+  });
+  finish({ status: "available", windows: [{ id: "late", label: "Late" }] });
+  expect((await registry.listReports())[0]).toEqual(failure);
+});
+
+test("attempt ordering keeps its timestamp while retained freshness records successful completion", async () => {
+  let now = 1000;
+  let available = true;
+  const registry = new UsageSourceRegistry(() => now);
+  registry.register(
+    source({
+      id: "source",
+      discover: async () => [{ key: "same", input: {} }],
+      fetch: async () => {
+        if (available) now = 2000;
+        return available
+          ? { status: "available", windows: [] }
+          : { status: "error", error: "failed" };
+      },
+    }),
+  );
+  const [success] = await registry.listReports();
+  expect(success?.fetchedAt).toBe(new Date(1000).toISOString());
+  expect(success?.successfulAt).toBe(new Date(2000).toISOString());
+  available = false;
+  now = 3000;
+  const [failure] = await registry.listReports({ forceRefresh: true });
+  expect(failure?.fetchedAt).toBe(new Date(3000).toISOString());
+  expect(failure?.lastSuccessful?.fetchedAt).toBe(success?.successfulAt);
+});
+
+test("failed discovery preserves history until discovery confirms account removal", async () => {
+  let discoveryFails = false;
+  let present = true;
+  let available = true;
+  const registry = new UsageSourceRegistry(() => 1000, 300_000, { warn: () => {} });
+  registry.register(
+    source({
+      id: "source",
+      discover: async () => {
+        if (discoveryFails) throw new Error("Login store temporarily unavailable");
+        return present ? [{ key: "account", input: {} }] : [];
+      },
+      fetch: async () =>
+        available
+          ? { status: "available", windows: [{ id: "weekly", label: "Weekly", usedPct: 42 }] }
+          : { status: "error", error: "Rate limited" },
+    }),
+  );
+  const [success] = await registry.listReports();
+  available = false;
+  discoveryFails = true;
+  const [duringDiscoveryFailure] = await registry.listReports({ forceRefresh: true });
+  expect(duringDiscoveryFailure?.lastSuccessful).toEqual({
+    fetchedAt: success?.successfulAt,
+    report: success?.report,
+  });
+  discoveryFails = false;
+  const [afterDiscoveryRecovery] = await registry.listReports({ forceRefresh: true });
+  expect(afterDiscoveryRecovery?.lastSuccessful).toEqual(duringDiscoveryFailure?.lastSuccessful);
+  expect(afterDiscoveryRecovery?.report).toEqual({ status: "error", error: "Rate limited" });
+  present = false;
+  expect(await registry.listReports()).toEqual([]);
+  present = true;
+  expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
 });
