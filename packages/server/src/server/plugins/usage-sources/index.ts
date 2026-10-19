@@ -111,8 +111,14 @@ export class UsageSourceRegistry {
       ids = options.reportIds;
     } else {
       const generation = ++this.discoveries;
-      this.defaults = await this.discover({ kind: "global" }, this.defaults);
-      this.rebindLogins(this.defaults, generation);
+      const previous = this.defaults;
+      this.defaults = await this.discover({ kind: "global" }, previous);
+      const retained = new Set(
+        [...this.defaults]
+          .filter(([id, report]) => previous.get(id) === report)
+          .map(([, report]) => report),
+      );
+      this.rebindLogins(this.defaults, generation, retained);
       this.mergeKnown();
       ids = [...this.known.keys()];
     }
@@ -171,10 +177,15 @@ export class UsageSourceRegistry {
     return [...reports.keys()];
   }
 
-  private rebindLogins(fresh: Map<string, KnownReport>, generation: number): void {
+  private rebindLogins(
+    fresh: Map<string, KnownReport>,
+    generation: number,
+    retained: ReadonlySet<KnownReport> = new Set(),
+  ): void {
     // A shared login store changes identity for every scope when its account switches. The
     // newest-started discovery decides, so one that finishes late cannot undo a switch.
     for (const [id, report] of fresh) {
+      if (retained.has(report)) continue;
       for (const login of report.logins) {
         const key = `${report.source.id}:${loginKey(login)}`;
         if ((this.identities.get(key)?.generation ?? 0) <= generation)
@@ -188,7 +199,9 @@ export class UsageSourceRegistry {
           const owner = this.identities.get(`${report.source.id}:${loginKey(login)}`);
           // A discovery keeps its own accounts unless a newer one has since claimed the login.
           const identity =
-            reports === fresh && (owner?.generation ?? 0) <= generation ? undefined : owner;
+            reports === fresh && !retained.has(report) && (owner?.generation ?? 0) <= generation
+              ? undefined
+              : owner;
           const currentId = identity?.id ?? id;
           const current = rebound.get(currentId);
           if (current) current.logins.push(login);

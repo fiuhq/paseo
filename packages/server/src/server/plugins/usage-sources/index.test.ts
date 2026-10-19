@@ -145,6 +145,49 @@ test("a discovery that finishes after a newer one cannot rebind the login back",
   ]);
 });
 
+test("failed global discovery cannot undo a pending agent account switch", async () => {
+  let account = "personal";
+  let discoveryFails = false;
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const registry = new UsageSourceRegistry(
+    () => 0,
+    300_000,
+    { warn: () => {} },
+    {
+      hasAgent: () => true,
+      usageSession: () => ({ provider: "claude", env: {}, sessionKey: "launch" }),
+    },
+  );
+  registry.register({
+    id: "claude",
+    label: "Claude",
+    discover: async (scope) => {
+      const seen = account;
+      if (scope.kind === "session") await held;
+      else if (discoveryFails) throw new Error("Login store temporarily unavailable");
+      return [{ key: seen, label: `${seen}@example.test`, input: { path: "shared-login" } }];
+    },
+    fetch: async () => ({ status: "available", windows: [], planLabel: account }),
+  });
+  const initial = await registry.listReports();
+  expect(initial.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:personal", "personal@example.test"],
+  ]);
+  account = "team";
+  const pendingAgent = registry.listReports({ agentId: "agent" });
+  discoveryFails = true;
+  const retained = await registry.listReports();
+  release();
+  const agent = await pendingAgent;
+  expect(retained.map((entry) => [entry.id, entry.account.label])).toEqual([
+    ["claude:personal", "personal@example.test"],
+  ]);
+  expect(agent.map((entry) => [entry.id, entry.account.label, entry.report.planLabel])).toEqual([
+    ["claude:team", "team@example.test", "team"],
+  ]);
+});
+
 test("coalesces per account, caches errors, and refreshes only requested IDs", async () => {
   let now = 0;
   const counts = new Map<string, number>();
