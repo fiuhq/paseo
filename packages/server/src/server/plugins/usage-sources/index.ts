@@ -177,10 +177,10 @@ export class UsageSourceRegistry {
     return [...reports.keys()];
   }
 
-  private rebindLogins(
+  private claimLogins(
     fresh: Map<string, KnownReport>,
     generation: number,
-    retained: ReadonlySet<KnownReport> = new Set(),
+    retained: ReadonlySet<KnownReport>,
   ): void {
     // A shared login store changes identity for every scope when its account switches. The
     // newest-started successful discovery decides; retained reports cannot undo a switch.
@@ -192,6 +192,14 @@ export class UsageSourceRegistry {
           this.identities.set(key, { id, label: report.label, generation });
       }
     }
+  }
+
+  private rebindLogins(
+    fresh: Map<string, KnownReport>,
+    generation: number,
+    retained: ReadonlySet<KnownReport> = new Set(),
+  ): void {
+    this.claimLogins(fresh, generation, retained);
     for (const reports of [this.defaults, ...[...this.byAgent.values()].map((a) => a.reports)]) {
       const rebound = new Map<string, KnownReport>();
       for (const [id, report] of reports) {
