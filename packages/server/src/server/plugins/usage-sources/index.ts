@@ -33,7 +33,7 @@ interface KnownReport {
 interface LoginIdentity {
   id: string;
   label?: string;
-  /** The discovery that saw it; a discovery that started earlier never replaces it. */
+  /** The successful discovery that saw it; one that started earlier never replaces it. */
   generation: number;
 }
 
@@ -183,7 +183,7 @@ export class UsageSourceRegistry {
     retained: ReadonlySet<KnownReport> = new Set(),
   ): void {
     // A shared login store changes identity for every scope when its account switches. The
-    // newest-started discovery decides, so one that finishes late cannot undo a switch.
+    // newest-started successful discovery decides; retained reports cannot undo a switch.
     for (const [id, report] of fresh) {
       if (retained.has(report)) continue;
       for (const login of report.logins) {
@@ -197,7 +197,7 @@ export class UsageSourceRegistry {
       for (const [id, report] of reports) {
         for (const login of report.logins) {
           const owner = this.identities.get(`${report.source.id}:${loginKey(login)}`);
-          // A discovery keeps its own accounts unless a newer one has since claimed the login.
+          // A successful discovery keeps its accounts unless a newer observation owns the login.
           const identity =
             reports === fresh && !retained.has(report) && (owner?.generation ?? 0) <= generation
               ? undefined
