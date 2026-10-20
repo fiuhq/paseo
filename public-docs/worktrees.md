@@ -40,6 +40,8 @@ With a custom root, Paseo keeps the same hashed layout under that directory:
 3. Review the diff against the base branch
 4. Merge or archive the workspace; after the last workspace using it is archived, Paseo runs teardown and removes the worktree
 
+Scheduled runs archive their workspaces when they finish by default. Turn off **Archive on finish** in the schedule's app form to [keep run workspaces](/docs/schedules#keep-run-workspaces) and their worktrees until you archive them.
+
 ## Create a worktree-backed workspace
 
 The examples below use the current directory as the source checkout. Pass `--path ~/dev/my-app` to create the workspace from another checkout.
@@ -111,6 +113,8 @@ Drop a `paseo.json` in your repo root. Paseo reads it from the committed version
 Both fields accept a multiline shell script or an array of commands; commands run sequentially either way.
 
 Commands run with the worktree as `cwd`. Use `$PASEO_SOURCE_CHECKOUT_PATH` to reach files in the original checkout (untracked config, local caches, etc).
+
+Open **Setup** in the workspace to inspect command output. Failed or blocked setup adds a Setup tab automatically. If the panel asks you to update the host, update the daemon on that machine to view details.
 
 ## Scripts and services
 
