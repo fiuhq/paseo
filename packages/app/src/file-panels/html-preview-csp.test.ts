@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withPreviewCsp } from "@/file-pane/html-preview-csp";
+import { withPreviewCsp } from "./html-preview-csp";
 
 function previewPolicy(document: string): Map<string, string[]> {
   const content = /<meta http-equiv="Content-Security-Policy" content="([^"]*)">/.exec(document);
