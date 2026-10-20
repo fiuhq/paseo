@@ -114,6 +114,8 @@ Both fields accept a multiline shell script or an array of commands; commands ru
 
 Commands run with the worktree as `cwd`. Use `$PASEO_SOURCE_CHECKOUT_PATH` to reach files in the original checkout (untracked config, local caches, etc).
 
+Open **Setup** in the workspace to inspect command output. Failed or blocked setup adds a Setup tab automatically. If the panel asks you to update the host, update the daemon on that machine to view details.
+
 ## Scripts and services
 
 `scripts` are named commands you can run inside a worktree on demand. Mark one as a _service_ and Paseo supervises it as a long-running process, assigns it a port, and routes HTTP traffic to it through the daemon's reverse proxy.

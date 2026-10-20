@@ -1245,7 +1245,7 @@ Showing another toast replaces the currently visible toast. An empty message is 
 
 ### Icons
 
-Every contribution `icon` field takes one of three forms, typed `PluginIcon` in
+Client contribution `icon` fields take one of three forms, typed `PluginIcon` in
 `@getpaseo/plugin/client`:
 
 | Form        | Example                     | Use it for                                          |
@@ -1255,7 +1255,8 @@ Every contribution `icon` field takes one of three forms, typed `PluginIcon` in
 | Component   | `icon: ReviewBadge`         | An icon that changes with state, such as a counter. |
 
 Attachment sources take a Lucide name or inline SVG (`PluginSerializableIcon`), because each
-attached item stores its source's icon.
+attached item stores its source's icon. Daemon-side provider and usage-source icons use
+[plugin-relative file paths](#providers).
 
 Paseo validates the icon when the contribution registers. An unknown Lucide name or an SVG that
 breaks a rule fails the plugin with the reason:
@@ -1263,6 +1264,8 @@ breaks a rule fails the plugin with the reason:
 ```text
 Workspace panel review has an invalid icon: script elements are not allowed
 ```
+
+`SidebarRow` validates its icon when rendered; an invalid icon fails that sidebar item.
 
 Paseo draws inline SVG at the surface's icon size and passes the surface's icon color as
 `currentColor`. Paint with `currentColor` to follow the theme; fixed fills keep their colors.
