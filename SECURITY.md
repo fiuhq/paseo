@@ -90,7 +90,7 @@ If you don't trust a page, read it in `Source`, which executes nothing. Source i
 
 ## PDF file preview
 
-On web and desktop, a PDF opens in the browser's built-in PDF viewer inside the file pane, the same viewer that opens a PDF in a browser tab. The frame is not sandboxed, because Chromium does not run its PDF viewer in a sandboxed frame. Its source is a `blob:` URL of the file's bytes created with the type `application/pdf`, so the browser always hands it to the viewer and never loads it as a page in Paseo's origin. The HTML preview's restrictions above are unchanged. iOS and Android show the file as an unpreviewable binary.
+A PDF opens in the built-in PDF file panel, which renders the file through `DocumentFrame`. On web and desktop that is the browser's built-in PDF viewer inside the file tab, the same viewer that opens a PDF in a browser tab. The frame is not sandboxed, because Chromium does not run its PDF viewer in a sandboxed frame. Its source is a `blob:` URL of the file's bytes created with the type `application/pdf`, so the browser always hands it to the viewer and never loads it as a page in Paseo's origin. The HTML preview's restrictions above are unchanged. iOS shows the file in a WebView with JavaScript disabled, loading only that file's `file:` URL. Android's WebView has no PDF viewer, so Android shows a message naming the file type instead.
 
 ## Agent authentication
 
