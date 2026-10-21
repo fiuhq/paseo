@@ -1,3 +1,4 @@
+import { EXPLORER_WORKSPACE_MIN_WIDTH } from "@/components/explorer-sidebar-layout";
 import {
   SETTINGS_DESKTOP_SIDEBAR_WIDTH,
   SETTINGS_DESKTOP_SPLIT_MIN_WIDTH,
@@ -75,8 +76,12 @@ export function resolveSettingsDesktopSidebarWidth(viewportWidth: number): numbe
   });
 }
 
-export function resolveDesktopAppContentMinimum(input: { isSettingsRoute: boolean }): number {
-  return input.isSettingsRoute ? SETTINGS_DESKTOP_SPLIT_MIN_WIDTH : 0;
+export function resolveDesktopAppContentMinimum(input: {
+  isSettingsRoute: boolean;
+  explorerVisible?: boolean;
+}): number {
+  if (input.isSettingsRoute) return SETTINGS_DESKTOP_SPLIT_MIN_WIDTH;
+  return input.explorerVisible ? EXPLORER_WORKSPACE_MIN_WIDTH : 0;
 }
 
 export function canDesktopAppSidebarShare(input: {
