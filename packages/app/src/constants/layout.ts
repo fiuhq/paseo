@@ -33,7 +33,10 @@ export {
   getIsElectronMac as getIsElectronRuntimeMac,
 } from "./platform";
 
-/** Compact layouts are the breakpoints below `md`. */
+/**
+ * Below `medium` (600 points in a touch browser, 720 with a mouse or on native), sidebars overlay
+ * the workspace. Medium and wider layouts dock them.
+ */
 export function isCompactBreakpoint(breakpoint: string | undefined): boolean {
   return breakpoint === "xs" || breakpoint === "sm";
 }
