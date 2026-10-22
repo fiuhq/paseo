@@ -958,6 +958,7 @@ export const ar: TranslationResources = {
         checkingRepository: "فحص المستودع...",
         notRepository: "ليس مستودع جيت",
         diffMode: "وضع الفرق",
+        all: "كل التغييرات",
         uncommitted: "غير ملتزم",
         committed: "ملتزم",
         branchUnknown: "مجهول",

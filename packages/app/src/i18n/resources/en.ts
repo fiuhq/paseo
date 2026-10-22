@@ -966,6 +966,7 @@ export const en = {
         checkingRepository: "Checking repository...",
         notRepository: "Not a git repository",
         diffMode: "Diff mode",
+        all: "All changes",
         uncommitted: "Uncommitted",
         committed: "Committed",
         branchUnknown: "Unknown",
