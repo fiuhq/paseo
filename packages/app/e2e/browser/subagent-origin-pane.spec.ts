@@ -1,5 +1,6 @@
 import { buildSeededHost } from "../support/helpers/daemon-registry";
 import { submitMessage } from "../support/helpers/composer";
+import { answerConfirmDialog } from "../support/helpers/confirm-dialog";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "../support/fixtures";
@@ -299,10 +300,8 @@ test("a directly connected B opens and archives its MCP child from A's track", a
     expect((await fleet.a.fetchAgent(fleet.remote.agentId))?.agent.lastUserMessageAt).toBeNull();
     await openFleetParentWithDirectB(page, fleet);
     await page.getByTestId(`subagents-track-row-${fleet.remote.agentId}`).hover();
-    page.once("dialog", (dialog) => {
-      void dialog.accept();
-    });
     await page.getByRole("button", { name: "Archive MCP child on B", exact: true }).click();
+    await answerConfirmDialog(page, "accept");
     await expectManagedSubagentArchived({ client: fleet.b }, fleet.remote.agentId);
     await expect(page.getByTestId(`subagents-track-row-${fleet.remote.agentId}`)).toHaveCount(0);
     expect((await fleet.a.fetchAgent(fleet.remote.agentId))?.agent.archivedAt).toBeNull();
