@@ -208,6 +208,10 @@ describe("QuestionFormCard option previews", () => {
     // The box the picture is fitted into, and the frame as it is drawn (scaled) inside it.
     const pictureBox = (label: string) => pictureViewport(label).getBoundingClientRect();
     const drawnFrame = (label: string) => pictureFrame(label).getBoundingClientRect();
+    // Where a user wheels over the picture: the frame's own centre can sit on the clipped edge of
+    // the viewport (the frame is laid out at the height limit), where the wheel misses the picture.
+    const wheelPicture = (label: string, x: number) =>
+      userEvent.wheel(pictureViewport(label), { delta: { x } });
     const toolbarButton = (label: string, name: string) =>
       within(pictureViewport(label)).getByRole("button", { name });
     const currentQuestion = () => view.getByTestId("question-form-current-question").textContent;
@@ -218,6 +222,7 @@ describe("QuestionFormCard option previews", () => {
       pictureFrame,
       pictureBox,
       drawnFrame,
+      wheelPicture,
       toolbarButton,
       currentQuestion,
       pick,
@@ -459,7 +464,7 @@ describe("QuestionFormCard option previews", () => {
     await vi.waitFor(() => expect(card.drawnFrame("Wide").width).toBeCloseTo(fitted, 0));
     const fittedLeft = card.drawnFrame("Wide").left;
 
-    await userEvent.wheel(card.pictureFrame("Wide"), { delta: { x: 60 } });
+    await card.wheelPicture("Wide", 60);
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(card.drawnFrame("Wide").left).toBe(fittedLeft);
 
@@ -467,7 +472,7 @@ describe("QuestionFormCard option previews", () => {
     await vi.waitFor(() => expect(card.drawnFrame("Wide").width).toBeCloseTo(fitted * 1.25, 0));
     const zoomedLeft = card.drawnFrame("Wide").left;
 
-    await userEvent.wheel(card.pictureFrame("Wide"), { delta: { x: 30 } });
+    await card.wheelPicture("Wide", 30);
 
     await vi.waitFor(() => expect(card.drawnFrame("Wide").left).toBeLessThan(zoomedLeft - 20));
   });
@@ -573,7 +578,7 @@ describe("QuestionFormCard option previews", () => {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     const zoomedLeft = card.drawnFrame("Wide").left;
 
-    await userEvent.wheel(card.pictureFrame("Wide"), { delta: { x: 30 } });
+    await card.wheelPicture("Wide", 30);
 
     await vi.waitFor(() => expect(card.drawnFrame("Wide").left).toBeLessThan(zoomedLeft - 20));
   });
