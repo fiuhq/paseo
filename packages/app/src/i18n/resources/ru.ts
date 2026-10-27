@@ -2486,9 +2486,22 @@ export const ru: TranslationResources = {
           zinc: "Цинк",
           midnight: "Полночь",
           claude: "Claude",
+          claudeLight: "Claude светлая",
           ghostty: "Ghostty",
           pureBlack: "Абсолютно чёрная",
           auto: "Системная",
+        },
+        system: {
+          light: {
+            title: "В светлом режиме",
+            hint: "Тема, которую «Системная» использует в светлом режиме устройства",
+            accessibilityLabel: "В светлом режиме: {{value}}",
+          },
+          dark: {
+            title: "В тёмном режиме",
+            hint: "Тема, которую «Системная» использует в тёмном режиме устройства",
+            accessibilityLabel: "В тёмном режиме: {{value}}",
+          },
         },
       },
       detailLevel: {
