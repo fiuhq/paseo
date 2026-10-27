@@ -815,7 +815,6 @@ export const THEME_OPTIONS = [
     theme: darkClaudeTheme,
     swatch: "#D97757",
   },
-
   {
     name: "ghostty",
     group: "variant",
