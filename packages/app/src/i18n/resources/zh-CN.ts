@@ -2431,9 +2431,22 @@ export const zhCN: TranslationResources = {
           zinc: "Zinc",
           midnight: "Midnight",
           claude: "Claude",
+          claudeLight: "Claude 浅色",
           ghostty: "Ghostty",
           pureBlack: "纯黑",
           auto: "系统",
+        },
+        system: {
+          light: {
+            title: "浅色模式时",
+            hint: "设备处于浅色模式时“跟随系统”使用的主题",
+            accessibilityLabel: "浅色模式时: {{value}}",
+          },
+          dark: {
+            title: "深色模式时",
+            hint: "设备处于深色模式时“跟随系统”使用的主题",
+            accessibilityLabel: "深色模式时: {{value}}",
+          },
         },
       },
       detailLevel: {

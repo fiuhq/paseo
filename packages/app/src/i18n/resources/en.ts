@@ -2582,9 +2582,22 @@ export const en = {
           zinc: "Zinc",
           midnight: "Midnight",
           claude: "Claude",
+          claudeLight: "Claude light",
           ghostty: "Ghostty",
           pureBlack: "Pure black",
           auto: "System",
+        },
+        system: {
+          light: {
+            title: "When light",
+            hint: "Theme System uses while your device is in light mode",
+            accessibilityLabel: "When light: {{value}}",
+          },
+          dark: {
+            title: "When dark",
+            hint: "Theme System uses while your device is in dark mode",
+            accessibilityLabel: "When dark: {{value}}",
+          },
         },
       },
       detailLevel: {
