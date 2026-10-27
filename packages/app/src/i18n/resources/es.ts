@@ -2498,9 +2498,22 @@ export const es: TranslationResources = {
           zinc: "Zinc",
           midnight: "Medianoche",
           claude: "claudio",
+          claudeLight: "Claude claro",
           ghostty: "fantasmal",
           pureBlack: "Negro puro",
           auto: "Sistema",
+        },
+        system: {
+          light: {
+            title: "En modo claro",
+            hint: "Tema que usa Sistema cuando el dispositivo está en modo claro",
+            accessibilityLabel: "En modo claro: {{value}}",
+          },
+          dark: {
+            title: "En modo oscuro",
+            hint: "Tema que usa Sistema cuando el dispositivo está en modo oscuro",
+            accessibilityLabel: "En modo oscuro: {{value}}",
+          },
         },
       },
       detailLevel: {

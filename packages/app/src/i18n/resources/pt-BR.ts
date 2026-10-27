@@ -2481,9 +2481,22 @@ export const ptBR: TranslationResources = {
           zinc: "Zinc",
           midnight: "Midnight",
           claude: "Claude",
+          claudeLight: "Claude claro",
           ghostty: "Ghostty",
           pureBlack: "Preto puro",
           auto: "Sistema",
+        },
+        system: {
+          light: {
+            title: "No modo claro",
+            hint: "Tema usado por Sistema quando o dispositivo está no modo claro",
+            accessibilityLabel: "No modo claro: {{value}}",
+          },
+          dark: {
+            title: "No modo escuro",
+            hint: "Tema usado por Sistema quando o dispositivo está no modo escuro",
+            accessibilityLabel: "No modo escuro: {{value}}",
+          },
         },
       },
       detailLevel: {
