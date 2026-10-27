@@ -775,33 +775,6 @@ export function buildLightTheme(semanticColors: ReturnType<typeof buildLightSema
 
 export const lightTheme = buildLightTheme(lightSemanticColors);
 
-// Claude light — warm ivory surfaces with the Claude orange accent
-const claudeLightColors = buildLightSemanticColors({
-  surface0: "#faf9f5",
-  surface1: "#f5f4ee",
-  surface2: "#f0eee6",
-  surface3: "#e8e6dc",
-  surface4: "#dad8cd",
-  surfaceDiffEmpty: "#f3f1ea",
-  surfaceSidebar: "#f0eee6",
-  foreground: "#141413",
-  foregroundMuted: "#73726c",
-  foregroundExtraMuted: "#a3a199",
-  border: "#e8e6dc",
-  borderAccent: "#efede5",
-  accent: "#c96442",
-  accentBright: "#d97757",
-  accentForeground: "#ffffff",
-  primary: "#141413",
-  primaryForeground: "#faf9f5",
-  destructive: "#b5402f", // deeper than the accent so a destructive action never reads as primary
-  terminalBlack: "#141413",
-  terminalBrightBlack: "#3d3d3a",
-  ring: "#141413",
-});
-
-export const lightClaudeTheme = buildLightTheme(claudeLightColors);
-
 // Keep compatibility with existing code
 export const theme = darkTheme;
 
@@ -842,13 +815,7 @@ export const THEME_OPTIONS = [
     theme: darkClaudeTheme,
     swatch: "#D97757",
   },
-  {
-    name: "claudeLight",
-    group: "variant",
-    unistylesName: "lightClaude",
-    theme: lightClaudeTheme,
-    swatch: "#F0EEE6",
-  },
+
   {
     name: "ghostty",
     group: "variant",

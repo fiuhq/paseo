@@ -34,7 +34,6 @@ describe("Theme catalog", () => {
       "zinc",
       "midnight",
       "claude",
-      "claudeLight",
       "ghostty",
       "pureBlack",
     ]);
@@ -45,7 +44,7 @@ describe("Theme catalog", () => {
 
 describe("System theme pair", () => {
   it("offers each theme only for the OS color scheme it is drawn for", () => {
-    expect(SYSTEM_THEME_NAMES.light).toEqual(["light", "claudeLight"]);
+    expect(SYSTEM_THEME_NAMES.light).toEqual(["light"]);
     expect(SYSTEM_THEME_NAMES.dark).toEqual([
       "dark",
       "zinc",

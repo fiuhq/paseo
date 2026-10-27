@@ -2582,7 +2582,6 @@ export const en = {
           zinc: "Zinc",
           midnight: "Midnight",
           claude: "Claude",
-          claudeLight: "Claude light",
           ghostty: "Ghostty",
           pureBlack: "Pure black",
           auto: "System",

@@ -2499,7 +2499,6 @@ export const ru: TranslationResources = {
           zinc: "Цинк",
           midnight: "Полночь",
           claude: "Claude",
-          claudeLight: "Claude светлая",
           ghostty: "Ghostty",
           pureBlack: "Абсолютно чёрная",
           auto: "Системная",

@@ -2431,7 +2431,6 @@ export const zhCN: TranslationResources = {
           zinc: "Zinc",
           midnight: "Midnight",
           claude: "Claude",
-          claudeLight: "Claude 浅色",
           ghostty: "Ghostty",
           pureBlack: "纯黑",
           auto: "系统",

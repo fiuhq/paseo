@@ -2493,7 +2493,6 @@ export const ar: TranslationResources = {
           zinc: "الزنك",
           midnight: "منتصف الليل",
           claude: "كلود",
-          claudeLight: "Claude فاتح",
           ghostty: "شبحي",
           pureBlack: "أسود خالص",
           auto: "نظام",

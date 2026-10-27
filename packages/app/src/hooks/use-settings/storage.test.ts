@@ -189,7 +189,7 @@ describe("loadAppSettingsFromStorage", () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
         [APP_SETTINGS_KEY]: JSON.stringify({
-          systemLightTheme: "claudeLight",
+          systemLightTheme: "light",
           systemDarkTheme: "claude",
         }),
       }),
@@ -197,7 +197,7 @@ describe("loadAppSettingsFromStorage", () => {
 
     const result = await loadAppSettingsFromStorage(deps);
 
-    expect(result.systemLightTheme).toBe("claudeLight");
+    expect(result.systemLightTheme).toBe("light");
     expect(result.systemDarkTheme).toBe("claude");
   });
 

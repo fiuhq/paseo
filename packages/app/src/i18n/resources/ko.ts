@@ -2470,7 +2470,6 @@ export const ko: TranslationResources = {
           zinc: "Zinc",
           midnight: "Midnight",
           claude: "Claude",
-          claudeLight: "Claude 라이트",
           ghostty: "Ghostty",
           pureBlack: "순수 검정",
           auto: "시스템",

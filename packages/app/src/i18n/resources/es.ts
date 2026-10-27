@@ -2511,7 +2511,6 @@ export const es: TranslationResources = {
           zinc: "Zinc",
           midnight: "Medianoche",
           claude: "claudio",
-          claudeLight: "Claude claro",
           ghostty: "fantasmal",
           pureBlack: "Negro puro",
           auto: "Sistema",
