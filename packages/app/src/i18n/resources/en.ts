@@ -63,6 +63,7 @@ export const en = {
       daemonClientUnavailable: "Daemon client unavailable",
       daemonClientDisconnected: "Daemon client is disconnected",
       noFileFound: "No file found for {{token}}",
+      folderOutsideWorkspace: "{{path}} is outside this workspace",
       unexpectedDictationError: "An unexpected error occurred while handling dictation.",
     },
     connectionStatus: {
@@ -2585,6 +2586,18 @@ export const en = {
           ghostty: "Ghostty",
           pureBlack: "Pure black",
           auto: "System",
+        },
+        system: {
+          light: {
+            title: "When light",
+            hint: "Theme System uses while your device is in light mode",
+            accessibilityLabel: "When light: {{value}}",
+          },
+          dark: {
+            title: "When dark",
+            hint: "Theme System uses while your device is in dark mode",
+            accessibilityLabel: "When dark: {{value}}",
+          },
         },
       },
       detailLevel: {

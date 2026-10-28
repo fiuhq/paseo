@@ -67,6 +67,7 @@ export const zhCN: TranslationResources = {
       daemonClientUnavailable: "Daemon client 不可用",
       daemonClientDisconnected: "Daemon client 已断开连接",
       noFileFound: "未找到 {{token}} 对应的文件",
+      folderOutsideWorkspace: "{{path}} 不在此工作区内",
       unexpectedDictationError: "处理听写时发生意外错误。",
     },
     connectionStatus: {
@@ -2434,6 +2435,18 @@ export const zhCN: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "纯黑",
           auto: "系统",
+        },
+        system: {
+          light: {
+            title: "浅色模式时",
+            hint: "设备处于浅色模式时“跟随系统”使用的主题",
+            accessibilityLabel: "浅色模式时: {{value}}",
+          },
+          dark: {
+            title: "深色模式时",
+            hint: "设备处于深色模式时“跟随系统”使用的主题",
+            accessibilityLabel: "深色模式时: {{value}}",
+          },
         },
       },
       detailLevel: {

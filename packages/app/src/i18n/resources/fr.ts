@@ -68,6 +68,7 @@ export const fr: TranslationResources = {
       daemonClientUnavailable: "Client du daemon indisponible",
       daemonClientDisconnected: "Le client du daemon est déconnecté",
       noFileFound: "Aucun fichier trouvé pour {{token}}",
+      folderOutsideWorkspace: "{{path}} se trouve en dehors de cet espace de travail",
       unexpectedDictationError: "Une erreur inattendue s’est produite pendant la dictée.",
     },
     connectionStatus: {
@@ -2514,6 +2515,18 @@ export const fr: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "Noir pur",
           auto: "Système",
+        },
+        system: {
+          light: {
+            title: "En mode clair",
+            hint: "Thème utilisé par Système quand l’appareil est en mode clair",
+            accessibilityLabel: "En mode clair: {{value}}",
+          },
+          dark: {
+            title: "En mode sombre",
+            hint: "Thème utilisé par Système quand l’appareil est en mode sombre",
+            accessibilityLabel: "En mode sombre: {{value}}",
+          },
         },
       },
       detailLevel: {

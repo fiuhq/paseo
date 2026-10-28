@@ -68,6 +68,7 @@ export const ptBR: TranslationResources = {
       daemonClientUnavailable: "Cliente do daemon indisponível",
       daemonClientDisconnected: "O cliente do daemon está desconectado",
       noFileFound: "Nenhum arquivo encontrado para {{token}}",
+      folderOutsideWorkspace: "{{path}} está fora deste workspace",
       unexpectedDictationError: "Ocorreu um erro inesperado ao processar o ditado.",
     },
     connectionStatus: {
@@ -2497,6 +2498,18 @@ export const ptBR: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "Preto puro",
           auto: "Sistema",
+        },
+        system: {
+          light: {
+            title: "No modo claro",
+            hint: "Tema usado por Sistema quando o dispositivo está no modo claro",
+            accessibilityLabel: "No modo claro: {{value}}",
+          },
+          dark: {
+            title: "No modo escuro",
+            hint: "Tema usado por Sistema quando o dispositivo está no modo escuro",
+            accessibilityLabel: "No modo escuro: {{value}}",
+          },
         },
       },
       detailLevel: {

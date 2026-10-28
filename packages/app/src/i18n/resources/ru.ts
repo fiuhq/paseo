@@ -68,6 +68,7 @@ export const ru: TranslationResources = {
       daemonClientUnavailable: "Daemon клиента недоступен",
       daemonClientDisconnected: "Daemon клиента отключен",
       noFileFound: "Файл для {{token}} не найден",
+      folderOutsideWorkspace: "{{path}} находится вне этого рабочего пространства",
       unexpectedDictationError: "При обработке диктовки произошла непредвиденная ошибка.",
     },
     connectionStatus: {
@@ -2502,6 +2503,18 @@ export const ru: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "Абсолютно чёрная",
           auto: "Системная",
+        },
+        system: {
+          light: {
+            title: "В светлом режиме",
+            hint: "Тема, которую «Системная» использует в светлом режиме устройства",
+            accessibilityLabel: "В светлом режиме: {{value}}",
+          },
+          dark: {
+            title: "В тёмном режиме",
+            hint: "Тема, которую «Системная» использует в тёмном режиме устройства",
+            accessibilityLabel: "В тёмном режиме: {{value}}",
+          },
         },
       },
       detailLevel: {

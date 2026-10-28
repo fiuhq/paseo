@@ -68,6 +68,7 @@ export const ja: TranslationResources = {
       daemonClientUnavailable: "デーモンクライアントが利用できません",
       daemonClientDisconnected: "デーモンクライアントが切断されています",
       noFileFound: "{{token}}のファイルが見つかりません",
+      folderOutsideWorkspace: "{{path}} はこのワークスペースの外にあります",
       unexpectedDictationError: "音声入力処理中に予期しないエラーが発生しました。",
     },
     connectionStatus: {
@@ -2480,6 +2481,18 @@ export const ja: TranslationResources = {
           ghostty: "Ghostty",
           pureBlack: "ピュアブラック",
           auto: "システム",
+        },
+        system: {
+          light: {
+            title: "ライトモード時",
+            hint: "デバイスがライトモードのときにシステムが使うテーマ",
+            accessibilityLabel: "ライトモード時: {{value}}",
+          },
+          dark: {
+            title: "ダークモード時",
+            hint: "デバイスがダークモードのときにシステムが使うテーマ",
+            accessibilityLabel: "ダークモード時: {{value}}",
+          },
         },
       },
       detailLevel: {

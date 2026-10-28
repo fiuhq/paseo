@@ -90,6 +90,7 @@ import {
 import { createAssistantImageOccurrenceKey } from "@/assistant-image/acquisition-cache";
 import { AssistantSelectionCopySurface } from "@/assistant-selection-copy/surface";
 import { AssistantFileLinkResolverProvider, createInlinePathOpener } from "@/assistant-file-links";
+import { useOpenOutsideWorkspaceFolder } from "@/workspace/open-in-file-manager/outside-folder";
 import {
   createWorkspaceFileTabTarget,
   type WorkspaceFileLocation,
@@ -459,6 +460,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         view: "files",
       });
     });
+    const openInlineOutsideDirectory = useOpenOutsideWorkspaceFolder(resolvedServerId);
     const inlinePathOpener = useMemo(
       () =>
         createInlinePathOpener({
@@ -466,8 +468,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           client,
           openFile: openInlineFile,
           openDirectory: openInlineDirectory,
+          openOutsideDirectory: openInlineOutsideDirectory,
         }),
-      [workspaceRoot, client, openInlineFile, openInlineDirectory],
+      [workspaceRoot, client, openInlineFile, openInlineDirectory, openInlineOutsideDirectory],
     );
     useEffect(() => {
       if (!isActive) inlinePathOpener.cancel();
@@ -895,12 +898,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               ? group.run.calls.map((call, index) => (
                   <React.Fragment key={call.id}>
                     {call.kind === "thought" ? (
+                      // Reasoning is grouped only while Expand thinking is off, so an opened
+                      // group shows each thought as a closed row like any other call.
                       <ThoughtSlot
                         itemId={call.id}
                         text={call.text}
                         status={call.status}
                         isLastInSequence={index === group.run.calls.length - 1}
-                        defaultExpanded
+                        defaultExpanded={false}
                         onInlineDetailsExpandedChangeByItemId={setInlineDetailsExpanded}
                       />
                     ) : (
@@ -1203,6 +1208,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           <AssistantSelectionCopySurface style={stylesheet.container}>
             <MessageOuterSpacingProvider disableOuterSpacing>
               {streamRenderStrategy.render({
+                readingRowReplacements: presentation.readingRowReplacements,
                 agentId,
                 segments: renderModel.segments,
                 historyRowRevision,
@@ -1895,12 +1901,11 @@ function StreamItemWrapper({ gapBelow, turnIndent, children }: StreamItemWrapper
   const gapStyle = useMemo(() => ({ paddingBottom: gapBelow }), [gapBelow]);
   switch (turnIndent) {
     case "none":
-      return <View style={wrapperStyle}>{children}</View>;
     case "openedHost":
       return (
         <View style={wrapperStyle}>
           {children}
-          <IndentRail style={gapStyle} />
+          {turnIndent === "openedHost" ? <IndentRail style={gapStyle} /> : null}
         </View>
       );
     case "nested":
