@@ -1,4 +1,4 @@
-import type { PluginWireBeforeRequests } from "./lifecycle/index.js";
+import type { PluginWireBeforeRequests, PluginBeforeResults } from "./lifecycle/index.js";
 import type { SessionOpenWireRequest, AttachedAgentTool } from "./agent-tools.js";
 import type { UsageScope } from "@getpaseo/plugin/server/usage";
 import {
@@ -13,10 +13,9 @@ import type {
 } from "@getpaseo/plugin/server";
 import { validateBeforeRequest, validateBeforeResult } from "./lifecycle/index.js";
 import { fork } from "node:child_process";
-import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type pino from "pino";
 import {
   PROVIDER_CAPABILITIES,
@@ -28,10 +27,8 @@ import {
   type ProviderInput,
 } from "@getpaseo/plugin/server/provider";
 import type { PluginLogEntry } from "@getpaseo/protocol/messages";
-import { compilePlugin } from "./compiler.js";
-import { readPluginManifest } from "./manifest.js";
+import { compileDirectoryPlugin } from "./compiler.js";
 import type { PluginRequirements } from "@getpaseo/protocol/messages";
-import { assertPluginCompatibility } from "@getpaseo/protocol/plugin-requirements";
 import type {
   PluginProcessMessage,
   PluginProcessRequest,
@@ -43,8 +40,6 @@ import { PluginSessionSocket } from "./session-socket.js";
 import { InternalPluginChild } from "./internal-child.js";
 import { evaluateBundle } from "./bundle-evaluator.js";
 
-const CLIENT_ENTRY_FILENAMES = ["index.client.ts", "index.client.tsx"] as const;
-const SERVER_ENTRY_FILENAMES = ["index.server.ts", "index.server.tsx"] as const;
 const REQUEST_TIMEOUT_MS = 30_000;
 const TOOL_CALL_TIMEOUT_MS = 10 * 60_000;
 const MAX_LOG_ENTRIES = 500;
@@ -79,6 +74,8 @@ interface LoadedPlugin {
   instanceId: string;
   requirements: PluginRequirements | undefined;
   clientBundle: string;
+  /** Lets a client that already holds this bundle skip downloading it again. */
+  clientBundleHash: string;
   methods: ReadonlySet<string>;
   hooks: { events: string[]; before: string[] };
   providers: readonly PluginProviderMetadata[];
@@ -251,6 +248,10 @@ function terminatePluginChild(child: PluginChild): void {
   if (!child.killed) child.kill();
 }
 
+function hashClientBundle(clientBundle: string): string {
+  return createHash("sha256").update(clientBundle).digest("hex");
+}
+
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -271,35 +272,6 @@ function send(child: PluginChild, message: PluginProcessRequest): Promise<void> 
       resolve();
     });
   });
-}
-
-async function findEntry(directory: string, filenames: readonly string[]): Promise<string | null> {
-  for (const filename of filenames) {
-    const filePath = path.join(directory, filename);
-    const info = await stat(filePath).catch(() => null);
-    if (info?.isFile()) return filePath;
-  }
-  return null;
-}
-
-async function resolveEntryPaths(directory: string): Promise<{
-  client: string | null;
-  server: string | null;
-}> {
-  const [client, server] = await Promise.all([
-    findEntry(directory, CLIENT_ENTRY_FILENAMES),
-    findEntry(directory, SERVER_ENTRY_FILENAMES),
-  ]);
-  if (client || server) return { client, server };
-  const legacyEntry = await findEntry(directory, ["index.ts", "index.tsx"]);
-  if (legacyEntry) {
-    throw new Error(
-      "This plugin was made for an older version of Paseo and cannot run on Paseo v0.8. Ask its author to update it. Plugin authors can follow the migration guide: https://paseo.sh/docs/plugins/migration",
-    );
-  }
-  throw new Error(
-    `Plugin entry points are missing: expected ${CLIENT_ENTRY_FILENAMES.join(" or ")} and/or ${SERVER_ENTRY_FILENAMES.join(" or ")} in ${directory}`,
-  );
 }
 
 export class PluginRuntime {
@@ -350,10 +322,16 @@ export class PluginRuntime {
   ): Promise<void> {
     if (this.plugins.has(pluginId)) throw new Error(`Plugin is already running: ${pluginId}`);
     this.appendLog(pluginId, "stdout", "[paseo] Loading plugin");
-    const loaded = await this.loadDirectoryPlugin(pluginId, configuredPath).catch((error) => {
-      this.appendLog(pluginId, "stderr", `[paseo] Plugin failed to load: ${describeError(error)}`);
-      throw error;
-    });
+    const loaded = await this.loadDirectoryPlugin(pluginId, configuredPath, canPublish).catch(
+      (error) => {
+        this.appendLog(
+          pluginId,
+          "stderr",
+          `[paseo] Plugin failed to load: ${describeError(error)}`,
+        );
+        throw error;
+      },
+    );
     if (!canPublish()) {
       await this.stopPlugin(loaded);
       throw new Error(`Plugin start cancelled: ${pluginId}`);
@@ -367,12 +345,8 @@ export class PluginRuntime {
     if (this.plugins.has(input.id)) throw new Error(`Plugin is already running: ${input.id}`);
     this.appendLog(input.id, "stdout", "[paseo] Loading plugin");
     const directory = path.resolve(input.directory);
-    const manifest = await readPluginManifest(directory);
-    if (manifest.id !== input.id) {
-      throw new Error(`Built-in plugin ${input.id} has manifest ID ${manifest.id}`);
-    }
-    assertPluginCompatibility({ ...manifest, version: this.daemonVersion, runtime: "daemon" });
-    const bundles = await compilePlugin(await resolveEntryPaths(directory));
+    const bundles = await compileDirectoryPlugin(directory, this.daemonVersion, input.id);
+    const { manifest } = bundles;
     if (!bundles.serverBundle) throw new Error(`Built-in plugin ${input.id} needs a server entry`);
     const loaded = await this.launchPlugin({
       pluginId: input.id,
@@ -388,11 +362,7 @@ export class PluginRuntime {
   }
 
   async validatePlugin(configuredPath: string): Promise<void> {
-    const directory = path.resolve(configuredPath);
-    const manifest = await readPluginManifest(directory);
-    assertPluginCompatibility({ ...manifest, version: this.daemonVersion, runtime: "daemon" });
-    const entryPaths = await resolveEntryPaths(directory);
-    await compilePlugin(entryPaths);
+    await compileDirectoryPlugin(path.resolve(configuredPath), this.daemonVersion);
   }
 
   async stopPluginById(pluginId: string): Promise<boolean> {
@@ -405,9 +375,19 @@ export class PluginRuntime {
     return true;
   }
 
-  catalog(): Array<{ id: string; clientBundle: string; requirements?: PluginRequirements }> {
+  catalog(): Array<{
+    id: string;
+    clientBundle: string;
+    clientBundleHash: string;
+    requirements?: PluginRequirements;
+  }> {
     return [...this.plugins.values()]
-      .map(({ id, clientBundle, requirements }) => ({ id, clientBundle, requirements }))
+      .map(({ id, clientBundle, clientBundleHash, requirements }) => ({
+        id,
+        clientBundle,
+        clientBundleHash,
+        requirements,
+      }))
       .sort((left, right) => left.id.localeCompare(right.id));
   }
 
@@ -571,12 +551,14 @@ export class PluginRuntime {
   async before<Name extends keyof PluginWireBeforeRequests>(
     name: Name,
     input: PluginWireBeforeRequests[Name],
-  ): Promise<PluginWireBeforeRequests[Name]> {
+  ): Promise<PluginBeforeResults[Name]> {
     let request = validateBeforeRequest(name, input);
     const plugins = [...this.plugins.values()].sort((left, right) => {
       return left.id.localeCompare(right.id);
     });
     const attached: AttachedAgentTool[] = [];
+    const mcpServers: SessionOpenWireRequest["mcpServers"] = {};
+    const mcpServerOwners: Record<string, string> = {};
     for (const loaded of plugins) {
       if (!loaded.hooks.before.includes(name)) {
         continue;
@@ -587,11 +569,14 @@ export class PluginRuntime {
           requestId: randomUUID(),
           kind: "before",
           name,
-          input: name === "agent.session_open" ? { ...request, tools: [] } : request,
+          input:
+            name === "agent.session_open" ? { ...request, tools: [], mcpServers: {} } : request,
         });
         request = validateBeforeResult(name, request, output);
         if (name === "agent.session_open") {
-          this.collectAgentTools(attached, loaded, (request as SessionOpenWireRequest).tools);
+          const opened = request as SessionOpenWireRequest;
+          this.collectMcpServers(mcpServers, mcpServerOwners, loaded, opened.mcpServers);
+          this.collectAgentTools(attached, loaded, opened.tools);
         }
       } catch (error) {
         if (name === "agent.session_open")
@@ -601,7 +586,14 @@ export class PluginRuntime {
         });
       }
     }
-    if (name === "agent.session_open") (request as SessionOpenWireRequest).tools = attached;
+    if (name === "agent.session_open") {
+      return {
+        ...request,
+        tools: attached,
+        mcpServers,
+        mcpServerOwners,
+      } as PluginBeforeResults[Name];
+    }
     return request;
   }
 
@@ -621,6 +613,23 @@ export class PluginRuntime {
     if (output !== undefined && typeof output !== "string")
       throw new Error("Invalid catalogue key from plugin");
     return output;
+  }
+
+  private collectMcpServers(
+    servers: SessionOpenWireRequest["mcpServers"],
+    owners: Record<string, string>,
+    loaded: LoadedPlugin,
+    contributions: SessionOpenWireRequest["mcpServers"],
+  ): void {
+    for (const [name, server] of Object.entries(contributions)) {
+      if (Object.hasOwn(servers, name)) {
+        throw new Error(
+          `MCP server ${name} from plugin ${loaded.id} collides with plugin ${owners[name]}`,
+        );
+      }
+      servers[name] = server;
+      owners[name] = loaded.id;
+    }
   }
 
   private collectAgentTools(
@@ -738,18 +747,20 @@ export class PluginRuntime {
   private async loadDirectoryPlugin(
     pluginId: string,
     configuredPath: string,
+    canPublish: () => boolean,
   ): Promise<LoadedPlugin> {
     const directory = path.resolve(configuredPath);
-    const manifest = await readPluginManifest(directory);
-    assertPluginCompatibility({ ...manifest, version: this.daemonVersion, runtime: "daemon" });
-    const entryPaths = await resolveEntryPaths(directory);
-    const bundles = await compilePlugin(entryPaths);
+    const bundles = await compileDirectoryPlugin(directory, this.daemonVersion);
+    const { manifest } = bundles;
+    if (!canPublish()) throw new Error(`Plugin start cancelled: ${pluginId}`);
     const serverBundle = bundles.serverBundle;
     if (!serverBundle) {
+      const clientBundle = bundles.clientBundle ?? "";
       return {
         id: pluginId,
         instanceId: randomUUID(),
-        clientBundle: bundles.clientBundle ?? "",
+        clientBundle,
+        clientBundleHash: hashClientBundle(clientBundle),
         requirements: manifest.requirements,
         methods: new Set(),
         hooks: { events: [], before: [] },
@@ -879,6 +890,7 @@ export class PluginRuntime {
       id: pluginId,
       instanceId: randomUUID(),
       clientBundle,
+      clientBundleHash: hashClientBundle(clientBundle),
       requirements,
       methods: new Set(ready.methods),
       hooks: ready.hooks ?? { events: [], before: [] },
