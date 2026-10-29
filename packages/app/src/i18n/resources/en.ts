@@ -2148,6 +2148,21 @@ export const en = {
     zeroSub: {
       signedOut: "Signed out in ZeroSub",
       notRead: "ZeroSub has not read this account's usage yet",
+      default: "Default",
+      inUse_one: "In use · {{count}} agent",
+      inUse_other: "In use · {{count}} agents",
+      limited: "Limited · back in {{duration}}",
+      limitedNow: "Limited",
+      agents_one: "{{count}} agent",
+      agents_other: "{{count}} agents",
+      updated: "updated {{relativeTime}}",
+      lastRead: "last read {{relativeTime}}",
+      readThrough: "One reading per account, through ZeroSub · updated {{relativeTime}}",
+      readThroughNever: "One reading per account, through ZeroSub",
+      accountCount_one: "{{count}} account",
+      accountCount_other: "{{count}} accounts",
+      signedOutLine: "Signed out: {{names}}",
+      signIn: "Sign in from Accounts",
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",
@@ -3213,6 +3228,7 @@ type TranslationResourcesBase = WidenStringLeaves<typeof en>;
 type PluralCategory = "zero" | "one" | "two" | "few" | "many" | "other";
 type DurationPluralKey = `${"days" | "hours" | "minutes"}_${PluralCategory}`;
 type AgoPluralKey = `${"daysAgo" | "hoursAgo" | "minutesAgo"}_${PluralCategory}`;
+type ZeroSubPluralKey = `${"inUse" | "agents" | "accountCount"}_${PluralCategory}`;
 
 // i18next plural categories differ by locale, so locale catalogs may add the
 // explicit v4 suffixes they need while retaining the canonical fallback keys.
@@ -3222,5 +3238,7 @@ export type TranslationResources = TranslationResourcesBase & {
       Partial<Record<DurationPluralKey, string>>;
     timing: TranslationResourcesBase["providerUsage"]["timing"] &
       Partial<Record<AgoPluralKey, string>>;
+    zeroSub: TranslationResourcesBase["providerUsage"]["zeroSub"] &
+      Partial<Record<ZeroSubPluralKey, string>>;
   };
 };

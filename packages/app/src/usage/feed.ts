@@ -6,7 +6,7 @@ import type { InstalledPlugin } from "@/plugins/types";
 import { useHostFeature } from "@/runtime/host-features";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { usageCopy } from "./copy";
-import type { UsageReportEntry, UsageWindow } from "./types";
+import type { UsageAccountPresentation, UsageReportEntry, UsageWindow } from "./types";
 
 /** What a usage view asks a host for: every report, one agent's, or a few by ID. */
 export interface UsageFeedRequest {
@@ -106,6 +106,10 @@ const ZeroSubAccountSchema = z.object({
   email: z.string().nullable(),
   plan: z.string().nullable(),
   status: z.string(),
+  // Routing facts for the account's badges; optional so an older ZeroSub still reads.
+  isDefault: z.boolean().optional(),
+  agentCount: z.number().optional(),
+  limitedUntil: z.string().nullable().optional(),
   usage: z
     .object({
       fetchedAt: z.string(),
@@ -157,7 +161,10 @@ export class ZeroSubUsageFeed extends UsageFeed {
     ) {
       return this.daemon.list(request, onReport);
     }
-    const reports = this.accountsFor(state, request).map((account) => entryOf(account, this.now));
+    const sharing = providersWithSeveralAccounts(state.accounts);
+    const reports = this.accountsFor(state, request).map((account) =>
+      entryOf(account, this.now, sharing),
+    );
     for (const report of reports) onReport?.(report);
     return reports;
   }
@@ -176,8 +183,39 @@ export class ZeroSubUsageFeed extends UsageFeed {
   }
 }
 
-function entryOf(account: ZeroSubAccount, now: () => Date): UsageReportEntry {
+/** Providers ZeroSub holds more than one signed-in account of: there, "in use" tells them apart. */
+function providersWithSeveralAccounts(accounts: readonly ZeroSubAccount[]): ReadonlySet<string> {
+  const counts = new Map<string, number>();
+  for (const account of accounts) {
+    if (account.status === "signed_out") continue;
+    counts.set(account.family, (counts.get(account.family) ?? 0) + 1);
+  }
+  return new Set([...counts].filter(([, count]) => count > 1).map(([family]) => family));
+}
+
+function presentationOf(
+  account: ZeroSubAccount,
+  sharing: ReadonlySet<string>,
+): UsageAccountPresentation {
+  const agents = account.agentCount ?? 0;
+  return {
+    name: account.label,
+    provider: account.family,
+    isDefault: account.isDefault === true,
+    agents,
+    inUse: agents > 0 && sharing.has(account.family),
+    limitedUntil: account.status === "limited" ? (account.limitedUntil ?? null) : null,
+    signedOut: account.status === "signed_out",
+  };
+}
+
+function entryOf(
+  account: ZeroSubAccount,
+  now: () => Date,
+  sharing: ReadonlySet<string>,
+): UsageReportEntry {
   const base = {
+    presentation: presentationOf(account, sharing),
     id: zeroSubReportId(account.id),
     account: { label: account.email ?? account.label },
     sourceId: FAMILY_SOURCE_ID[account.family] ?? account.family,

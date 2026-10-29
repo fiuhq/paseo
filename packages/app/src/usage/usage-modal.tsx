@@ -61,7 +61,13 @@ function HostUsageModal({
   return (
     <UsageModalFrame {...props} actions={controls}>
       <View testID={`usage-host-${serverId}`}>
-        <UsageBody serverId={serverId} view={view} display={display} onRefresh={refresh} />
+        <UsageBody
+          serverId={serverId}
+          view={view}
+          display={display}
+          onRefresh={refresh}
+          onClose={props.onClose}
+        />
       </View>
     </UsageModalFrame>
   );

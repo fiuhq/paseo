@@ -44,11 +44,14 @@ export function UsageBody({
   view,
   display,
   onRefresh,
+  onClose,
 }: {
   serverId: string;
   view: UsageView;
   display: UsageDisplay;
   onRefresh: () => void;
+  /** Closes the dialog the view sits in, before a control navigates away from it. */
+  onClose?: () => void;
 }) {
   const { t } = useTranslation();
   if (view.kind === "unavailable") {
@@ -78,7 +81,9 @@ export function UsageBody({
     return <UsageMessage text={t("providerUsage.empty")} />;
   }
 
-  return <UsageList serverId={serverId} reports={view.reports} display={display} />;
+  return (
+    <UsageList serverId={serverId} reports={view.reports} display={display} onClose={onClose} />
+  );
 }
 
 export function UsageMessage({ text }: { text: string }) {

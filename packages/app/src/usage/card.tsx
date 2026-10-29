@@ -16,16 +16,18 @@ import { isNative } from "@/constants/platform";
 import type { TFunction } from "i18next";
 import { UsageBalanceBar } from "./balance-bar";
 import type { UsageDisplay } from "./display";
+import { AccountHeading, CardFooter, CardIdentity } from "./account-card-parts";
+import { isAccountNote } from "./accounts";
 import { formatAgo, formatProviderUsageLabel } from "./format";
 import { resolveUsageReport, type UsageRefresh } from "./model";
 import { useReportRefresh } from "./queries";
-import { UsageSourceIcon } from "./source-icon";
-import type { UsageReport, UsageReportEntry, UsageWindow } from "./types";
+import type { UsageReportEntry, UsageWindow } from "./types";
 import { UsageWindowBar } from "./window-bar";
 import { useRelativeTimeTick } from "./use-relative-time-tick";
 
-function statusText(report: UsageReport, t: TFunction): string | null {
-  if (report.status === "available") return null;
+function statusText(entry: UsageReportEntry, t: TFunction): string | null {
+  const report = entry.report;
+  if (report.status === "available" || isAccountNote(entry)) return null;
   return report.status === "error"
     ? t("providerUsage.status.error")
     : t("providerUsage.status.unavailable");
@@ -59,8 +61,7 @@ export function UsageCard({
   // Where there is no hover the freshness is printed on the card; elsewhere the Refresh tooltip.
   const showsFreshnessInline = isNative || isCompact || !refreshable;
   const usage = entry.report;
-  const status = statusText(usage, t);
-  const footer = entry.account.label ?? null;
+  const status = statusText(entry, t);
   const { windows, balances, details, planLabel, successfulAt, retained, messages } =
     resolveUsageReport(entry, t);
 
@@ -80,12 +81,20 @@ export function UsageCard({
   return (
     <View style={containerStyle} testID={`usage-report-${entry.id}`}>
       <View style={styles.header}>
-        <UsageSourceIcon svg={entry.icon ?? null} size={14} />
-        <Text style={styles.name} numberOfLines={1}>
-          {entry.sourceLabel}
-        </Text>
-        {planLabel ? <StatusBadge label={planLabel} variant="muted" size="xs" /> : null}
-        <View style={styles.headerSpacer} />
+        {entry.presentation ? (
+          <AccountHeading
+            entry={entry}
+            serverId={serverId}
+            planLabel={planLabel}
+            nameStyle={styles.name}
+          />
+        ) : (
+          <>
+            <CardIdentity entry={entry} serverId={serverId} style={styles.name} />
+            {planLabel ? <StatusBadge label={planLabel} variant="muted" size="xs" /> : null}
+            <View style={styles.headerSpacer} />
+          </>
+        )}
         {status ? (
           <View style={styles.statusRow}>
             <View style={dotStyle} />
@@ -105,7 +114,7 @@ export function UsageCard({
       </View>
 
       {messages.length > 0 ? (
-        <Text style={styles.error} testID="usage-login-error">
+        <Text style={isAccountNote(entry) ? styles.note : styles.error} testID="usage-login-error">
           {messages.join("\n")}
         </Text>
       ) : null}
@@ -143,21 +152,21 @@ export function UsageCard({
         </View>
       ) : null}
 
-      {footer || showsFreshnessInline ? (
-        <View style={styles.footerRow}>
-          <Text style={styles.footer} numberOfLines={1}>
-            {footer}
-          </Text>
-          {showsFreshnessInline ? (
-            <UsageFreshness
-              successfulAt={successfulAt}
-              retained={retained}
-              style={styles.freshness}
-              testID="usage-freshness"
-            />
-          ) : null}
-        </View>
-      ) : null}
+      <CardFooter
+        entry={entry}
+        successfulAt={successfulAt}
+        retained={retained}
+        showsFreshness={showsFreshnessInline}
+        rowStyle={styles.footerRow}
+        style={styles.footer}
+      >
+        <UsageFreshness
+          successfulAt={successfulAt}
+          retained={retained}
+          style={styles.freshness}
+          testID="usage-freshness"
+        />
+      </CardFooter>
 
       {refreshState === "failed" ? (
         <Text style={styles.error} testID="usage-refresh-error">
@@ -357,6 +366,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   error: {
     color: theme.colors.palette.red[300],
+    fontSize: theme.fontSize.sm,
+    lineHeight: theme.fontSize.sm * 1.4,
+  },
+  note: {
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     lineHeight: theme.fontSize.sm * 1.4,
   },

@@ -1,6 +1,8 @@
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { settingsStyles } from "@/styles/settings";
+import { usageAccountGroups } from "./accounts";
+import { UsageAccountsList } from "./accounts-list";
 import { UsageCard } from "./card";
 import type { UsageDisplay } from "./display";
 import { useUsageInSidebar } from "./in-sidebar";
@@ -11,12 +13,27 @@ export function UsageList({
   serverId,
   reports,
   display,
+  onClose,
 }: {
   serverId: string;
   reports: UsageReportEntry[];
   display: UsageDisplay;
+  onClose?: () => void;
 }) {
   const { inSidebar } = useUsageInSidebar();
+  // Fork seam: ZeroSub's accounts lay out by provider (accounts-list.tsx).
+  const accounts = usageAccountGroups(reports);
+  if (accounts) {
+    return (
+      <UsageAccountsList
+        serverId={serverId}
+        reports={reports}
+        accounts={accounts}
+        display={display}
+        onClose={onClose}
+      />
+    );
+  }
   return (
     <View style={styles.list}>
       {reports.map((entry) => (
