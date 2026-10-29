@@ -2171,6 +2171,12 @@ export const ptBR: TranslationResources = {
       accountCount_other: "{{count}} contas",
       signedOutLine: "Desconectadas: {{names}}",
       signIn: "Entrar em Contas",
+      otherAccounts: "Outras contas",
+      consoleOnly: "Só no console",
+      short: {
+        five_hour: "5h",
+        seven_day: "semana",
+      },
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",

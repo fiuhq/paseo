@@ -2186,6 +2186,12 @@ export const fr: TranslationResources = {
       accountCount_other: "{{count}} comptes",
       signedOutLine: "Déconnectés : {{names}}",
       signIn: "Se connecter depuis Comptes",
+      otherAccounts: "Autres comptes",
+      consoleOnly: "Console uniquement",
+      short: {
+        five_hour: "5h",
+        seven_day: "sem.",
+      },
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",

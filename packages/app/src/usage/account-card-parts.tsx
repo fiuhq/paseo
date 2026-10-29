@@ -158,11 +158,12 @@ function AccountFooter({
     presentation.agents > 0 && !presentation.inUse
       ? t("providerUsage.zeroSub.agents", { count: presentation.agents })
       : null;
-  const read = ago
-    ? t(retained ? "providerUsage.zeroSub.lastRead" : "providerUsage.zeroSub.updated", {
-        relativeTime: ago,
-      })
-    : null;
+  const read =
+    ago && !presentation.omitReadTime
+      ? t(retained ? "providerUsage.zeroSub.lastRead" : "providerUsage.zeroSub.updated", {
+          relativeTime: ago,
+        })
+      : null;
   const parts = [email, agents, read].filter(Boolean);
   if (parts.length === 0) return null;
   return (

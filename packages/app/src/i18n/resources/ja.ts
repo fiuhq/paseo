@@ -2159,6 +2159,12 @@ export const ja: TranslationResources = {
       accountCount_other: "{{count}} アカウント",
       signedOutLine: "サインアウト中: {{names}}",
       signIn: "アカウントからサインイン",
+      otherAccounts: "その他のアカウント",
+      consoleOnly: "コンソールのみ",
+      short: {
+        five_hour: "5時間",
+        seven_day: "週",
+      },
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",

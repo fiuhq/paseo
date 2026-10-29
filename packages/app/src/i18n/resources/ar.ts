@@ -2150,6 +2150,12 @@ export const ar: TranslationResources = {
       accountCount_other: "{{count}} حساب",
       signedOutLine: "تم تسجيل الخروج: {{names}}",
       signIn: "سجّل الدخول من الحسابات",
+      otherAccounts: "حسابات أخرى",
+      consoleOnly: "في وحدة التحكم فقط",
+      short: {
+        five_hour: "5س",
+        seven_day: "أسبوع",
+      },
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",

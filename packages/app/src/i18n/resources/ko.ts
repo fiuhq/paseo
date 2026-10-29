@@ -2148,6 +2148,12 @@ export const ko: TranslationResources = {
       accountCount_other: "계정 {{count}}개",
       signedOutLine: "로그아웃됨: {{names}}",
       signIn: "계정에서 로그인",
+      otherAccounts: "다른 계정",
+      consoleOnly: "콘솔에서만",
+      short: {
+        five_hour: "5시간",
+        seven_day: "주",
+      },
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",

@@ -141,6 +141,7 @@ describe("ZeroSubUsageFeed", () => {
           usedPct: 36,
           remainingPct: 64,
           resetsAt: "2026-10-29T05:00:00.000Z",
+          shortLabel: "5h",
           summary: true,
         },
         {
@@ -149,6 +150,7 @@ describe("ZeroSubUsageFeed", () => {
           usedPct: 58,
           remainingPct: 42,
           resetsAt: "2026-10-29T05:00:00.000Z",
+          shortLabel: "week",
         },
       ],
     });
@@ -185,6 +187,7 @@ describe("ZeroSubUsageFeed", () => {
             usedPct: 90,
             remainingPct: 10,
             resetsAt: "2026-10-29T05:00:00.000Z",
+            shortLabel: "5h",
             summary: true,
           },
         ],

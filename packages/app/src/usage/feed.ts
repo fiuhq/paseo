@@ -246,6 +246,10 @@ function entryOf(
         usedPct: window.usedPercent,
         remainingPct: Math.max(0, 100 - window.usedPercent),
         resetsAt: window.resetsAt,
+        // Where space is tight (the popover's other accounts, the sidebar): "5h", "week".
+        shortLabel: i18n.t(`providerUsage.zeroSub.short.${window.id}`, {
+          defaultValue: window.label,
+        }),
       };
       // The first window is the one the sidebar summary shows until windows are pinned.
       if (index === 0) shown.summary = true;

@@ -2116,6 +2116,12 @@ export const zhCN: TranslationResources = {
       accountCount_other: "{{count}} 个账户",
       signedOutLine: "已退出：{{names}}",
       signIn: "在“账户”中登录",
+      otherAccounts: "其他账户",
+      consoleOnly: "仅在控制台",
+      short: {
+        five_hour: "5小时",
+        seven_day: "周",
+      },
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",
