@@ -2141,6 +2141,17 @@ export const ja: TranslationResources = {
     hostUnavailable: "{{host}} に接続してプロバイダーの使用状況を確認してください",
     hostUpgradeRequired: "{{host}} を更新してプロバイダーの使用状況を確認してください",
     clientUnavailable: "ホスト接続の準備ができていません",
+    zeroSub: {
+      signedOut: "ZeroSub でサインアウト済み",
+      notRead: "ZeroSub はこのアカウントの使用量をまだ読み取っていません",
+      families: {
+        claude: "Claude",
+        codex: "ChatGPT (Codex)",
+        copilot: "GitHub Copilot",
+        kimi: "Kimi Code",
+        opencode: "OpenCode Go",
+      },
+    },
     retry: "再試行",
     tooltipLoading: "プラン使用状況を読み込み中...",
     status: {

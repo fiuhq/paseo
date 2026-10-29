@@ -1,4 +1,5 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { DaemonUsageFeed, ZeroSubUsageFeed } from "./feed";
 import { QueryClient } from "@tanstack/react-query";
 import { expect, test } from "vitest";
 import { agentUsageQueryKey, refreshReport, usageReportsQueryKey } from "./reports";
@@ -32,8 +33,8 @@ const personal = entry("claude:personal");
 const team = entry("claude:team");
 const codex = entry("codex:account");
 const updated = { ...personal, fetchedAt: "2026-01-01T00:01:00.000Z" };
-const hostKey = usageReportsQueryKey("host");
-const agentKey = agentUsageQueryKey("host", "agent");
+const hostKey = usageReportsQueryKey("host", "daemon");
+const agentKey = agentUsageQueryKey("host", "daemon", "agent");
 
 test.each([
   {
@@ -67,15 +68,15 @@ test.each([
   "$scope card refresh reconciles the account",
   async ({ agentId, key, refreshed, expected, request, invalidateHost }) => {
     const queryClient = new QueryClient();
-    const otherHostKey = usageReportsQueryKey("other-host");
-    const otherAgentKey = agentUsageQueryKey("host", "other-agent");
+    const otherHostKey = usageReportsQueryKey("other-host", "daemon");
+    const otherAgentKey = agentUsageQueryKey("host", "daemon", "other-agent");
     for (const queryKey of [hostKey, agentKey, otherHostKey, otherAgentKey]) {
       queryClient.setQueryData(queryKey, [personal, codex]);
     }
     const client = new UsageClient(Promise.resolve({ requestId: "refresh", reports: refreshed }));
     try {
       await refreshReport({
-        client,
+        feed: new DaemonUsageFeed(client),
         queryClient,
         serverId: "host",
         reportId: personal.id,
@@ -112,7 +113,7 @@ test("an agent refresh drops the agent list still loading under the previous log
   const client = new UsageClient(Promise.resolve({ requestId: "refresh", reports: [team, codex] }));
   try {
     await refreshReport({
-      client,
+      feed: new DaemonUsageFeed(client),
       queryClient,
       serverId: "host",
       reportId: personal.id,
@@ -133,10 +134,44 @@ test("a failed refresh preserves the previous reports and propagates the error",
   const client = new UsageClient(Promise.reject(error));
   try {
     await expect(
-      refreshReport({ client, queryClient, serverId: "host", reportId: personal.id }),
+      refreshReport({
+        feed: new DaemonUsageFeed(client),
+        queryClient,
+        serverId: "host",
+        reportId: personal.id,
+      }),
     ).rejects.toBe(error);
     expect(queryClient.getQueryData(hostKey)).toEqual([personal, codex]);
     expect(queryClient.getQueryState(hostKey)?.isInvalidated).toBe(false);
+  } finally {
+    queryClient.clear();
+  }
+});
+
+test("a ZeroSub card refresh lands in the ZeroSub reports, never in the daemon's cached ones", async () => {
+  const queryClient = new QueryClient();
+  const zeroSubKey = usageReportsQueryKey("host", "zerosub");
+  const account = {
+    id: "claude-main",
+    family: "claude",
+    label: "Account A",
+    email: null,
+    plan: null,
+    status: "ready",
+    usage: { fetchedAt: "2026-01-01T00:01:00.000Z", windows: [], error: null },
+  };
+  queryClient.setQueryData(hostKey, [personal, codex]);
+  queryClient.setQueryData(zeroSubKey, [{ ...entry("zerosub:claude-main"), sourceId: "claude" }]);
+  const feed = new ZeroSubUsageFeed(async () => ({ accounts: [account], agents: [] }), {
+    list: async () => [],
+  });
+  try {
+    await refreshReport({ feed, queryClient, serverId: "host", reportId: "zerosub:claude-main" });
+    expect(queryClient.getQueryData(hostKey)).toEqual([personal, codex]);
+    expect(
+      queryClient.getQueryData<UsageReportEntry[]>(zeroSubKey)?.map((r) => r.fetchedAt),
+    ).toEqual(["2026-01-01T00:01:00.000Z"]);
+    expect(queryClient.getQueryState(zeroSubKey)?.isInvalidated).toBe(false);
   } finally {
     queryClient.clear();
   }

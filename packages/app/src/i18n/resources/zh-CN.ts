@@ -2098,6 +2098,17 @@ export const zhCN: TranslationResources = {
     hostUnavailable: "连接到 {{host}} 以查看提供商用量",
     hostUpgradeRequired: "更新 {{host}} 以查看提供商用量",
     clientUnavailable: "主机连接尚未就绪",
+    zeroSub: {
+      signedOut: "已在 ZeroSub 中退出登录",
+      notRead: "ZeroSub 尚未读取此账户的用量",
+      families: {
+        claude: "Claude",
+        codex: "ChatGPT (Codex)",
+        copilot: "GitHub Copilot",
+        kimi: "Kimi Code",
+        opencode: "OpenCode Go",
+      },
+    },
     retry: "重试",
     tooltipLoading: "正在加载套餐用量...",
     status: {

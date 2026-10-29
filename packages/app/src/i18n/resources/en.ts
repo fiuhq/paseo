@@ -2145,6 +2145,17 @@ export const en = {
     hostUnavailable: "Connect to {{host}} to see usage",
     hostUpgradeRequired: "Update {{host}} to see usage",
     clientUnavailable: "Host connection is not ready",
+    zeroSub: {
+      signedOut: "Signed out in ZeroSub",
+      notRead: "ZeroSub has not read this account's usage yet",
+      families: {
+        claude: "Claude",
+        codex: "ChatGPT (Codex)",
+        copilot: "GitHub Copilot",
+        kimi: "Kimi Code",
+        opencode: "OpenCode Go",
+      },
+    },
     retry: "Try again",
     tooltipLoading: "Loading plan usage...",
     status: {

@@ -2120,6 +2120,17 @@ export const ar: TranslationResources = {
     hostUnavailable: "اتصل بـ{{host}} لعرض استخدام المزوّد",
     hostUpgradeRequired: "حدّث {{host}} لعرض استخدام المزوّد",
     clientUnavailable: "اتصال المضيف غير جاهز",
+    zeroSub: {
+      signedOut: "تم تسجيل الخروج في ZeroSub",
+      notRead: "لم يقرأ ZeroSub استخدام هذا الحساب بعد",
+      families: {
+        claude: "Claude",
+        codex: "ChatGPT (Codex)",
+        copilot: "GitHub Copilot",
+        kimi: "Kimi Code",
+        opencode: "OpenCode Go",
+      },
+    },
     retry: "حاول مرة أخرى",
     tooltipLoading: "جارٍ تحميل استخدام الخطة...",
     status: {

@@ -76,6 +76,22 @@ afterEach(() => {
 });
 
 describe("PluginRegistry", () => {
+  it("knows a host's catalog once installed, even an empty one, and forgets it with the host", () => {
+    let published = 0;
+    const unsubscribe = pluginRegistry.subscribe(() => published++);
+    try {
+      expect(registry.hasCatalog("host-a")).toBe(false);
+      pluginRegistry.installCatalog("host-a", []);
+      expect(registry.hasCatalog("host-a")).toBe(true);
+      expect(registry.hasCatalog("host-b")).toBe(false);
+      expect(published).toBe(1);
+      pluginRegistry.removeHost("host-a");
+      expect(registry.hasCatalog("host-a")).toBe(false);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("publishes synchronous setup once after storing the installation", () => {
     const snapshots: string[][] = [];
     const unsubscribe = pluginRegistry.subscribe(() => {

@@ -37,6 +37,9 @@ export class PluginRegistry {
 
   getSnapshot = (): InstalledPlugin[] => this.snapshot;
 
+  /** Whether the host's plugins are known: its catalog was installed, or its first load failed. */
+  hasCatalog = (serverId: string): boolean => this.byHost.has(serverId);
+
   getEvaluationError(serverId: string, pluginId: string): string | undefined {
     return this.evaluationErrors.get(`${serverId}/${pluginId}`);
   }
@@ -50,6 +53,7 @@ export class PluginRegistry {
       audio: Pick<AudioEngine, "play">;
     },
   ): boolean {
+    const firstCatalog = !this.byHost.has(serverId);
     const previous = this.byHost.get(serverId) ?? [];
     const previousErrors = this.hostEvaluationErrors(serverId);
     // Installations call the client they were created with, so a new client replaces them all.
@@ -156,6 +160,7 @@ export class PluginRegistry {
     // An unchanged catalog keeps the snapshot, so timeline projections cached against the
     // installed transformers stay valid across a reconnect.
     const unchanged =
+      !firstCatalog &&
       installed.length === previous.length &&
       installed.every((plugin, index) => plugin === previous[index]) &&
       this.hostEvaluationErrors(serverId) === previousErrors;
@@ -235,6 +240,14 @@ export function useInstalledPlugins(): InstalledPlugin[] {
     pluginRegistry.subscribe,
     pluginRegistry.getSnapshot,
     pluginRegistry.getSnapshot,
+  );
+}
+
+export function useHasPluginCatalog(serverId: string): boolean {
+  return useSyncExternalStore(
+    pluginRegistry.subscribe,
+    () => pluginRegistry.hasCatalog(serverId),
+    () => pluginRegistry.hasCatalog(serverId),
   );
 }
 

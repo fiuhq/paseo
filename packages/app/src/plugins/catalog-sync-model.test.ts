@@ -422,3 +422,29 @@ it("ignores an in-flight catalog snapshot after disconnect", async () => {
   expect(h.client.settings.reads).toBe(1);
   expect(h.evaluations()).toBe(1);
 });
+
+it("settles a host with no plugins when its first catalog fails, and installs a later one", async () => {
+  const h = harness();
+  let failing = true;
+  class FlakyClient extends CatalogClient {
+    override async getPluginCatalog(): Promise<Catalog> {
+      this.fetches++;
+      if (failing) throw new Error("catalog timeout");
+      return this.catalog;
+    }
+  }
+  const client = new FlakyClient();
+  h.sync({ client });
+  await expect.poll(() => h.registry.hasCatalog("host")).toBe(true);
+  expect(h.registry.getSnapshot()).toEqual([]);
+
+  failing = false;
+  client.snapshot();
+  await expect.poll(() => h.registry.getSnapshot().length).toBe(1);
+
+  failing = true;
+  client.snapshot();
+  await expect.poll(() => client.fetches).toBe(3);
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(h.registry.getSnapshot().map((plugin) => plugin.id)).toEqual(["reports"]);
+});

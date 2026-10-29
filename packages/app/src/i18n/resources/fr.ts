@@ -2168,6 +2168,17 @@ export const fr: TranslationResources = {
     hostUnavailable: "Connectez-vous à {{host}} pour voir l’utilisation du fournisseur",
     hostUpgradeRequired: "Mettez à jour {{host}} pour voir l’utilisation du fournisseur",
     clientUnavailable: "La connexion à l’hôte n’est pas prête",
+    zeroSub: {
+      signedOut: "Déconnecté dans ZeroSub",
+      notRead: "ZeroSub n’a pas encore lu l’utilisation de ce compte",
+      families: {
+        claude: "Claude",
+        codex: "ChatGPT (Codex)",
+        copilot: "GitHub Copilot",
+        kimi: "Kimi Code",
+        opencode: "OpenCode Go",
+      },
+    },
     retry: "Réessayer",
     tooltipLoading: "Chargement de l’utilisation du forfait...",
     status: {
