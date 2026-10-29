@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DaemonUsageFeed, ZeroSubUsageFeed, usageFeedKind, zeroSubReportId } from "./feed";
+import {
+  DaemonUsageFeed,
+  planLabelOf,
+  ZeroSubUsageFeed,
+  usageFeedKind,
+  zeroSubReportId,
+} from "./feed";
 import type { UsageFeedRequest } from "./feed";
 import type { InstalledPlugin } from "@/plugins/types";
 import type { UsageReportEntry } from "./types";
@@ -349,6 +355,18 @@ describe("ZeroSubUsageFeed", () => {
       list: async () => [],
     });
     await expect(broken.list({})).rejects.toThrow();
+  });
+});
+
+describe("planLabelOf", () => {
+  it("names a plan as people do, leaving one already named alone", () => {
+    expect(["max", "team", "free", "Go", "Pro+"].map(planLabelOf)).toEqual([
+      "Max",
+      "Team",
+      "Free",
+      "Go",
+      "Pro+",
+    ]);
   });
 });
 

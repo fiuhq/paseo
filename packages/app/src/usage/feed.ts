@@ -238,7 +238,7 @@ function entryOf(
   }
   const available = {
     status: "available" as const,
-    ...(account.plan ? { planLabel: account.plan } : {}),
+    ...(account.plan ? { planLabel: planLabelOf(account.plan) } : {}),
     windows: usage.windows.map((window, index) => {
       const shown: UsageWindow = {
         id: window.id,
@@ -271,6 +271,11 @@ function entryOf(
       ? { lastSuccessful: { fetchedAt: usage.fetchedAt, report: available } }
       : {}),
   };
+}
+
+/** A plan as people name it: ZeroSub reads "max", "team", "free" from the provider. */
+export function planLabelOf(plan: string): string {
+  return plan.charAt(0).toLocaleUpperCase() + plan.slice(1);
 }
 
 export function zeroSubReportId(accountId: string): string {
