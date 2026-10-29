@@ -36,8 +36,34 @@ export function CardIdentity({
   );
 }
 
+/**
+ * An account's title row: its name, then its plan and routing badges. The badges wrap onto their
+ * own row rather than shrink the name, which ellipsizes only when it alone does not fit.
+ */
+export function AccountHeading({
+  entry,
+  serverId,
+  planLabel,
+  nameStyle,
+}: {
+  entry: UsageReportEntry;
+  serverId: string;
+  planLabel: string | null;
+  nameStyle: StyleProp<TextStyle>;
+}) {
+  return (
+    <View style={styles.heading}>
+      <View style={styles.identity}>
+        <CardIdentity entry={entry} serverId={serverId} style={nameStyle} />
+      </View>
+      {planLabel ? <StatusBadge label={planLabel} variant="muted" size="xs" /> : null}
+      <AccountBadges entry={entry} />
+    </View>
+  );
+}
+
 /** An account's routing state: Default, In use with its agents, Limited until it comes back. */
-export function AccountBadges({ entry }: { entry: UsageReportEntry }) {
+function AccountBadges({ entry }: { entry: UsageReportEntry }) {
   const { t } = useTranslation();
   const presentation = entry.presentation;
   const now = useRelativeTimeTick({ enabled: presentation?.limitedUntil != null });
@@ -147,6 +173,19 @@ function AccountFooter({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  heading: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  identity: {
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
   footer: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,

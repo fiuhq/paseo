@@ -111,7 +111,7 @@ function AccountGroup({
   );
 }
 
-/** The signed-out accounts, named on one line, with the way to sign them in. */
+/** The signed-out accounts, named on up to two lines, with the way to sign them in. */
 function SignedOut({
   serverId,
   entries,
@@ -131,7 +131,7 @@ function SignedOut({
   }, [onClose, serverId]);
   return (
     <View style={styles.signedOut} testID="usage-accounts-signed-out">
-      <Text style={styles.muted} numberOfLines={1}>
+      <Text style={styles.muted} numberOfLines={2}>
         {t("providerUsage.zeroSub.signedOutLine", { names })}
       </Text>
       <Button variant="ghost" size="sm" onPress={openAccounts} testID="usage-accounts-sign-in">

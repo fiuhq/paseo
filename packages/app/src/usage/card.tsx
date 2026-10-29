@@ -16,7 +16,7 @@ import { isNative } from "@/constants/platform";
 import type { TFunction } from "i18next";
 import { UsageBalanceBar } from "./balance-bar";
 import type { UsageDisplay } from "./display";
-import { AccountBadges, CardFooter, CardIdentity } from "./account-card-parts";
+import { AccountHeading, CardFooter, CardIdentity } from "./account-card-parts";
 import { isAccountNote } from "./accounts";
 import { formatAgo, formatProviderUsageLabel } from "./format";
 import { resolveUsageReport, type UsageRefresh } from "./model";
@@ -81,10 +81,20 @@ export function UsageCard({
   return (
     <View style={containerStyle} testID={`usage-report-${entry.id}`}>
       <View style={styles.header}>
-        <CardIdentity entry={entry} serverId={serverId} style={styles.name} />
-        {planLabel ? <StatusBadge label={planLabel} variant="muted" size="xs" /> : null}
-        <AccountBadges entry={entry} />
-        <View style={styles.headerSpacer} />
+        {entry.presentation ? (
+          <AccountHeading
+            entry={entry}
+            serverId={serverId}
+            planLabel={planLabel}
+            nameStyle={styles.name}
+          />
+        ) : (
+          <>
+            <CardIdentity entry={entry} serverId={serverId} style={styles.name} />
+            {planLabel ? <StatusBadge label={planLabel} variant="muted" size="xs" /> : null}
+            <View style={styles.headerSpacer} />
+          </>
+        )}
         {status ? (
           <View style={styles.statusRow}>
             <View style={dotStyle} />
