@@ -2179,6 +2179,7 @@ export const ru: TranslationResources = {
       signIn: "Войти в разделе «Аккаунты»",
       otherAccounts: "Другие аккаунты",
       consoleOnly: "Только в консоли",
+      notReadShort: "Ещё не прочитан",
       short: {
         five_hour: "5ч",
         seven_day: "нед.",

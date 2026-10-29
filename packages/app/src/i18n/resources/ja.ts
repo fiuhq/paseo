@@ -2161,6 +2161,7 @@ export const ja: TranslationResources = {
       signIn: "アカウントからサインイン",
       otherAccounts: "その他のアカウント",
       consoleOnly: "コンソールのみ",
+      notReadShort: "未読み取り",
       short: {
         five_hour: "5時間",
         seven_day: "週",

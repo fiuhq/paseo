@@ -1,13 +1,15 @@
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { formatDurationUntil } from "./format";
+import type { TFunction } from "i18next";
+import { isAccountNote } from "./accounts";
+import { formatDurationUntil, formatProviderUsageLabel } from "./format";
 import { UsageMeter } from "./meter";
 import { usedPercent } from "./model";
 import { useUsageHostReports } from "./queries";
 import { UsageProviderIcon } from "./source-icon";
 import { windowTone } from "./tone";
-import type { UsageReportEntry, UsageWindow } from "./types";
+import type { AvailableUsageReport, UsageReportEntry, UsageWindow } from "./types";
 import { useRelativeTimeTick } from "./use-relative-time-tick";
 
 // The composer popover's other accounts, under the agent's own: every account ZeroSub holds
@@ -19,10 +21,19 @@ function shareOf(window: UsageWindow): number {
   return usedPercent(window) ?? 0;
 }
 
+/** A window for one model ("Weekly · Fable"), which the popover leaves out. */
+function isModelScoped(window: UsageWindow): boolean {
+  return window.label.includes(" · ");
+}
+
+/** The reading the account shows: its fresh one, else the one kept behind a failed re-read. */
+function shownReport(entry: UsageReportEntry): AvailableUsageReport | undefined {
+  return entry.report.status === "available" ? entry.report : entry.lastSuccessful?.report;
+}
+
 /** The window that stops the account soonest: its fullest, a model-scoped window aside. */
 export function fullestWindow(entry: UsageReportEntry): UsageWindow | null {
-  const report = entry.report.status === "available" ? entry.report : entry.lastSuccessful?.report;
-  const windows = (report?.windows ?? []).filter((window) => !window.label.includes(" · "));
+  const windows = (shownReport(entry)?.windows ?? []).filter((window) => !isModelScoped(window));
   return windows.reduce<UsageWindow | null>(
     (fullest, window) => (!fullest || shareOf(window) > shareOf(fullest) ? window : fullest),
     null,
@@ -36,9 +47,25 @@ export function fullestWindow(entry: UsageReportEntry): UsageWindow | null {
 export function asAgentAccount(entry: UsageReportEntry): UsageReportEntry {
   if (!entry.presentation) return entry;
   const presentation = { ...entry.presentation, inUse: false, omitReadTime: true };
-  if (entry.report.status !== "available") return { ...entry, presentation };
-  const windows = entry.report.windows.filter((window) => !window.label.includes(" · "));
-  return { ...entry, presentation, report: { ...entry.report, windows } };
+  const main = (report: AvailableUsageReport): AvailableUsageReport => ({
+    ...report,
+    windows: report.windows.filter((window) => !isModelScoped(window)),
+  });
+  if (entry.report.status === "available")
+    return { ...entry, presentation, report: main(entry.report) };
+  if (!entry.lastSuccessful) return { ...entry, presentation };
+  const lastSuccessful = { ...entry.lastSuccessful, report: main(entry.lastSuccessful.report) };
+  return { ...entry, presentation, lastSuccessful };
+}
+
+/**
+ * What an account's line says where its window would be, when it has none: that its provider
+ * shows usage only in its own console, or that ZeroSub has not read it yet.
+ */
+export function accountNote(entry: UsageReportEntry, t: TFunction): string | null {
+  if (isAccountNote(entry)) return t("providerUsage.zeroSub.consoleOnly");
+  if (entry.report.status === "unavailable") return t("providerUsage.zeroSub.notReadShort");
+  return null;
 }
 
 /** The accounts the popover lists under the agent's own: signed in, and not the agent's. */
@@ -87,7 +114,7 @@ function useAccountState(entry: UsageReportEntry): { text: string; limited: bool
       : t("providerUsage.zeroSub.limitedNow");
     return { text, limited: true };
   }
-  const plan = entry.report.status === "available" ? entry.report.planLabel : undefined;
+  const plan = shownReport(entry)?.planLabel;
   const agents =
     presentation.agents > 0
       ? t("providerUsage.zeroSub.agents", { count: presentation.agents })
@@ -108,6 +135,7 @@ function OtherAccount({
   const presentation = entry.presentation!;
   const state = useAccountState(entry);
   const window = fullestWindow(entry);
+  const note = window ? null : accountNote(entry, t);
   return (
     <View
       style={[styles.row, first ? null : styles.rowRule]}
@@ -127,15 +155,16 @@ function OtherAccount({
       {window ? (
         <View style={styles.window}>
           <View style={styles.windowText}>
-            <Text style={styles.windowLabel}>{window.shortLabel ?? window.label}</Text>
+            <Text style={styles.windowLabel}>
+              {window.shortLabel ?? formatProviderUsageLabel(window.id, window.label, t)}
+            </Text>
             <Text style={styles.windowValue}>{`${Math.round(shareOf(window))}%`}</Text>
           </View>
           <UsageMeter percent={shareOf(window)} tone={windowTone(window)} />
         </View>
-      ) : (
-        // An account whose usage its provider shows only in its own console.
-        <Text style={styles.state}>{t("providerUsage.zeroSub.consoleOnly")}</Text>
-      )}
+      ) : note ? (
+        <Text style={styles.state}>{note}</Text>
+      ) : null}
     </View>
   );
 }

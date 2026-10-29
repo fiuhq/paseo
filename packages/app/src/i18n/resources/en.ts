@@ -2165,6 +2165,7 @@ export const en = {
       signIn: "Sign in from Accounts",
       otherAccounts: "Other accounts",
       consoleOnly: "Console only",
+      notReadShort: "Not read yet",
       short: {
         five_hour: "5h",
         seven_day: "week",

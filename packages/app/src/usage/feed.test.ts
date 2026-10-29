@@ -195,6 +195,24 @@ describe("ZeroSubUsageFeed", () => {
     });
   });
 
+  it("gives a window a short name only where ZeroSub's short names hold one", async () => {
+    const monthly = account({
+      usage: {
+        fetchedAt: "2026-10-29T03:00:00.000Z",
+        windows: [window("five_hour", "5-hour", 36), window("monthly", "Monthly", 10)],
+        error: null,
+      },
+    });
+    const zeroSub = new ZeroSubUsageFeed(
+      async () => ({ accounts: [monthly], agents: [] }),
+      { list: async () => [] },
+      () => new Date("2026-10-29T04:00:00.000Z"),
+    );
+    const [entry] = await zeroSub.list({});
+    const windows = entry!.report.status === "available" ? entry!.report.windows : [];
+    expect(windows.map((w) => w.shortLabel)).toEqual(["5h", undefined]);
+  });
+
   it("gives an agent the account ZeroSub routes it to, without asking the daemon", async () => {
     const { zeroSub, daemonCalls } = feed();
     expect((await zeroSub.list({ agentId: "a1" })).map((r) => r.id)).toEqual([

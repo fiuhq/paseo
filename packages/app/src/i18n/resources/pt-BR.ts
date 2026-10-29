@@ -2173,6 +2173,7 @@ export const ptBR: TranslationResources = {
       signIn: "Entrar em Contas",
       otherAccounts: "Outras contas",
       consoleOnly: "Só no console",
+      notReadShort: "Ainda não lido",
       short: {
         five_hour: "5h",
         seven_day: "semana",

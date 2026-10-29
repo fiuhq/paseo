@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { asAgentAccount, fullestWindow, otherAccounts } from "./other-accounts";
+import { i18n } from "@/i18n/i18next";
+import { accountNote, asAgentAccount, fullestWindow, otherAccounts } from "./other-accounts";
 import type { UsageAccountPresentation, UsageReportEntry, UsageWindow } from "./types";
 
 const window = (id: string, label: string, usedPct: number): UsageWindow => ({
@@ -68,5 +69,44 @@ describe("the composer popover's accounts", () => {
     ]);
     const daemon: UsageReportEntry = { ...own, presentation: undefined };
     expect(asAgentAccount(daemon)).toBe(daemon);
+  });
+
+  it("shows the main windows a failed re-read kept for the agent's own account", () => {
+    const own = account("z:own", [], { agents: 1 });
+    const failed: UsageReportEntry = {
+      ...own,
+      report: { status: "error", error: "HTTP 429" },
+      lastSuccessful: {
+        fetchedAt: own.fetchedAt,
+        report: {
+          status: "available",
+          windows: [
+            window("five_hour", "5-hour", 90),
+            window("seven_day_opus", "Weekly · Fable", 99),
+          ],
+        },
+      },
+    };
+    const shown = asAgentAccount(failed);
+    expect(shown.report).toEqual({ status: "error", error: "HTTP 429" });
+    expect(shown.lastSuccessful?.report.windows.map((w) => w.id)).toEqual(["five_hour"]);
+    expect(fullestWindow(failed)?.id).toBe("five_hour");
+  });
+
+  it("says Console only for an account never read, and Not read yet for one ZeroSub has not read", () => {
+    const base = account("z:a", []);
+    const unreadable: UsageReportEntry = { ...base, report: { status: "error", error: "e" } };
+    const unread: UsageReportEntry = {
+      ...base,
+      report: { status: "unavailable", problem: { kind: "no_quota", detail: "not read" } },
+    };
+    const retained: UsageReportEntry = {
+      ...unreadable,
+      lastSuccessful: { fetchedAt: base.fetchedAt, report: { status: "available", windows: [] } },
+    };
+    expect(accountNote(unreadable, i18n.t)).toBe("Console only");
+    expect(accountNote(unread, i18n.t)).toBe("Not read yet");
+    expect(accountNote(retained, i18n.t)).toBeNull();
+    expect(accountNote(base, i18n.t)).toBeNull();
   });
 });

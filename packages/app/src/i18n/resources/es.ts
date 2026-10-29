@@ -2188,6 +2188,7 @@ export const es: TranslationResources = {
       signIn: "Iniciar sesión en Cuentas",
       otherAccounts: "Otras cuentas",
       consoleOnly: "Solo en consola",
+      notReadShort: "Sin leer aún",
       short: {
         five_hour: "5h",
         seven_day: "semana",

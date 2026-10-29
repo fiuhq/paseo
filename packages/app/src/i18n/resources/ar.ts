@@ -2152,6 +2152,7 @@ export const ar: TranslationResources = {
       signIn: "سجّل الدخول من الحسابات",
       otherAccounts: "حسابات أخرى",
       consoleOnly: "في وحدة التحكم فقط",
+      notReadShort: "لم يُقرأ بعد",
       short: {
         five_hour: "5س",
         seven_day: "أسبوع",

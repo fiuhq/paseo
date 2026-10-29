@@ -2118,6 +2118,7 @@ export const zhCN: TranslationResources = {
       signIn: "在“账户”中登录",
       otherAccounts: "其他账户",
       consoleOnly: "仅在控制台",
+      notReadShort: "尚未读取",
       short: {
         five_hour: "5小时",
         seven_day: "周",

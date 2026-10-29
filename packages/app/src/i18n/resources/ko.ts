@@ -2150,6 +2150,7 @@ export const ko: TranslationResources = {
       signIn: "계정에서 로그인",
       otherAccounts: "다른 계정",
       consoleOnly: "콘솔에서만",
+      notReadShort: "아직 읽지 않음",
       short: {
         five_hour: "5시간",
         seven_day: "주",
