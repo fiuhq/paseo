@@ -1,4 +1,5 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { DaemonUsageFeed } from "./feed";
 import { QueryClient } from "@tanstack/react-query";
 import { expect, test } from "vitest";
 import { agentUsageQueryKey, refreshReport, usageReportsQueryKey } from "./reports";
@@ -75,7 +76,7 @@ test.each([
     const client = new UsageClient(Promise.resolve({ requestId: "refresh", reports: refreshed }));
     try {
       await refreshReport({
-        client,
+        feed: new DaemonUsageFeed(client),
         queryClient,
         serverId: "host",
         reportId: personal.id,
@@ -112,7 +113,7 @@ test("an agent refresh drops the agent list still loading under the previous log
   const client = new UsageClient(Promise.resolve({ requestId: "refresh", reports: [team, codex] }));
   try {
     await refreshReport({
-      client,
+      feed: new DaemonUsageFeed(client),
       queryClient,
       serverId: "host",
       reportId: personal.id,
@@ -133,7 +134,12 @@ test("a failed refresh preserves the previous reports and propagates the error",
   const client = new UsageClient(Promise.reject(error));
   try {
     await expect(
-      refreshReport({ client, queryClient, serverId: "host", reportId: personal.id }),
+      refreshReport({
+        feed: new DaemonUsageFeed(client),
+        queryClient,
+        serverId: "host",
+        reportId: personal.id,
+      }),
     ).rejects.toBe(error);
     expect(queryClient.getQueryData(hostKey)).toEqual([personal, codex]);
     expect(queryClient.getQueryState(hostKey)?.isInvalidated).toBe(false);

@@ -11,13 +11,11 @@ import {
 import { useShallow } from "zustand/shallow";
 import { useFetchQuery } from "@/data/query";
 import {
-  getHostRuntimeStore,
   useHostRuntimeConnectionStatuses,
   useHostRuntimeIsConnected,
   useHosts,
 } from "@/runtime/host-runtime";
 import { useSessionStore, type SessionState } from "@/stores/session-store";
-import { usageCopy } from "./copy";
 import {
   resolveAgentUsageView,
   resolveUsageRefresh,
@@ -29,18 +27,13 @@ import {
   type UsageRefresh,
   upsertReport,
 } from "./model";
+import { UsageFeed } from "./feed";
 import { agentUsageQueryKey, refreshReport, usageReportsQueryKey } from "./reports";
 import type { UsageReportEntry, UsageView } from "./types";
 
 // The daemon caches each report for five minutes, so re-reading it is cheap. Only
 // an explicit refresh passes `forceRefresh` and reaches the source's API.
 const REPORTS_STALE_TIME_MS = 60_000;
-
-function requireClient(serverId: string) {
-  const client = getHostRuntimeStore().getClient(serverId);
-  if (!client) throw new Error(usageCopy.clientUnavailable);
-  return client;
-}
 
 /**
  * Lists a host's reports, or one agent's, writing each into `queryKey` as it streams in so a slow
@@ -57,15 +50,12 @@ async function streamReports(input: {
   signal?: AbortSignal;
 }): Promise<UsageReportEntry[]> {
   const { queryClient, queryKey, serverId, agentId, forceRefresh = false, signal } = input;
-  const { reports } = await requireClient(serverId).listUsageReports(
-    { agentId, forceRefresh },
-    (report) => {
-      if (signal?.aborted) return;
-      queryClient.setQueryData<UsageReportEntry[]>(queryKey, (current) =>
-        upsertReport(current, report),
-      );
-    },
-  );
+  const reports = await UsageFeed.forHost(serverId).list({ agentId, forceRefresh }, (report) => {
+    if (signal?.aborted) return;
+    queryClient.setQueryData<UsageReportEntry[]>(queryKey, (current) =>
+      upsertReport(current, report),
+    );
+  });
   return settleReports(queryClient.getQueryData<UsageReportEntry[]>(queryKey), reports);
 }
 
@@ -217,7 +207,7 @@ export function useReportRefresh(
   const mutation = useMutation({
     mutationFn: () =>
       refreshReport({
-        client: requireClient(serverId),
+        feed: UsageFeed.forHost(serverId),
         queryClient,
         serverId,
         reportId,

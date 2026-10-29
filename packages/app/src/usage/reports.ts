@@ -1,5 +1,5 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { QueryClient } from "@tanstack/react-query";
+import type { UsageFeed } from "./feed";
 import { replaceReport, settleReports } from "./model";
 import type { UsageReportEntry } from "./types";
 
@@ -16,7 +16,7 @@ export function agentUsageQueryKey(serverId: string, agentId: string) {
 }
 
 interface RefreshReportInput {
-  client: Pick<DaemonClient, "listUsageReports">;
+  feed: Pick<UsageFeed, "list">;
   queryClient: QueryClient;
   serverId: string;
   reportId: string;
@@ -24,7 +24,7 @@ interface RefreshReportInput {
 }
 
 export async function refreshReport({
-  client,
+  feed,
   queryClient,
   serverId,
   reportId,
@@ -38,7 +38,7 @@ export async function refreshReport({
     agentId === undefined ? usageReportsQueryKey(serverId) : agentUsageQueryKey(serverId, agentId);
   // An agent list still streaming was scoped to the login before the refresh; drop it.
   if (agentId !== undefined) await queryClient.cancelQueries({ queryKey, exact: true });
-  const { reports: refreshed } = await client.listUsageReports(options);
+  const refreshed = await feed.list(options);
   queryClient.setQueryData<UsageReportEntry[]>(queryKey, (reports) => {
     if (agentId !== undefined) return settleReports(reports, refreshed);
     const report = refreshed.find((entry) => entry.id === reportId) ?? null;
