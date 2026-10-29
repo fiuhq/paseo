@@ -110,8 +110,8 @@ does not change workspace focus. Web dragging shares the workspace drag scope; c
 accept only reordering inside the source pane.
 
 Cmd+E shows or hides Explorer without changing its selected view. All layouts use the same
-workspace tabs, launcher, and panel host. Below the `medium` breakpoint (600 points in a touch
-browser, 720 with a mouse or on native) the shell is the swipeable Explorer overlay; at `medium`
+workspace tabs, launcher, and panel host. Below the `md` breakpoint (600 points in a touch
+browser, 720 with a mouse or on native) the shell is the swipeable Explorer overlay; at `md`
 and above it reserves width beside the workspace. Native docking keeps its touch resize handle. Full workspace splits remain a separate web-only capability.
 
 The dock reserves at least 240 points and the workspace 360. App navigation yields when it cannot
