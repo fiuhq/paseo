@@ -9,7 +9,7 @@ interface CatalogSyncInput {
   audio: Pick<AudioEngine, "play"> | null;
   connected: boolean;
   supported: boolean;
-  registry: Pick<PluginRegistry, "installCatalog" | "getSnapshot" | "removeHost">;
+  registry: Pick<PluginRegistry, "installCatalog" | "getSnapshot" | "removeHost" | "hasCatalog">;
 }
 
 export function syncPluginCatalog({
@@ -42,6 +42,9 @@ export function syncPluginCatalog({
         .catch((error) => {
           if (!cancelled) {
             console.warn(`[Plugins] Failed to load catalog for ${serverId}`, error);
+            if (!registry.hasCatalog(serverId)) {
+              registry.installCatalog(serverId, [], installationOptions);
+            }
           }
           return undefined;
         }),

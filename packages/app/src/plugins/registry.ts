@@ -37,7 +37,7 @@ export class PluginRegistry {
 
   getSnapshot = (): InstalledPlugin[] => this.snapshot;
 
-  /** Whether the host's catalog has been installed, so its plugins (or their absence) are known. */
+  /** Whether the host's plugins are known: its catalog was installed, or its first load failed. */
   hasCatalog = (serverId: string): boolean => this.byHost.has(serverId);
 
   getEvaluationError(serverId: string, pluginId: string): string | undefined {

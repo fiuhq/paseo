@@ -57,7 +57,7 @@ export function usageFeedKind(
 
 /**
  * The host's feed kind, re-read when a plugin installs or goes away; null until a host that runs
- * plugins has had its catalog installed, so a host-wide list never asks the daemon's sources first.
+ * plugins has settled its catalog, so a host-wide list never asks the daemon's sources first.
  */
 export function useUsageFeedKind(serverId: string): UsageFeedKind | null {
   const plugins = useInstalledPlugins();
