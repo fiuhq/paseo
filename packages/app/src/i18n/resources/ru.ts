@@ -2153,6 +2153,17 @@ export const ru: TranslationResources = {
     hostUnavailable: "Подключитесь к {{host}}, чтобы увидеть использование провайдера",
     hostUpgradeRequired: "Обновите {{host}}, чтобы увидеть использование провайдера",
     clientUnavailable: "Соединение с хостом не готово",
+    zeroSub: {
+      signedOut: "Выполнен выход в ZeroSub",
+      notRead: "ZeroSub ещё не прочитал использование этого аккаунта",
+      families: {
+        claude: "Claude",
+        codex: "ChatGPT (Codex)",
+        copilot: "GitHub Copilot",
+        kimi: "Kimi Code",
+        opencode: "OpenCode Go",
+      },
+    },
     retry: "Повторить",
     tooltipLoading: "Загрузка использования плана...",
     status: {

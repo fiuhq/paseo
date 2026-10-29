@@ -2130,6 +2130,17 @@ export const ko: TranslationResources = {
     hostUnavailable: "{{host}}에 연결하여 제공업체 사용량을 확인하세요",
     hostUpgradeRequired: "{{host}}를 업데이트하여 제공업체 사용량을 확인하세요",
     clientUnavailable: "호스트 연결이 준비되지 않았습니다",
+    zeroSub: {
+      signedOut: "ZeroSub에서 로그아웃됨",
+      notRead: "ZeroSub가 아직 이 계정의 사용량을 읽지 않았습니다",
+      families: {
+        claude: "Claude",
+        codex: "ChatGPT (Codex)",
+        copilot: "GitHub Copilot",
+        kimi: "Kimi Code",
+        opencode: "OpenCode Go",
+      },
+    },
     retry: "다시 시도",
     tooltipLoading: "플랜 사용량 불러오는 중...",
     status: {

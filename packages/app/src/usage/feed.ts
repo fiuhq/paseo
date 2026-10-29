@@ -1,5 +1,6 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { z } from "zod";
+import { i18n } from "@/i18n/i18next";
 import { pluginRegistry } from "@/plugins/registry";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { usageCopy } from "./copy";
@@ -23,13 +24,14 @@ export abstract class UsageFeed {
 
   /** ZeroSub's accounts when the host runs ZeroSub, else the daemon's own usage sources. */
   static forHost(serverId: string): UsageFeed {
+    const client = getHostRuntimeStore().getClient(serverId);
+    if (!client) throw new Error(usageCopy.clientUnavailable);
+    const daemon = new DaemonUsageFeed(client);
     const zeroSub = pluginRegistry
       .getSnapshot()
       .find((plugin) => plugin.serverId === serverId && plugin.id === ZEROSUB_PLUGIN_ID);
-    if (zeroSub) return new ZeroSubUsageFeed((method, input) => zeroSub.invoke(method, input));
-    const client = getHostRuntimeStore().getClient(serverId);
-    if (!client) throw new Error(usageCopy.clientUnavailable);
-    return new DaemonUsageFeed(client);
+    if (!zeroSub) return daemon;
+    return new ZeroSubUsageFeed((method, input) => zeroSub.invoke(method, input), daemon);
   }
 }
 
@@ -47,12 +49,13 @@ export class DaemonUsageFeed extends UsageFeed {
 
 export const ZEROSUB_PLUGIN_ID = "zerosub";
 
-const FAMILY_LABEL: Record<string, string> = {
-  claude: "Claude",
-  codex: "ChatGPT (Codex)",
-  kimi: "Kimi Code",
-  copilot: "GitHub Copilot",
-  opencode: "OpenCode Go",
+// The daemon's own usage source per family, so pins saved on a daemon window keep matching.
+const FAMILY_SOURCE_ID: Record<string, string> = {
+  claude: "claude",
+  codex: "codex",
+  copilot: "copilot",
+  kimi: "kimi",
+  opencode: "opencode-go",
 };
 
 const ZeroSubWindowSchema = z.object({
@@ -69,9 +72,6 @@ const ZeroSubAccountSchema = z.object({
   email: z.string().nullable(),
   plan: z.string().nullable(),
   status: z.string(),
-  isDefault: z.boolean(),
-  limitedUntil: z.string().nullable(),
-  agentCount: z.number(),
   usage: z
     .object({
       fetchedAt: z.string(),
@@ -91,12 +91,14 @@ type ZeroSubState = z.infer<typeof ZeroSubStateSchema>;
 
 /**
  * ZeroSub's accounts, every one it holds, read through its own `zerosub.state`. ZeroSub reads each
- * account's usage itself (once, with its own backoff), so the daemon's usage sources are never
- * asked and no provider usage API is called a second time.
+ * account's usage itself (once, with its own backoff), so the host-wide list never asks the
+ * daemon's usage sources and no provider usage API is called a second time. Only an agent ZeroSub
+ * routes nowhere (a provider it does not hold) is asked of the daemon, for that agent alone.
  */
 export class ZeroSubUsageFeed extends UsageFeed {
   constructor(
     private readonly invoke: (method: string, input: unknown) => Promise<unknown>,
+    private readonly daemon: Pick<UsageFeed, "list">,
     private readonly now: () => Date = () => new Date(),
   ) {
     super();
@@ -106,7 +108,15 @@ export class ZeroSubUsageFeed extends UsageFeed {
     const state = ZeroSubStateSchema.parse(
       await this.invoke("zerosub.state", { refreshUsage: request.forceRefresh === true }),
     );
-    const reports = this.accountsFor(state, request).map((account) => this.entryOf(account));
+    if (
+      request.agentId !== undefined &&
+      !state.agents.some((agent) => agent.agentId === request.agentId)
+    ) {
+      return this.daemon.list(request, onReport);
+    }
+    const reports = this.accountsFor(state, request).map((account) =>
+      entryOf(account, this.now),
+    );
     for (const report of reports) onReport?.(report);
     return reports;
   }
@@ -122,50 +132,62 @@ export class ZeroSubUsageFeed extends UsageFeed {
     }
     return state.accounts;
   }
+}
 
-  private entryOf(account: ZeroSubAccount): UsageReportEntry {
-    const fetchedAt = account.usage?.fetchedAt ?? this.now().toISOString();
-    const base = {
-      id: zeroSubReportId(account.id),
-      account: { label: account.email ?? account.label },
-      fetchedAt,
-      sourceId: `zerosub-${account.family}`,
-      sourceLabel: FAMILY_LABEL[account.family] ?? account.family,
-    };
-    if (account.status === "signed_out") {
-      return {
-        ...base,
-        report: {
-          status: "unavailable",
-          problem: { kind: "no_quota", detail: "Signed out in ZeroSub" },
-        },
-      };
-    }
-    const windows = account.usage?.windows ?? [];
-    if (windows.length === 0 && account.usage?.error) {
-      return { ...base, report: { status: "error", error: account.usage.error } };
-    }
+function entryOf(account: ZeroSubAccount, now: () => Date): UsageReportEntry {
+  const base = {
+    id: zeroSubReportId(account.id),
+    account: { label: account.email ?? account.label },
+    sourceId: FAMILY_SOURCE_ID[account.family] ?? account.family,
+    sourceLabel: i18n.t(`providerUsage.zeroSub.families.${account.family}`, {
+      defaultValue: account.family,
+    }),
+  };
+  const usage = account.usage;
+  if (account.status === "signed_out" || !usage) {
+    const detail = i18n.t(
+      account.status === "signed_out"
+        ? "providerUsage.zeroSub.signedOut"
+        : "providerUsage.zeroSub.notRead",
+    );
     return {
       ...base,
-      ...(account.usage && !account.usage.error ? { successfulAt: account.usage.fetchedAt } : {}),
-      report: {
-        status: "available",
-        ...(account.plan ? { planLabel: account.plan } : {}),
-        windows: windows.map((window, index) => {
-          const shown: UsageWindow = {
-            id: window.id,
-            label: window.label,
-            usedPct: window.usedPercent,
-            remainingPct: Math.max(0, 100 - window.usedPercent),
-            resetsAt: window.resetsAt,
-          };
-          // The first window is the one the sidebar summary shows until windows are pinned.
-          if (index === 0) shown.summary = true;
-          return shown;
-        }),
-      },
+      fetchedAt: usage?.fetchedAt ?? now().toISOString(),
+      report: { status: "unavailable", problem: { kind: "no_quota", detail } },
     };
   }
+  const available = {
+    status: "available" as const,
+    ...(account.plan ? { planLabel: account.plan } : {}),
+    windows: usage.windows.map((window, index) => {
+      const shown: UsageWindow = {
+        id: window.id,
+        label: window.label,
+        usedPct: window.usedPercent,
+        remainingPct: Math.max(0, 100 - window.usedPercent),
+        resetsAt: window.resetsAt,
+      };
+      // The first window is the one the sidebar summary shows until windows are pinned.
+      if (index === 0) shown.summary = true;
+      return shown;
+    }),
+  };
+  if (!usage.error) {
+    return {
+      ...base,
+      fetchedAt: usage.fetchedAt,
+      successfulAt: usage.fetchedAt,
+      report: available,
+    };
+  }
+  return {
+    ...base,
+    fetchedAt: usage.fetchedAt,
+    report: { status: "error", error: usage.error },
+    ...(available.windows.length > 0
+      ? { lastSuccessful: { fetchedAt: usage.fetchedAt, report: available } }
+      : {}),
+  };
 }
 
 export function zeroSubReportId(accountId: string): string {
