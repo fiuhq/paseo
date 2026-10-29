@@ -105,6 +105,17 @@ export function formatResetLabel(
   return duration ? t("providerUsage.timing.resetsIn", { duration }) : null;
 }
 
+/** How long until `iso`, as the badges say it ("2h"); null once it has passed. */
+export function formatDurationUntil(
+  iso: string | null | undefined,
+  now = Date.now(),
+  t: TFunction = i18n.t,
+): string | null {
+  if (!iso) return null;
+  const rel = relativeDuration(iso, now);
+  return rel ? formatRelativeDuration(rel, t) : null;
+}
+
 export function formatRunsOutLabel(
   iso: string | null | undefined,
   now = Date.now(),

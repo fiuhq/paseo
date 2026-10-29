@@ -225,6 +225,89 @@ describe("ZeroSubUsageFeed", () => {
     expect(reports.map((r) => r.id)).toEqual(["zerosub:opencode-main"]);
   });
 
+  it("presents each account by its own name, with Default, In use (only where several accounts share a provider) and Limited", async () => {
+    const routed = new ZeroSubUsageFeed(
+      async () => ({
+        accounts: [
+          account({ agentCount: 94 }),
+          account({
+            id: "claude-team",
+            label: "Account B",
+            status: "limited",
+            limitedUntil: "2026-10-29T05:00:00.000Z",
+            agentCount: 0,
+          }),
+          account({ id: "claude-spare", label: "Account C", isDefault: true, agentCount: 0 }),
+          account({
+            id: "opencode-main",
+            family: "opencode",
+            label: "OpenCode account",
+            email: null,
+            agentCount: 1,
+          }),
+          account({
+            id: "kimi-main",
+            family: "kimi",
+            label: "Kimi login",
+            status: "signed_out",
+            usage: null,
+          }),
+        ],
+        agents: [],
+      }),
+      { list: async () => [] },
+    );
+    const presented = (await routed.list({})).map((r) => r.presentation);
+    expect(presented).toEqual([
+      {
+        name: "Account A",
+        provider: "claude",
+        isDefault: false,
+        agents: 94,
+        inUse: true,
+        limitedUntil: null,
+        signedOut: false,
+      },
+      {
+        name: "Account B",
+        provider: "claude",
+        isDefault: false,
+        agents: 0,
+        inUse: false,
+        limitedUntil: "2026-10-29T05:00:00.000Z",
+        signedOut: false,
+      },
+      {
+        name: "Account C",
+        provider: "claude",
+        isDefault: true,
+        agents: 0,
+        inUse: false,
+        limitedUntil: null,
+        signedOut: false,
+      },
+      // The only OpenCode account: its agent is told in the footer, not by an In use badge.
+      {
+        name: "OpenCode account",
+        provider: "opencode",
+        isDefault: false,
+        agents: 1,
+        inUse: false,
+        limitedUntil: null,
+        signedOut: false,
+      },
+      {
+        name: "Kimi login",
+        provider: "kimi",
+        isDefault: false,
+        agents: 0,
+        inUse: false,
+        limitedUntil: null,
+        signedOut: true,
+      },
+    ]);
+  });
+
   it("fails loudly on a state it cannot read rather than showing no accounts", async () => {
     const broken = new ZeroSubUsageFeed(async () => ({ accounts: "nope" }), {
       list: async () => [],
