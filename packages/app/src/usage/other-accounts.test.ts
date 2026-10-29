@@ -1,12 +1,22 @@
-import { describe, expect, it } from "vitest";
+/**
+ * @vitest-environment jsdom
+ */
+import { renderHook } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("./queries", () => ({ useUsageHostReports: vi.fn(() => []) }));
+vi.mock("./display", () => ({ useUsageDisplay: () => ({ display: { displayAs: "used" } }) }));
+
 import { i18n } from "@/i18n/i18next";
 import {
   accountNote,
   asAgentAccount,
   fullestWindow,
+  OtherAccounts,
   otherAccounts,
   shownShare,
 } from "./other-accounts";
+import { useUsageHostReports } from "./queries";
 import type { UsageAccountPresentation, UsageReportEntry, UsageWindow } from "./types";
 
 const window = (id: string, label: string, usedPct: number): UsageWindow => ({
@@ -120,5 +130,17 @@ describe("the composer popover's accounts", () => {
     const fiveHour = window("five_hour", "5-hour", 36);
     expect(shownShare(fiveHour, "used", "en")).toEqual({ percent: 36, text: "36%" });
     expect(shownShare(fiveHour, "remaining", "en")).toEqual({ percent: 64, text: "64%" });
+  });
+
+  it("asks the host for its accounts only beside an account of ZeroSub's", () => {
+    const askedHosts = () =>
+      new Set(vi.mocked(useUsageHostReports).mock.calls.map(([serverId]) => serverId));
+    const zeroSub = account("z:own", []);
+    const daemon: UsageReportEntry = { ...zeroSub, id: "claude:x", presentation: undefined };
+    renderHook(() => OtherAccounts({ serverId: "host", agentReports: [daemon] }));
+    expect(askedHosts()).toEqual(new Set([null]));
+    vi.mocked(useUsageHostReports).mockClear();
+    renderHook(() => OtherAccounts({ serverId: "host", agentReports: [zeroSub] }));
+    expect(askedHosts()).toEqual(new Set(["host"]));
   });
 });
