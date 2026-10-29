@@ -1599,8 +1599,12 @@ it("leaves a worker from a newer Paseo running, reports it incompatible, and clo
 
   await manager.closeTerminals();
 
-  expect(isProcessAlive(newer.workerPid)).toBe(false);
-  expect(isProcessAlive(newer.programPid)).toBe(false);
+  // The reaper confirms them stopped from the process table, where a killed process that its
+  // parent has not reaped yet shows as defunct; `kill(pid, 0)` still succeeds until it is reaped.
+  await waitForCondition(
+    () => !isProcessAlive(newer.workerPid) && !isProcessAlive(newer.programPid),
+    10000,
+  );
   expect(await workerRecords(paseoHome)).toEqual([]);
 });
 
