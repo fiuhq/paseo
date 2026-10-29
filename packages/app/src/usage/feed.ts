@@ -157,9 +157,7 @@ export class ZeroSubUsageFeed extends UsageFeed {
     ) {
       return this.daemon.list(request, onReport);
     }
-    const reports = this.accountsFor(state, request).map((account) =>
-      entryOf(account, this.now),
-    );
+    const reports = this.accountsFor(state, request).map((account) => entryOf(account, this.now));
     for (const report of reports) onReport?.(report);
     return reports;
   }
