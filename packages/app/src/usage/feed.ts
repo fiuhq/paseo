@@ -183,10 +183,13 @@ export class ZeroSubUsageFeed extends UsageFeed {
   }
 }
 
-/** Providers ZeroSub holds more than one account of: there, "in use" tells the accounts apart. */
+/** Providers ZeroSub holds more than one signed-in account of: there, "in use" tells them apart. */
 function providersWithSeveralAccounts(accounts: readonly ZeroSubAccount[]): ReadonlySet<string> {
   const counts = new Map<string, number>();
-  for (const account of accounts) counts.set(account.family, (counts.get(account.family) ?? 0) + 1);
+  for (const account of accounts) {
+    if (account.status === "signed_out") continue;
+    counts.set(account.family, (counts.get(account.family) ?? 0) + 1);
+  }
   return new Set([...counts].filter(([, count]) => count > 1).map(([family]) => family));
 }
 

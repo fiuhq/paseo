@@ -46,6 +46,29 @@ export function usageAccountGroups(
   };
 }
 
+/**
+ * The signed-out accounts' names on their shared line: each by its provider, and by provider and
+ * its own name where several of them share a provider.
+ */
+export function signedOutNames(entries: readonly UsageReportEntry[]): string[] {
+  const providers = entries.map((entry) => entry.presentation!.provider);
+  return entries.map((entry, index) => {
+    const provider = providers[index]!;
+    return providers.indexOf(provider) === providers.lastIndexOf(provider)
+      ? entry.sourceLabel
+      : `${entry.sourceLabel} (${entry.presentation!.name})`;
+  });
+}
+
+/**
+ * An account whose usage cannot be read and never was (OpenCode Go reads only in its console):
+ * a fact about the account, told in a muted note without an Error pill. A re-read that failed
+ * behind a retained reading stays an error.
+ */
+export function isAccountNote(entry: UsageReportEntry): boolean {
+  return entry.presentation != null && entry.report.status === "error" && !entry.lastSuccessful;
+}
+
 /** When the accounts were last read: the newest successful reading among them. */
 export function lastReadAt(reports: readonly UsageReportEntry[]): string | null {
   return reports.reduce<string | null>((newest, entry) => {

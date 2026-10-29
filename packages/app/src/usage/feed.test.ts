@@ -308,6 +308,21 @@ describe("ZeroSubUsageFeed", () => {
     ]);
   });
 
+  it("counts only signed-in accounts when deciding whether a provider's account is In use", async () => {
+    const routed = new ZeroSubUsageFeed(
+      async () => ({
+        accounts: [
+          account({ agentCount: 3 }),
+          account({ id: "claude-team", label: "Account B", status: "signed_out", usage: null }),
+        ],
+        agents: [],
+      }),
+      { list: async () => [] },
+    );
+    const [only] = await routed.list({});
+    expect(only!.presentation).toMatchObject({ name: "Account A", agents: 3, inUse: false });
+  });
+
   it("fails loudly on a state it cannot read rather than showing no accounts", async () => {
     const broken = new ZeroSubUsageFeed(async () => ({ accounts: "nope" }), {
       list: async () => [],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lastReadAt, usageAccountGroups } from "./accounts";
+import { isAccountNote, lastReadAt, signedOutNames, usageAccountGroups } from "./accounts";
 import type { UsageAccountPresentation, UsageReportEntry } from "./types";
 
 const presentation = (
@@ -56,6 +56,17 @@ describe("usageAccountGroups", () => {
     expect(usageAccountGroups([])).toBeNull();
   });
 
+  it("names signed-out accounts by provider, adding each account's name where a provider has several", () => {
+    expect(
+      signedOutNames([
+        entry("z:kimi", "Kimi Code", presentation("kimi", { signedOut: true })),
+        entry("z:c1", "Claude", presentation("claude", { name: "Account A", signedOut: true })),
+        entry("z:copilot", "GitHub Copilot", presentation("copilot", { signedOut: true })),
+        entry("z:c2", "Claude", presentation("claude", { name: "Account B", signedOut: true })),
+      ]),
+    ).toEqual(["Kimi Code", "Claude (Account A)", "GitHub Copilot", "Claude (Account B)"]);
+  });
+
   it("dates the accounts by their newest successful reading", () => {
     expect(
       lastReadAt([
@@ -64,5 +75,33 @@ describe("usageAccountGroups", () => {
         entry("z:c", "C", presentation("kimi")),
       ]),
     ).toBe("2026-10-29T03:30:00.000Z");
+  });
+});
+
+describe("isAccountNote", () => {
+  const failed = (p?: UsageAccountPresentation, retained = false): UsageReportEntry => {
+    const ok = entry("z:a", "OpenCode Go", p);
+    return {
+      ...ok,
+      report: { status: "error", error: "OpenCode Go shows usage only in the OpenCode Console." },
+      ...(retained
+        ? {
+            lastSuccessful: {
+              fetchedAt: ok.fetchedAt,
+              report: { status: "available", windows: [] },
+            },
+          }
+        : {}),
+    };
+  };
+
+  it("tells an account that was never read as a note", () => {
+    expect(isAccountNote(failed(presentation("opencode")))).toBe(true);
+  });
+
+  it("keeps a failed re-read behind a retained reading, and the daemon's errors, as errors", () => {
+    expect(isAccountNote(failed(presentation("codex"), true))).toBe(false);
+    expect(isAccountNote(failed())).toBe(false);
+    expect(isAccountNote(entry("z:b", "Claude", presentation("claude")))).toBe(false);
   });
 });

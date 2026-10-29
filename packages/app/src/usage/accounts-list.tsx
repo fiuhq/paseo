@@ -6,7 +6,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { buildPluginSurfaceRoute } from "@/plugins/routes";
 import { settingsStyles } from "@/styles/settings";
-import { lastReadAt, usageAccountGroups, type UsageAccountGroup } from "./accounts";
+import { lastReadAt, signedOutNames, usageAccountGroups, type UsageAccountGroup } from "./accounts";
 import { UsageCard } from "./card";
 import type { UsageDisplay } from "./display";
 import { ZEROSUB_PLUGIN_ID } from "./feed";
@@ -25,11 +25,13 @@ export function UsageAccountsList({
   reports,
   accounts,
   display,
+  onClose,
 }: {
   serverId: string;
   reports: UsageReportEntry[];
   accounts: NonNullable<ReturnType<typeof usageAccountGroups>>;
   display: UsageDisplay;
+  onClose?: () => void;
 }) {
   return (
     <View style={styles.list} testID="usage-accounts">
@@ -38,7 +40,7 @@ export function UsageAccountsList({
         <AccountGroup key={group.provider} serverId={serverId} group={group} display={display} />
       ))}
       {accounts.signedOut.length > 0 ? (
-        <SignedOut serverId={serverId} entries={accounts.signedOut} />
+        <SignedOut serverId={serverId} entries={accounts.signedOut} onClose={onClose} />
       ) : null}
     </View>
   );
@@ -110,16 +112,23 @@ function AccountGroup({
 }
 
 /** The signed-out accounts, named on one line, with the way to sign them in. */
-function SignedOut({ serverId, entries }: { serverId: string; entries: UsageReportEntry[] }) {
+function SignedOut({
+  serverId,
+  entries,
+  onClose,
+}: {
+  serverId: string;
+  entries: UsageReportEntry[];
+  onClose?: () => void;
+}) {
   const { t } = useTranslation();
-  const names = entries.map((entry) => entry.sourceLabel).join(", ");
-  const openAccounts = useCallback(
-    () =>
-      router.push(
-        buildPluginSurfaceRoute(serverId, ZEROSUB_PLUGIN_ID, { kind: "sidebar", id: "accounts" }),
-      ),
-    [serverId],
-  );
+  const names = signedOutNames(entries).join(", ");
+  const openAccounts = useCallback(() => {
+    onClose?.();
+    router.push(
+      buildPluginSurfaceRoute(serverId, ZEROSUB_PLUGIN_ID, { kind: "sidebar", id: "accounts" }),
+    );
+  }, [onClose, serverId]);
   return (
     <View style={styles.signedOut} testID="usage-accounts-signed-out">
       <Text style={styles.muted} numberOfLines={1}>

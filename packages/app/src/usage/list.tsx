@@ -13,10 +13,12 @@ export function UsageList({
   serverId,
   reports,
   display,
+  onClose,
 }: {
   serverId: string;
   reports: UsageReportEntry[];
   display: UsageDisplay;
+  onClose?: () => void;
 }) {
   const { inSidebar } = useUsageInSidebar();
   // Fork seam: ZeroSub's accounts lay out by provider (accounts-list.tsx).
@@ -28,6 +30,7 @@ export function UsageList({
         reports={reports}
         accounts={accounts}
         display={display}
+        onClose={onClose}
       />
     );
   }

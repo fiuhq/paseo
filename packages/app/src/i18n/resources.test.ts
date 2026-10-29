@@ -29,6 +29,9 @@ const arabicProviderUsagePluralKeys = [
   "providerUsage.timing.daysAgo",
   "providerUsage.timing.hoursAgo",
   "providerUsage.timing.minutesAgo",
+  "providerUsage.zeroSub.inUse",
+  "providerUsage.zeroSub.agents",
+  "providerUsage.zeroSub.accountCount",
 ] as const;
 
 function canonicalKeys(value: unknown): string[] {
@@ -38,7 +41,9 @@ function canonicalKeys(value: unknown): string[] {
     ...new Set(
       keys.map((key) => {
         const baseKey = key.replace(pluralSuffixPattern, "");
-        return baseKey !== key && keySet.has(baseKey) ? baseKey : key;
+        return baseKey !== key && (keySet.has(baseKey) || keySet.has(`${baseKey}_other`))
+          ? baseKey
+          : key;
       }),
     ),
   ].sort();
@@ -184,6 +189,15 @@ describe("translation resources", () => {
     for (const key of arabicProviderUsagePluralKeys) {
       for (const suffix of arabicPluralSuffixes) {
         expect(arabicStrings[`${key}_${suffix}`]).toBeTypeOf("string");
+      }
+    }
+  });
+
+  it("includes every Russian form for ZeroSub's counts", () => {
+    const russianStrings = flattenStrings(ru);
+    for (const key of ["inUse", "agents", "accountCount"]) {
+      for (const suffix of ["one", "few", "many", "other"]) {
+        expect(russianStrings[`providerUsage.zeroSub.${key}_${suffix}`]).toBeTypeOf("string");
       }
     }
   });

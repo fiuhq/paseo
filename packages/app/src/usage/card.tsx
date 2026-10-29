@@ -17,6 +17,7 @@ import type { TFunction } from "i18next";
 import { UsageBalanceBar } from "./balance-bar";
 import type { UsageDisplay } from "./display";
 import { AccountBadges, CardFooter, CardIdentity } from "./account-card-parts";
+import { isAccountNote } from "./accounts";
 import { formatAgo, formatProviderUsageLabel } from "./format";
 import { resolveUsageReport, type UsageRefresh } from "./model";
 import { useReportRefresh } from "./queries";
@@ -26,8 +27,7 @@ import { useRelativeTimeTick } from "./use-relative-time-tick";
 
 function statusText(entry: UsageReportEntry, t: TFunction): string | null {
   const report = entry.report;
-  // An account's state reads in its badges and its note; the error pill is the daemon's.
-  if (report.status === "available" || entry.presentation) return null;
+  if (report.status === "available" || isAccountNote(entry)) return null;
   return report.status === "error"
     ? t("providerUsage.status.error")
     : t("providerUsage.status.unavailable");
@@ -61,7 +61,6 @@ export function UsageCard({
   // Where there is no hover the freshness is printed on the card; elsewhere the Refresh tooltip.
   const showsFreshnessInline = isNative || isCompact || !refreshable;
   const usage = entry.report;
-  const presentation = entry.presentation ?? null;
   const status = statusText(entry, t);
   const { windows, balances, details, planLabel, successfulAt, retained, messages } =
     resolveUsageReport(entry, t);
@@ -105,7 +104,7 @@ export function UsageCard({
       </View>
 
       {messages.length > 0 ? (
-        <Text style={presentation ? styles.note : styles.error} testID="usage-login-error">
+        <Text style={isAccountNote(entry) ? styles.note : styles.error} testID="usage-login-error">
           {messages.join("\n")}
         </Text>
       ) : null}
