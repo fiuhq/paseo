@@ -2177,6 +2177,13 @@ export const ru: TranslationResources = {
       accountCount_other: "аккаунтов: {{count}}",
       signedOutLine: "Не выполнен вход: {{names}}",
       signIn: "Войти в разделе «Аккаунты»",
+      otherAccounts: "Другие аккаунты",
+      consoleOnly: "Только в консоли",
+      notReadShort: "Ещё не прочитан",
+      short: {
+        five_hour: "5ч",
+        seven_day: "нед.",
+      },
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",

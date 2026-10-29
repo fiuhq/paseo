@@ -141,6 +141,7 @@ describe("ZeroSubUsageFeed", () => {
           usedPct: 36,
           remainingPct: 64,
           resetsAt: "2026-10-29T05:00:00.000Z",
+          shortLabel: "5h",
           summary: true,
         },
         {
@@ -149,6 +150,7 @@ describe("ZeroSubUsageFeed", () => {
           usedPct: 58,
           remainingPct: 42,
           resetsAt: "2026-10-29T05:00:00.000Z",
+          shortLabel: "week",
         },
       ],
     });
@@ -185,11 +187,30 @@ describe("ZeroSubUsageFeed", () => {
             usedPct: 90,
             remainingPct: 10,
             resetsAt: "2026-10-29T05:00:00.000Z",
+            shortLabel: "5h",
             summary: true,
           },
         ],
       },
     });
+  });
+
+  it("gives a window a short name only where ZeroSub's short names hold one", async () => {
+    const monthly = account({
+      usage: {
+        fetchedAt: "2026-10-29T03:00:00.000Z",
+        windows: [window("five_hour", "5-hour", 36), window("monthly", "Monthly", 10)],
+        error: null,
+      },
+    });
+    const zeroSub = new ZeroSubUsageFeed(
+      async () => ({ accounts: [monthly], agents: [] }),
+      { list: async () => [] },
+      () => new Date("2026-10-29T04:00:00.000Z"),
+    );
+    const [entry] = await zeroSub.list({});
+    const windows = entry!.report.status === "available" ? entry!.report.windows : [];
+    expect(windows.map((w) => w.shortLabel)).toEqual(["5h", undefined]);
   });
 
   it("gives an agent the account ZeroSub routes it to, without asking the daemon", async () => {

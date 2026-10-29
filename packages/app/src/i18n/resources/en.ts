@@ -2163,6 +2163,13 @@ export const en = {
       accountCount_other: "{{count}} accounts",
       signedOutLine: "Signed out: {{names}}",
       signIn: "Sign in from Accounts",
+      otherAccounts: "Other accounts",
+      consoleOnly: "Console only",
+      notReadShort: "Not read yet",
+      short: {
+        five_hour: "5h",
+        seven_day: "week",
+      },
       families: {
         claude: "Claude",
         codex: "ChatGPT (Codex)",

@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { UsageCard } from "./card";
+import { asAgentAccount, OtherAccounts } from "./other-accounts";
 import { useUsageDisplay } from "./display";
 import { useAgentUsage } from "./queries";
 import type { UsageReportEntry } from "./types";
@@ -28,12 +29,16 @@ export function AgentUsage({
     <>
       <View style={styles.divider} />
       {view.kind === "ready" ? (
-        <AgentUsageCards
-          serverId={serverId}
-          agentId={agentId}
-          reports={view.reports}
-          refreshable={refreshable}
-        />
+        <>
+          <AgentUsageCards
+            serverId={serverId}
+            agentId={agentId}
+            reports={view.reports}
+            refreshable={refreshable}
+          />
+          {/* Fork seam: ZeroSub's other accounts under the agent's own (other-accounts.tsx). */}
+          <OtherAccounts serverId={serverId} agentReports={view.reports} />
+        </>
       ) : (
         <Text style={styles.message}>
           {view.kind === "loading" ? t("providerUsage.loading") : view.message}
@@ -60,7 +65,7 @@ function AgentUsageCards({
       key={entry.id}
       serverId={serverId}
       agentId={agentId}
-      entry={entry}
+      entry={asAgentAccount(entry)}
       display={display}
       compact
       pinnable={false}

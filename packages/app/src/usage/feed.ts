@@ -247,6 +247,9 @@ function entryOf(
         remainingPct: Math.max(0, 100 - window.usedPercent),
         resetsAt: window.resetsAt,
       };
+      // Where space is tight (the popover's other accounts, the sidebar): "5h", "week".
+      const shortKey = `providerUsage.zeroSub.short.${window.id}`;
+      if (i18n.exists(shortKey)) shown.shortLabel = i18n.t(shortKey);
       // The first window is the one the sidebar summary shows until windows are pinned.
       if (index === 0) shown.summary = true;
       return shown;

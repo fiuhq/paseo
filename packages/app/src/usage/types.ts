@@ -21,6 +21,8 @@ export interface UsageAccountPresentation {
   /** When the account is limited, when it comes back. */
   limitedUntil: string | null;
   signedOut: boolean;
+  /** The card leaves out when the account was last read (the composer popover, which has Refresh). */
+  omitReadTime?: boolean;
 }
 
 export type UsageReportEntry = ProtocolUsageReportEntry & {
