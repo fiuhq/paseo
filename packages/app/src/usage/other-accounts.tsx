@@ -4,7 +4,7 @@ import { StyleSheet } from "react-native-unistyles";
 import type { TFunction } from "i18next";
 import { isAccountNote } from "./accounts";
 import { useUsageDisplay } from "./display";
-import { formatDisplayPct, formatDurationUntil, formatProviderUsageLabel } from "./format";
+import { formatDurationUntil, formatPct, formatProviderUsageLabel } from "./format";
 import { UsageMeter } from "./meter";
 import { displayPercent, usedPercent } from "./model";
 import type { UsageDisplayAs } from "./preferences";
@@ -70,18 +70,14 @@ export function accountNote(entry: UsageReportEntry, t: TFunction): string | nul
   return null;
 }
 
-/** A row's window share as the card above it reads: used or left, under the user's preference. */
+/** A row's window share in the card's measure (used or left), as a bare percent. */
 export function shownShare(
   window: UsageWindow,
   displayAs: UsageDisplayAs,
-  t: TFunction,
   locale?: string,
 ): { percent: number; text: string } {
   const percent = displayPercent(window, displayAs);
-  return {
-    percent: percent ?? 0,
-    text: percent != null ? formatDisplayPct(percent, displayAs, locale, t) : "—",
-  };
+  return { percent: percent ?? 0, text: percent != null ? formatPct(percent, locale) : "—" };
 }
 
 /** The accounts the popover lists under the agent's own: signed in, and not the agent's. */
@@ -160,7 +156,7 @@ function OtherAccount({
   const presentation = entry.presentation!;
   const state = useAccountState(entry);
   const window = fullestWindow(entry);
-  const share = window ? shownShare(window, displayAs, t, i18n.resolvedLanguage) : null;
+  const share = window ? shownShare(window, displayAs, i18n.resolvedLanguage) : null;
   const note = window ? null : accountNote(entry, t);
   return (
     <View
@@ -181,10 +177,12 @@ function OtherAccount({
       {window && share ? (
         <View style={styles.window}>
           <View style={styles.windowText}>
-            <Text style={styles.windowLabel}>
+            <Text style={styles.windowLabel} numberOfLines={1}>
               {window.shortLabel ?? formatProviderUsageLabel(window.id, window.label, t)}
             </Text>
-            <Text style={styles.windowValue}>{share.text}</Text>
+            <Text style={styles.windowValue} numberOfLines={1}>
+              {share.text}
+            </Text>
           </View>
           <UsageMeter percent={share.percent} tone={windowTone(window)} />
         </View>

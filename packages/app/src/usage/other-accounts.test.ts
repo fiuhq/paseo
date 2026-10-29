@@ -116,12 +116,9 @@ describe("the composer popover's accounts", () => {
     expect(accountNote(base, i18n.t)).toBeNull();
   });
 
-  it("shows a row's share as used or left, as the user reads usage", () => {
+  it("shows a row's share as a bare percent of the measure the user reads, used or left", () => {
     const fiveHour = window("five_hour", "5-hour", 36);
-    expect(shownShare(fiveHour, "used", i18n.t, "en")).toEqual({ percent: 36, text: "36% used" });
-    expect(shownShare(fiveHour, "remaining", i18n.t, "en")).toEqual({
-      percent: 64,
-      text: "64% left",
-    });
+    expect(shownShare(fiveHour, "used", "en")).toEqual({ percent: 36, text: "36%" });
+    expect(shownShare(fiveHour, "remaining", "en")).toEqual({ percent: 64, text: "64%" });
   });
 });
