@@ -76,7 +76,10 @@ const state = {
       usage: null,
     }),
   ],
-  agents: [{ agentId: "a1", accountId: "claude-team" }],
+  agents: [
+    { agentId: "a1", accountId: "claude-team" },
+    { agentId: "a2", accountId: "claude-team", pendingAccountId: "claude-main" },
+  ],
 };
 
 const daemonEntry = {
@@ -195,6 +198,12 @@ describe("ZeroSubUsageFeed", () => {
       "zerosub:claude-team",
     ]);
     expect(daemonCalls).toEqual([]);
+  });
+
+  it("gives an agent waiting on a switch the account its live session still runs on", async () => {
+    expect((await feed().zeroSub.list({ agentId: "a2" })).map((r) => r.id)).toEqual([
+      "zerosub:claude-main",
+    ]);
   });
 
   it("asks the daemon for an agent ZeroSub routes nowhere, for that agent alone", async () => {

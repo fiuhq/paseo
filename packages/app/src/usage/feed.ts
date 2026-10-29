@@ -1,8 +1,9 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { z } from "zod";
 import { i18n } from "@/i18n/i18next";
-import { pluginRegistry, useInstalledPlugins } from "@/plugins/registry";
+import { pluginRegistry, useHasPluginCatalog, useInstalledPlugins } from "@/plugins/registry";
 import type { InstalledPlugin } from "@/plugins/types";
+import { useHostFeature } from "@/runtime/host-features";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { usageCopy } from "./copy";
 import type { UsageReportEntry, UsageWindow } from "./types";
@@ -54,9 +55,16 @@ export function usageFeedKind(
   return zeroSubPlugin(plugins, serverId) ? "zerosub" : "daemon";
 }
 
-/** The host's feed kind, re-read when a plugin installs or goes away. */
-export function useUsageFeedKind(serverId: string): UsageFeedKind {
-  return usageFeedKind(useInstalledPlugins(), serverId);
+/**
+ * The host's feed kind, re-read when a plugin installs or goes away; null until a host that runs
+ * plugins has had its catalog installed, so a host-wide list never asks the daemon's sources first.
+ */
+export function useUsageFeedKind(serverId: string): UsageFeedKind | null {
+  const plugins = useInstalledPlugins();
+  const runsPlugins = useHostFeature(serverId, "plugins");
+  const hasCatalog = useHasPluginCatalog(serverId);
+  if (runsPlugins && !hasCatalog) return null;
+  return usageFeedKind(plugins, serverId);
 }
 
 /** The daemon's usage sources, one per provider, each reading its provider's usage API. */
@@ -109,7 +117,14 @@ const ZeroSubAccountSchema = z.object({
 
 const ZeroSubStateSchema = z.object({
   accounts: z.array(ZeroSubAccountSchema),
-  agents: z.array(z.object({ agentId: z.string(), accountId: z.string() })),
+  agents: z.array(
+    z.object({
+      agentId: z.string(),
+      accountId: z.string(),
+      // The account the live session still runs on while a switch to `accountId` waits.
+      pendingAccountId: z.string().nullable().optional(),
+    }),
+  ),
 });
 
 export type ZeroSubAccount = z.infer<typeof ZeroSubAccountSchema>;
@@ -152,7 +167,8 @@ export class ZeroSubUsageFeed extends UsageFeed {
   private accountsFor(state: ZeroSubState, request: UsageFeedRequest): ZeroSubAccount[] {
     if (request.agentId !== undefined) {
       const route = state.agents.find((agent) => agent.agentId === request.agentId);
-      return state.accounts.filter((account) => account.id === route?.accountId);
+      const accountId = route?.pendingAccountId ?? route?.accountId;
+      return state.accounts.filter((account) => account.id === accountId);
     }
     if (request.reportIds !== undefined) {
       const ids = new Set(request.reportIds);

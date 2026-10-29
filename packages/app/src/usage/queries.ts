@@ -104,14 +104,14 @@ export function useHostUsage(serverId: string): { view: UsageView; refresh: () =
   const isSupported = useSessionStore((state) => supportsUsage(state.sessions[serverId]));
   const kind = useUsageFeedKind(serverId);
   const query = useFetchQuery({
-    queryKey: usageReportsQueryKey(serverId, kind),
-    queryFn: () => listReports(queryClient, serverId, kind),
+    queryKey: usageReportsQueryKey(serverId, kind ?? "daemon"),
+    queryFn: kind ? () => listReports(queryClient, serverId, kind) : skipToken,
     enabled: isConnected && isSupported,
     dataShape: "list",
     staleTimeMs: REPORTS_STALE_TIME_MS,
   });
   const refresh = useCallback(() => {
-    void refreshReports(queryClient, serverId, kind).catch(() => undefined);
+    if (kind) void refreshReports(queryClient, serverId, kind).catch(() => undefined);
   }, [queryClient, serverId, kind]);
   const { t } = useTranslation();
   const hostLabel = useHosts().find((host) => host.serverId === serverId)?.label ?? serverId;
@@ -137,8 +137,8 @@ export function useUsageHostReports(serverId: string | null): UsageReportEntry[]
   const queryClient = useQueryClient();
   const kind = useUsageFeedKind(serverId ?? "");
   const query = useFetchQuery({
-    queryKey: usageReportsQueryKey(serverId ?? "", kind),
-    queryFn: serverId ? () => listReports(queryClient, serverId, kind) : skipToken,
+    queryKey: usageReportsQueryKey(serverId ?? "", kind ?? "daemon"),
+    queryFn: serverId && kind ? () => listReports(queryClient, serverId, kind) : skipToken,
     dataShape: "list",
     staleTimeMs: REPORTS_STALE_TIME_MS,
   });
@@ -152,7 +152,7 @@ export function useUsageHostReports(serverId: string | null): UsageReportEntry[]
 export function useAgentUsage(serverId: string, agentId: string): AgentUsageView {
   const queryClient = useQueryClient();
   const canReport = useHostReportsUsage(serverId);
-  const queryKey = agentUsageQueryKey(serverId, useUsageFeedKind(serverId), agentId);
+  const queryKey = agentUsageQueryKey(serverId, useUsageFeedKind(serverId) ?? "daemon", agentId);
   const query = useFetchQuery({
     queryKey,
     // Consuming the signal cancels the request when the details close, so a reopen sends a new
