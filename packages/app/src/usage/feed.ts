@@ -1,7 +1,8 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { z } from "zod";
 import { i18n } from "@/i18n/i18next";
-import { pluginRegistry } from "@/plugins/registry";
+import { pluginRegistry, useInstalledPlugins } from "@/plugins/registry";
+import type { InstalledPlugin } from "@/plugins/types";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { usageCopy } from "./copy";
 import type { UsageReportEntry, UsageWindow } from "./types";
@@ -15,11 +16,16 @@ export interface UsageFeedRequest {
 
 export type OnUsageReport = (report: UsageReportEntry) => void;
 
+/** Which feed a host's usage comes from; usage queries are keyed on it so an install refetches. */
+export type UsageFeedKind = "zerosub" | "daemon";
+
 /**
  * Where a host's usage reports come from. Every usage view (the Usage dialog, the composer's
  * popover, the sidebar summary) asks `UsageFeed.forHost`, never the daemon directly.
  */
 export abstract class UsageFeed {
+  abstract readonly kind: UsageFeedKind;
+
   abstract list(request: UsageFeedRequest, onReport?: OnUsageReport): Promise<UsageReportEntry[]>;
 
   /** ZeroSub's accounts when the host runs ZeroSub, else the daemon's own usage sources. */
@@ -27,16 +33,36 @@ export abstract class UsageFeed {
     const client = getHostRuntimeStore().getClient(serverId);
     if (!client) throw new Error(usageCopy.clientUnavailable);
     const daemon = new DaemonUsageFeed(client);
-    const zeroSub = pluginRegistry
-      .getSnapshot()
-      .find((plugin) => plugin.serverId === serverId && plugin.id === ZEROSUB_PLUGIN_ID);
+    const zeroSub = zeroSubPlugin(pluginRegistry.getSnapshot(), serverId);
     if (!zeroSub) return daemon;
     return new ZeroSubUsageFeed((method, input) => zeroSub.invoke(method, input), daemon);
   }
 }
 
+function zeroSubPlugin(
+  plugins: readonly InstalledPlugin[],
+  serverId: string,
+): InstalledPlugin | undefined {
+  return plugins.find((plugin) => plugin.serverId === serverId && plugin.id === ZEROSUB_PLUGIN_ID);
+}
+
+/** The feed `UsageFeed.forHost` picks for a host, given the plugins installed right now. */
+export function usageFeedKind(
+  plugins: readonly InstalledPlugin[],
+  serverId: string,
+): UsageFeedKind {
+  return zeroSubPlugin(plugins, serverId) ? "zerosub" : "daemon";
+}
+
+/** The host's feed kind, re-read when a plugin installs or goes away. */
+export function useUsageFeedKind(serverId: string): UsageFeedKind {
+  return usageFeedKind(useInstalledPlugins(), serverId);
+}
+
 /** The daemon's usage sources, one per provider, each reading its provider's usage API. */
 export class DaemonUsageFeed extends UsageFeed {
+  readonly kind = "daemon";
+
   constructor(private readonly client: Pick<DaemonClient, "listUsageReports">) {
     super();
   }
@@ -96,6 +122,8 @@ type ZeroSubState = z.infer<typeof ZeroSubStateSchema>;
  * routes nowhere (a provider it does not hold) is asked of the daemon, for that agent alone.
  */
 export class ZeroSubUsageFeed extends UsageFeed {
+  readonly kind = "zerosub";
+
   constructor(
     private readonly invoke: (method: string, input: unknown) => Promise<unknown>,
     private readonly daemon: Pick<UsageFeed, "list">,

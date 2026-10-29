@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DaemonUsageFeed, ZeroSubUsageFeed, zeroSubReportId } from "./feed";
+import { DaemonUsageFeed, ZeroSubUsageFeed, usageFeedKind, zeroSubReportId } from "./feed";
 import type { UsageFeedRequest } from "./feed";
+import type { InstalledPlugin } from "@/plugins/types";
 import type { UsageReportEntry } from "./types";
 
 const window = (id: string, label: string, usedPercent: number) => ({
@@ -245,5 +246,16 @@ describe("DaemonUsageFeed", () => {
       await new DaemonUsageFeed(client as never).list({ agentId: "a1" }, (r) => streamed.push(r)),
     ).toEqual([entry]);
     expect(streamed).toEqual([entry]);
+  });
+});
+
+describe("usageFeedKind", () => {
+  const plugin = (serverId: string, id: string) => ({ serverId, id }) as InstalledPlugin;
+
+  it("picks ZeroSub only for the host whose ZeroSub plugin is installed", () => {
+    const plugins = [plugin("host-a", "zerosub"), plugin("host-b", "other")];
+    expect(usageFeedKind(plugins, "host-a")).toBe("zerosub");
+    expect(usageFeedKind(plugins, "host-b")).toBe("daemon");
+    expect(usageFeedKind([], "host-a")).toBe("daemon");
   });
 });

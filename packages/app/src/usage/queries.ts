@@ -27,7 +27,7 @@ import {
   type UsageRefresh,
   upsertReport,
 } from "./model";
-import { UsageFeed } from "./feed";
+import { UsageFeed, useUsageFeedKind, type UsageFeedKind } from "./feed";
 import { agentUsageQueryKey, refreshReport, usageReportsQueryKey } from "./reports";
 import type { UsageReportEntry, UsageView } from "./types";
 
@@ -62,11 +62,12 @@ async function streamReports(input: {
 function listReports(
   queryClient: QueryClient,
   serverId: string,
+  kind: UsageFeedKind,
   forceRefresh = false,
 ): Promise<UsageReportEntry[]> {
   return streamReports({
     queryClient,
-    queryKey: usageReportsQueryKey(serverId),
+    queryKey: usageReportsQueryKey(serverId, kind),
     serverId,
     forceRefresh,
   });
@@ -76,10 +77,14 @@ function supportsUsage(session: SessionState | undefined): boolean {
   return supportsUsageReports(session?.serverInfo?.features);
 }
 
-async function refreshReports(queryClient: QueryClient, serverId: string): Promise<void> {
+async function refreshReports(
+  queryClient: QueryClient,
+  serverId: string,
+  kind: UsageFeedKind,
+): Promise<void> {
   await queryClient.fetchQuery({
-    queryKey: usageReportsQueryKey(serverId),
-    queryFn: () => listReports(queryClient, serverId, true),
+    queryKey: usageReportsQueryKey(serverId, kind),
+    queryFn: () => listReports(queryClient, serverId, kind, true),
     staleTime: 0,
   });
 }
@@ -97,16 +102,17 @@ export function useHostUsage(serverId: string): { view: UsageView; refresh: () =
   const queryClient = useQueryClient();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const isSupported = useSessionStore((state) => supportsUsage(state.sessions[serverId]));
+  const kind = useUsageFeedKind(serverId);
   const query = useFetchQuery({
-    queryKey: usageReportsQueryKey(serverId),
-    queryFn: () => listReports(queryClient, serverId),
+    queryKey: usageReportsQueryKey(serverId, kind),
+    queryFn: () => listReports(queryClient, serverId, kind),
     enabled: isConnected && isSupported,
     dataShape: "list",
     staleTimeMs: REPORTS_STALE_TIME_MS,
   });
   const refresh = useCallback(() => {
-    void refreshReports(queryClient, serverId).catch(() => undefined);
-  }, [queryClient, serverId]);
+    void refreshReports(queryClient, serverId, kind).catch(() => undefined);
+  }, [queryClient, serverId, kind]);
   const { t } = useTranslation();
   const hostLabel = useHosts().find((host) => host.serverId === serverId)?.label ?? serverId;
   const view = resolveUsageView(
@@ -129,9 +135,10 @@ const NO_REPORTS: UsageReportEntry[] = [];
  */
 export function useUsageHostReports(serverId: string | null): UsageReportEntry[] {
   const queryClient = useQueryClient();
+  const kind = useUsageFeedKind(serverId ?? "");
   const query = useFetchQuery({
-    queryKey: usageReportsQueryKey(serverId ?? ""),
-    queryFn: serverId ? () => listReports(queryClient, serverId) : skipToken,
+    queryKey: usageReportsQueryKey(serverId ?? "", kind),
+    queryFn: serverId ? () => listReports(queryClient, serverId, kind) : skipToken,
     dataShape: "list",
     staleTimeMs: REPORTS_STALE_TIME_MS,
   });
@@ -145,7 +152,7 @@ export function useUsageHostReports(serverId: string | null): UsageReportEntry[]
 export function useAgentUsage(serverId: string, agentId: string): AgentUsageView {
   const queryClient = useQueryClient();
   const canReport = useHostReportsUsage(serverId);
-  const queryKey = agentUsageQueryKey(serverId, agentId);
+  const queryKey = agentUsageQueryKey(serverId, useUsageFeedKind(serverId), agentId);
   const query = useFetchQuery({
     queryKey,
     // Consuming the signal cancels the request when the details close, so a reopen sends a new
