@@ -3,9 +3,11 @@ import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { TFunction } from "i18next";
 import { isAccountNote } from "./accounts";
-import { formatDurationUntil, formatProviderUsageLabel } from "./format";
+import { useUsageDisplay } from "./display";
+import { formatDisplayPct, formatDurationUntil, formatProviderUsageLabel } from "./format";
 import { UsageMeter } from "./meter";
-import { usedPercent } from "./model";
+import { displayPercent, usedPercent } from "./model";
+import type { UsageDisplayAs } from "./preferences";
 import { useUsageHostReports } from "./queries";
 import { UsageProviderIcon } from "./source-icon";
 import { windowTone } from "./tone";
@@ -68,6 +70,20 @@ export function accountNote(entry: UsageReportEntry, t: TFunction): string | nul
   return null;
 }
 
+/** A row's window share as the card above it reads: used or left, under the user's preference. */
+export function shownShare(
+  window: UsageWindow,
+  displayAs: UsageDisplayAs,
+  t: TFunction,
+  locale?: string,
+): { percent: number; text: string } {
+  const percent = displayPercent(window, displayAs);
+  return {
+    percent: percent ?? 0,
+    text: percent != null ? formatDisplayPct(percent, displayAs, locale, t) : "—",
+  };
+}
+
 /** The accounts the popover lists under the agent's own: signed in, and not the agent's. */
 export function otherAccounts(
   reports: readonly UsageReportEntry[],
@@ -88,6 +104,7 @@ export function OtherAccounts({
 }) {
   const { t } = useTranslation();
   const reports = useUsageHostReports(serverId);
+  const { displayAs } = useUsageDisplay(reports).display;
   // Only beside an account of ZeroSub's: the daemon's reports have no other accounts to list.
   if (!agentReports.some((entry) => entry.presentation)) return null;
   const others = otherAccounts(reports, agentReports);
@@ -96,7 +113,13 @@ export function OtherAccounts({
     <View style={styles.section} testID="usage-other-accounts">
       <Text style={styles.heading}>{t("providerUsage.zeroSub.otherAccounts")}</Text>
       {others.map((entry, index) => (
-        <OtherAccount key={entry.id} serverId={serverId} entry={entry} first={index === 0} />
+        <OtherAccount
+          key={entry.id}
+          serverId={serverId}
+          entry={entry}
+          displayAs={displayAs}
+          first={index === 0}
+        />
       ))}
     </View>
   );
@@ -125,16 +148,19 @@ function useAccountState(entry: UsageReportEntry): { text: string; limited: bool
 function OtherAccount({
   serverId,
   entry,
+  displayAs,
   first,
 }: {
   serverId: string;
   entry: UsageReportEntry;
+  displayAs: UsageDisplayAs;
   first: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const presentation = entry.presentation!;
   const state = useAccountState(entry);
   const window = fullestWindow(entry);
+  const share = window ? shownShare(window, displayAs, t, i18n.resolvedLanguage) : null;
   const note = window ? null : accountNote(entry, t);
   return (
     <View
@@ -152,15 +178,15 @@ function OtherAccount({
           </Text>
         ) : null}
       </View>
-      {window ? (
+      {window && share ? (
         <View style={styles.window}>
           <View style={styles.windowText}>
             <Text style={styles.windowLabel}>
               {window.shortLabel ?? formatProviderUsageLabel(window.id, window.label, t)}
             </Text>
-            <Text style={styles.windowValue}>{`${Math.round(shareOf(window))}%`}</Text>
+            <Text style={styles.windowValue}>{share.text}</Text>
           </View>
-          <UsageMeter percent={shareOf(window)} tone={windowTone(window)} />
+          <UsageMeter percent={share.percent} tone={windowTone(window)} />
         </View>
       ) : note ? (
         <Text style={styles.state}>{note}</Text>

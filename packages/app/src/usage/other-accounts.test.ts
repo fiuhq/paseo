@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import { accountNote, asAgentAccount, fullestWindow, otherAccounts } from "./other-accounts";
+import {
+  accountNote,
+  asAgentAccount,
+  fullestWindow,
+  otherAccounts,
+  shownShare,
+} from "./other-accounts";
 import type { UsageAccountPresentation, UsageReportEntry, UsageWindow } from "./types";
 
 const window = (id: string, label: string, usedPct: number): UsageWindow => ({
@@ -108,5 +114,14 @@ describe("the composer popover's accounts", () => {
     expect(accountNote(unread, i18n.t)).toBe("Not read yet");
     expect(accountNote(retained, i18n.t)).toBeNull();
     expect(accountNote(base, i18n.t)).toBeNull();
+  });
+
+  it("shows a row's share as used or left, as the user reads usage", () => {
+    const fiveHour = window("five_hour", "5-hour", 36);
+    expect(shownShare(fiveHour, "used", i18n.t, "en")).toEqual({ percent: 36, text: "36% used" });
+    expect(shownShare(fiveHour, "remaining", i18n.t, "en")).toEqual({
+      percent: 64,
+      text: "64% left",
+    });
   });
 });
