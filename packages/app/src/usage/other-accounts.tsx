@@ -187,9 +187,8 @@ function OtherAccount({
           </View>
           <UsageMeter percent={share.percent} tone={windowTone(window)} />
         </View>
-      ) : note ? (
-        <Text style={styles.state}>{note}</Text>
       ) : null}
+      {note ? <Text style={styles.state}>{note}</Text> : null}
     </View>
   );
 }
