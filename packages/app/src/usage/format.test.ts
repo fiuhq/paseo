@@ -4,6 +4,7 @@ import {
   formatDisplayPct,
   formatAgo,
   formatAmount,
+  formatDurationUntil,
   formatPct,
   formatProviderUsageLabel,
   formatResetLabel,
@@ -121,6 +122,12 @@ describe("reset countdown", () => {
   it("joins the at-risk countdown the same way", () => {
     const iso = new Date(NOW + 3 * HOUR + 5 * MINUTE).toISOString();
     expect(formatRunsOutLabel(iso, NOW)).toBe("runs out in 3h 5m");
+  });
+
+  it("gives a badge's duration until a time, and nothing once it has passed", () => {
+    expect(formatDurationUntil(new Date(NOW + 2 * HOUR).toISOString(), NOW)).toBe("2h");
+    expect(formatDurationUntil(new Date(NOW).toISOString(), NOW)).toBeNull();
+    expect(formatDurationUntil(new Date(NOW - MINUTE).toISOString(), NOW)).toBeNull();
   });
 });
 
