@@ -147,7 +147,7 @@ export function formatDurationUntil(
 ): string | null {
   if (!iso) return null;
   const rel = relativeDuration(iso, now);
-  return rel ? formatRelativeDuration(rel, t) : null;
+  return rel?.kind === "remaining" ? formatRelativeDuration(rel, t) : null;
 }
 
 export function formatRunsOutLabel(
