@@ -87,6 +87,8 @@ export function initializeEnvironmentProxy(
       httpProxy: environment.httpProxy,
       httpsProxy: environment.httpsProxy,
       noProxy: bypassList(environment.noProxy),
+      // undici 8 forwards plain-http requests by default; proxyClient's auth is CONNECT-only.
+      proxyTunnel: true,
       clientFactory: proxyClient,
     }),
   );
