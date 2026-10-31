@@ -21,10 +21,16 @@ The invariants are:
 > agent establishes the daemon's current tail in one complete-turn request, with older history reachable
 > through backward pagination.
 
-Tool output is bounded before it enters either delivery path. Canonical shell tool output is sliced
-to 64 KiB, and the same bounded item is used for runtime timeline rows and live stream events.
-Provider history hydration applies the same rule so reopening an agent cannot restore an oversized
-tool payload.
+Every item is bounded before it enters either delivery path, because a timeline page is one
+WebSocket message and the daemon closes a socket whose outbound buffer passes 64 MiB. Tool calls get
+64 KiB and other items 256 KiB. Over budget, the largest strings are cut to a shared length with a
+`…[truncated 12.3 MB]` marker, and an oversized `data:` URL is replaced by the marker. Strings up
+to 1 KiB stay whole, so ids and paths survive. Arrays drop their trailing elements without a marker
+element, so typed arrays still match the wire schema. Limiting an item twice gives the same item. The
+budget does not bound wide objects or multi-byte text. The same
+bounded item is used for runtime timeline rows and live stream events. Provider history hydration
+applies the same rule so reopening an agent cannot restore an oversized payload. Fetches apply it
+again to assistant and reasoning rows the projection merges from many chunks.
 
 ## Presence is not delivery
 
@@ -66,15 +72,16 @@ agent messages each start a fallback turn. This deterministic fallback is shared
 and presentation; it cannot recover historical batching or steering. Older history remains
 user-driven by scrolling upward.
 
-A failed catch-up or subscription reconcile retries on its own, doubling from 1s to a 30s ceiling.
-A fixed 1s retry turned a persistent daemon-side refusal — a Codex thread that already has an active
-writer, say — into a request and a log line every second on an idle app. The delay resets on success,
-reconnect, delivery-mode change, and visibility change, so recovery is still immediate once the
-condition clears. Republishing the same visibility set is a no-op and never bypasses backoff.
+A failed catch-up or subscription reconcile keeps its sync-error callout until the user retries or the
+connection is re-established. Nothing retries on a timer, because each attempt can reopen the provider
+session, and a persistent refusal such as a Codex thread that already has an active writer would
+repeat that on an idle app. Foregrounding and gap recovery skip a chat in error. Reconnecting clears
+the error and catches up again. After a failed subscription, a retry subscribes first and then fetches
+what the chat missed. Archived chats show the same callout.
 
-Background retries are silent. The retry the user presses in the sync-error callout is a fallible
-user action and owns its pending state: `retrying` is a status the sync model publishes, not a React
-boolean, so the button reports in-flight and the callout returns to `error` when the attempt fails.
+The retry the user presses in the callout is a fallible user action and owns its pending state:
+`retrying` is a status the sync model publishes, not a React boolean, so the button reports in-flight
+and the callout returns to `error` when the attempt fails.
 
 Reaching the history-start threshold loads one older page and preserves the visible content anchor.
 Cursor progress does not trigger another page. The user must leave and return to the threshold unless
