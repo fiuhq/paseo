@@ -486,7 +486,7 @@ export default function contribute(server: PluginServerContext) {
 
 内置的 Claude 发现优先使用 macOS 钥匙串中的登录，只有当钥匙串为空时才使用 Claude Code 的凭据文件。`CLAUDE_CONFIG_DIR` 选择该文件所在的目录。新的 token 使用 OAuth 资料中的账号和组织 ID；已过期或被拒绝的资料使用存储位置的哈希。Codex 依次优先使用 Codex CLI、OpenCode、Pi 和 OMP，并按保存的元数据或 JWT 声明中的 ChatGPT 账号 ID 分组。Pi 和 OMP 的登录在过期后仍可被发现。OMP 需要 `node:sqlite`。
 
-不带 ID 调用 `usage.list_reports` 时会发现账号。带 ID 调用时，它会刷新已知的账号，而不重新发现身份。如果某个存储切换了账号，现有卡片会显示新登录的配额，直到下一次发现。报告会缓存五分钟；`forceRefresh` 会绕过缓存。条目携带 `id`、`account.label` 和 `fetchedAt`。失败的账号还会携带可选的 `loginErrors` 条目，其中包含 `harness` 和每个登录失败的 `report`。客户端通过 `server_info.features.usageSources` 判断是否启用此功能。较旧的 `provider.usage.list` RPC 会为 0.10 客户端映射同样的报告，并把问题渲染到它的 `error` 字符串中。
+不带 ID 调用 `usage.list_reports` 时会发现账号。带 ID 调用时，它会刷新已知的账号，而不重新发现身份。如果某个存储切换了账号，现有卡片会显示新登录的配额，直到下一次发现。报告会缓存五分钟；`forceRefresh` 会绕过缓存。条目携带 `id`、`account.label` 和 `fetchedAt`。失败的账号还会携带可选的 `loginErrors` 条目，其中包含 `harness` 和每个登录失败的 `report`。客户端通过 `server_info.features.usageSources` 判断是否启用此功能。较旧的 `provider.usage.list` RPC 会为 0.10 客户端映射同样的报告，并把问题渲染到它的 `error` 字符串中。当主机的 **检查用量** 开关关闭时，这两个 RPC 都会在发现之前失败，也不会运行任何来源的 `fetch()`。
 
 来源图标是一个文件路径，规则与 Provider 图标相同。
 

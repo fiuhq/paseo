@@ -609,7 +609,8 @@ new login's quota until the next discovery. Reports are cached for five minutes;
 bypasses that cache. Entries carry `id`, `account.label`, and `fetchedAt`. Failed accounts also carry optional
 `loginErrors` entries with `harness` and each login's failed `report`. Clients gate the feature
 on `server_info.features.usageSources`. The older `provider.usage.list` RPC maps the same reports
-for 0.10 clients and renders problems into its `error` string.
+for 0.10 clients and renders problems into its `error` string. With the host's **Check usage**
+switch off, both RPCs fail before discovery and no source's `fetch()` runs.
 
 The source icon is a file path with the same rules as a provider icon.
 
