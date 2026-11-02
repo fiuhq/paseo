@@ -62,6 +62,9 @@ function spawnRelayDevServer(port: number): ChildProcess {
       String(port),
       "--live-reload=false",
       "--show-interactive-dev-session=false",
+      // wrangler.toml forwards deployed traffic upstream; these tests exercise this relay.
+      "--var",
+      "PASEO_RELAY_UPSTREAM:",
     ],
     {
       cwd: relayPackageRoot,
