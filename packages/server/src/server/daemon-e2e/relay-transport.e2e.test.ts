@@ -326,7 +326,7 @@ async function waitForCapturedLog(
   const externalRelayPort = Number(process.env.PASEO_RELAY_E2E_PORT ?? "");
   const usesExternalRelay = Number.isInteger(externalRelayPort) && externalRelayPort > 0;
 
-  const startRelay = async (options: { useLocalRelay?: boolean; port?: number } = {}) => {
+  const startRelay = async (options: { port?: number } = {}) => {
     relayStdoutLines = [];
     if (usesExternalRelay) {
       relayPort = externalRelayPort;
@@ -345,10 +345,10 @@ async function waitForCapturedLog(
       String(relayPort),
       "--live-reload=false",
       "--show-interactive-dev-session=false",
+      // wrangler.toml forwards deployed traffic upstream; these tests exercise this relay.
+      "--var",
+      "PASEO_RELAY_UPSTREAM:",
     ];
-    if (options.useLocalRelay) {
-      relayArgs.push("--var", "PASEO_RELAY_UPSTREAM:");
-    }
     relayProcess = spawn(
       process.execPath,
       [
@@ -412,7 +412,7 @@ async function waitForCapturedLog(
       let terminalRoute: Awaited<ReturnType<typeof openConnectedHostTerminal>> | undefined;
       let wire: Awaited<ReturnType<typeof relayWire>> | undefined;
       try {
-        await startRelay({ useLocalRelay: true });
+        await startRelay();
         const port = relayPort;
         b = await createTestPaseoDaemon({
           relayEnabled: true,
@@ -489,7 +489,7 @@ async function waitForCapturedLog(
             { timeout: 15000 },
           )
           .toBe("DAEMON_CONNECTION_LOST");
-        await startRelay({ useLocalRelay: true, port });
+        await startRelay({ port });
         await expect
           .poll(
             async () => {
@@ -547,7 +547,7 @@ async function waitForCapturedLog(
     let daemon: Awaited<ReturnType<typeof createTestPaseoDaemon>> | undefined;
     const clients: HostClient[] = [];
     try {
-      await startRelay({ useLocalRelay: true });
+      await startRelay();
       daemon = await createTestPaseoDaemon({
         relayEnabled: true,
         relayEndpoint: `127.0.0.1:${relayPort}`,
@@ -596,7 +596,7 @@ async function waitForCapturedLog(
   test.each([true, false])(
     "large messages cross the relay with unpaced upload admission preserved (supportsDrain=%s)",
     async (supportsDrain) => {
-      await startRelay({ useLocalRelay: true });
+      await startRelay();
       const daemon = await createTestPaseoDaemon({
         relayEnabled: true,
         relayEndpoint: `127.0.0.1:${relayPort}`,
@@ -1007,7 +1007,7 @@ async function waitForCapturedLog(
       process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
 
       const { logger, lines } = createCapturingLogger();
-      await startRelay({ useLocalRelay: true });
+      await startRelay();
 
       const daemon = await createTestPaseoDaemon({
         listen: "127.0.0.1",
@@ -1418,7 +1418,7 @@ async function waitForCapturedLog(
     let client: DaemonClient | null = null;
 
     try {
-      await startRelay({ useLocalRelay: true });
+      await startRelay();
       daemon = await createTestPaseoDaemon({
         listen: "127.0.0.1",
         logger,

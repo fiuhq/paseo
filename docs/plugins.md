@@ -100,7 +100,7 @@ Built-in plugins ship from `plugins/<id>/`, with `paseo-plugin.json`, `index.ser
 checks cover that registry. Unlisted directories do not load.
 
 The `worktree-include` built-in copies gitignored files selected by
-[`.worktreeinclude`](../public-docs/worktrees.md#copy-local-files-with-worktreeinclude)
+[`.worktreeinclude`](../public-docs/worktrees/worktreeinclude.md)
 before setup and agents, through `worktree.create.after`.
 
 Desktop packaging ships the entire built-in plugin directory as an external resource,
