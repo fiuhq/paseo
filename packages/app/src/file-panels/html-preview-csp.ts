@@ -50,10 +50,10 @@ const PROLOGUE = `<!doctype html>${META}`;
 // instead of replacing the preview frame, and a #fragment link should scroll
 // within the page instead of navigating away. The listener runs on window in the
 // bubble phase, after the page's own handlers, and only acts when nothing else
-// already claimed the click. A fragment href resolves against the embedding app
-// URL inside a srcdoc frame, not about:srcdoc, so the default click would load the
-// app shell into the preview frame; setting location.hash instead keeps the
-// frame on its own document. Native keeps its navigation guard unchanged, this
+// already claimed the click. Setting location.hash keeps a fragment click on the
+// frame's own document however the frame was loaded: the web preview loads a
+// data: URL, and a srcdoc frame would resolve the fragment against the embedding
+// app URL and load the app shell instead. Native keeps its navigation guard unchanged, this
 // script never ships to the WebView document.
 //
 // A page that registers its own window click handler after this script runs

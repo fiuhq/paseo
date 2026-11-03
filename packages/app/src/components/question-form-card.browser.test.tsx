@@ -45,7 +45,10 @@ afterEach(() => {
   }
 });
 
-function buildPermission(question: Record<string, unknown>): PendingPermission {
+function buildPermission(
+  question: Record<string, unknown>,
+  following: Record<string, unknown>[] = [],
+): PendingPermission {
   return {
     key: "perm-1",
     agentId: "agent-1",
@@ -54,12 +57,12 @@ function buildPermission(question: Record<string, unknown>): PendingPermission {
       provider: "claude",
       name: "AskUserQuestion",
       kind: "question",
-      input: { questions: [question] },
+      input: { questions: [question, ...following] },
     },
   };
 }
 
-function mountCard(question: Record<string, unknown>) {
+function mountCard(question: Record<string, unknown>, following: Record<string, unknown>[] = []) {
   const onRespond = vi.fn<(response: AgentPermissionResponse) => void>();
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -67,7 +70,7 @@ function mountCard(question: Record<string, unknown>) {
   act(() =>
     root.render(
       <QuestionFormCard
-        permission={buildPermission(question)}
+        permission={buildPermission(question, following)}
         onRespond={onRespond}
         isResponding={false}
         responseError={null}
@@ -77,10 +80,14 @@ function mountCard(question: Record<string, unknown>) {
   mounted.push({ root, container });
 
   const view = within(container);
-  const optionRole = question.multiSelect ? "checkbox" : "radio";
   const otherInput = () =>
     view.getByRole<HTMLInputElement>("textbox", { name: String(question.question) });
-  const check = (label: string) => act(() => view.getByRole(optionRole, { name: label }).click());
+  const check = (label: string) =>
+    act(() =>
+      (
+        view.queryByRole("radio", { name: label }) ?? view.getByRole("checkbox", { name: label })
+      ).click(),
+    );
   const type = (text: string) => {
     const input = otherInput();
     const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -96,7 +103,7 @@ function mountCard(question: Record<string, unknown>) {
     if (!response || response.behavior !== "allow") throw new Error("card did not submit");
     return (response.updatedInput as { answers: Record<string, string> }).answers;
   };
-  return { check, type, otherInput, submit, submittedAnswers };
+  return { check, type, otherInput, submit, submittedAnswers, view, onRespond };
 }
 
 const multiSelectQuestion = {
@@ -242,11 +249,13 @@ describe("QuestionFormCard option previews", () => {
     }
   });
 
-  it("moves on to the next question after a pick, as questions without pictures do", () => {
+  it("keeps a picked picture option open until Next, as questions without pictures do", () => {
     const card = mountQuestions([layoutQuestion, shipQuestion]);
 
     card.pick("Detailed");
 
+    expect(card.currentQuestion()).toBe("Which card layout?");
+    act(() => card.view.getByRole("button", { name: "Next" }).click());
     expect(card.currentQuestion()).toBe("Ship it now?");
   });
 
@@ -629,12 +638,14 @@ describe("QuestionFormCard option previews", () => {
     expect(card.view.queryByTitle("Preview: Leaves")).toBeNull();
   });
 
-  it("still moves on after a pick when the question has no previews", () => {
+  it("still waits for Next after a pick when the question has no previews", () => {
     const card = mountQuestions([shipQuestion, layoutQuestion]);
 
     expect(card.view.queryByTestId("question-form-option-picture")).toBeNull();
     card.pick("Yes");
 
+    expect(card.currentQuestion()).toBe("Ship it now?");
+    act(() => card.view.getByRole("button", { name: "Next" }).click());
     expect(card.currentQuestion()).toBe("Which card layout?");
   });
 });
@@ -791,5 +802,33 @@ describe("question preview frame script", () => {
 
     expect(click(0)).toBe(true);
     expect(click(1)).toBe(false);
+  });
+});
+
+describe("QuestionFormCard explicit navigation", () => {
+  it("keeps a picked option visible until Next and submits only on Submit", () => {
+    const card = mountCard(singleSelectQuestion, [multiSelectQuestion]);
+    card.check("Codex");
+    expect(card.view.getByRole("radio", { name: "Codex" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(card.onRespond).not.toHaveBeenCalled();
+    act(() => card.view.getByRole("button", { name: "Next" }).click());
+    card.check("Apple");
+    expect(card.onRespond).not.toHaveBeenCalled();
+    card.submit();
+    expect(card.submittedAnswers()).toEqual({ Provider: "Codex", Fruits: "Apple" });
+  });
+
+  it("selects an option when its description is clicked without submitting", () => {
+    const card = mountCard({
+      ...singleSelectQuestion,
+      options: [{ label: "Codex", description: "Use this provider" }],
+    });
+    act(() => card.view.getByText("Use this provider").click());
+    expect(card.view.getByRole("radio", { name: "Codex" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(card.onRespond).not.toHaveBeenCalled();
   });
 });
