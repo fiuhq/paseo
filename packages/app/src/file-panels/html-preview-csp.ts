@@ -46,15 +46,13 @@ const META = `<meta http-equiv="Content-Security-Policy" content="${POLICY}">`;
 // document has to be parsed to place it.
 const PROLOGUE = `<!doctype html>${META}`;
 
-// Web only: a plain link (no target, like a chat link) should open in a new tab
-// instead of replacing the preview frame, and a #fragment link should scroll
-// within the page instead of navigating away. The listener runs on window in the
-// bubble phase, after the page's own handlers, and only acts when nothing else
-// already claimed the click. A fragment href resolves against the embedding app
-// URL inside a srcdoc frame, not about:srcdoc, so the default click would load the
-// app shell into the preview frame; setting location.hash instead keeps the
-// frame on its own document. Native keeps its navigation guard unchanged, this
-// script never ships to the WebView document.
+// Web only: a plain http(s) link (no target, like a chat link) should open in a
+// new tab instead of replacing the preview frame. The listener runs on window in
+// the bubble phase, after the page's own handlers, and only acts when nothing else
+// already claimed the click. A #fragment link resolves against the frame's data:
+// URL, fails the protocol check, and keeps the browser's own in-page navigation.
+// Native keeps its navigation guard unchanged, this script never ships to the
+// WebView document.
 //
 // A page that registers its own window click handler after this script runs
 // would otherwise see it first, so its preventDefault could never reach this
@@ -93,13 +91,6 @@ function paseoPreviewLinkClick(event) {
   var target = link.getAttribute("target");
   if (target && target !== "_self") return;
   if (link.hasAttribute("download")) return;
-
-  var rawHref = link.getAttribute("href") || "";
-  if (rawHref.indexOf("#") === 0) {
-    event.preventDefault();
-    location.hash = rawHref;
-    return;
-  }
 
   var url;
   try {
