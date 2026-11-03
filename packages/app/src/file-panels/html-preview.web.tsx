@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { withPreviewCspWeb } from "./html-preview-csp";
 
 // The frame runs a page the way a browser tab would, minus the Paseo app's
-// privileges. It never gets `allow-same-origin`: a srcdoc frame with that token
-// takes the app's origin, and with it the daemon session. The page stays in an
+// privileges. It never gets `allow-same-origin`, so whatever its source the frame
+// never shares the app's origin or the daemon session. The page stays in an
 // opaque origin that cannot reach the app's DOM, cookies, or storage (storage APIs
 // throw inside it). It never gets `allow-top-navigation*`, so it cannot replace the
 // app with a page of its own.
