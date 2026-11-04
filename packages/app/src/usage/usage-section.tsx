@@ -80,7 +80,7 @@ export function UsageBody({
         title={t("providerUsage.errorTitle")}
         description={view.message}
       >
-        <Button variant="outline" size="sm" onPress={onRefresh}>
+        <Button variant="outline" onPress={onRefresh}>
           {t("providerUsage.retry")}
         </Button>
       </Alert>
