@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe("PluginRegistry", () => {
-  it("knows a host's catalog once installed, even an empty one, and forgets it with the host", () => {
+  it("knows a host's catalog once installed, even an empty one, or once its first load failed, and forgets it with the host", () => {
     let published = 0;
     const unsubscribe = pluginRegistry.subscribe(() => published++);
     try {
@@ -84,7 +84,16 @@ describe("PluginRegistry", () => {
       pluginRegistry.installCatalog("host-a", []);
       expect(registry.hasCatalog("host-a")).toBe(true);
       expect(registry.hasCatalog("host-b")).toBe(false);
+      // The catalog status tells subscribers; an empty install keeps the snapshot as it was.
+      expect(published).toBe(0);
+      registry.setCatalogStatus("host-b", "error");
+      expect(registry.hasCatalog("host-b")).toBe(true);
       expect(published).toBe(1);
+      // A retry after a failed load keeps the host's plugins known while it runs.
+      registry.setCatalogStatus("host-b", "loading");
+      expect(registry.hasCatalog("host-b")).toBe(true);
+      pluginRegistry.removeHost("host-b");
+      expect(registry.hasCatalog("host-b")).toBe(false);
       pluginRegistry.removeHost("host-a");
       expect(registry.hasCatalog("host-a")).toBe(false);
     } finally {

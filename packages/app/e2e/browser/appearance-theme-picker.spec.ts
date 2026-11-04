@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { seedWorkspace } from "../support/helpers/seed-client";
@@ -9,9 +10,11 @@ test("shows Pure black in the appearance picker", async ({ page }, testInfo) => 
   await expect(page.getByTestId("settings-sidebar")).toBeVisible();
   await openSettingsSection(page, "appearance");
 
-  const themeTrigger = page.getByLabel("Theme: System", { exact: true });
-  await themeTrigger.click();
-  await expect(page.getByText("Pure black", { exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "System", exact: true })).toBeChecked();
+  await expect(
+    page.getByRole("radiogroup", { name: "Theme" }).getByRole("radio").first(),
+  ).toHaveAccessibleName("System");
+  await expect(page.getByRole("radio", { name: "Pure black", exact: true })).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("appearance-theme-picker.png"),
     fullPage: true,
@@ -93,4 +96,52 @@ test("applies the interface font size to settings text", async ({ page }) => {
   await expect(interfaceSizeInput).toHaveValue("12");
   await expect(contentSizeInput).toHaveValue("21");
   await expect(sectionTitle).toHaveCSS("font-size", "10px");
+});
+
+// Each built-in tile draws its preview in its own theme's colors; System draws its light theme,
+// then its dark theme. Comparing against those tiles keeps the expected colors out of the test.
+async function previewColors(page: Page, name: string): Promise<string[]> {
+  return page.getByRole("radio", { name, exact: true }).evaluate((tile) =>
+    Array.from(tile.querySelectorAll("div"))
+      .map((node) => getComputedStyle(node).backgroundColor)
+      .filter((color) => color !== "rgba(0, 0, 0, 0)"),
+  );
+}
+
+async function expectSystemPreviewToShow(page: Page, light: string, dark: string): Promise<void> {
+  const lightColors = await previewColors(page, light);
+  const darkColors = await previewColors(page, dark);
+  expect(lightColors).not.toEqual(darkColors);
+  await expect.poll(() => previewColors(page, "System")).toEqual([...lightColors, ...darkColors]);
+}
+
+test("previews the configured System pair in the System tile", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "@paseo:app-settings",
+      JSON.stringify({
+        theme: "auto",
+        systemLightTheme: "claudeLight",
+        systemDarkTheme: "midnight",
+      }),
+    );
+  });
+  await page.goto("/settings");
+  await expect(page.getByTestId("settings-sidebar")).toBeVisible();
+  await openSettingsSection(page, "appearance");
+
+  await expect(page.getByRole("radio", { name: "System", exact: true })).toBeChecked();
+  await expectSystemPreviewToShow(page, "Claude light", "Midnight");
+  await page.screenshot({
+    path: testInfo.outputPath("system-tile-configured-pair.png"),
+    fullPage: true,
+  });
+});
+
+test("previews Light and Dark in the System tile by default", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByTestId("settings-sidebar")).toBeVisible();
+  await openSettingsSection(page, "appearance");
+
+  await expectSystemPreviewToShow(page, "Light", "Dark");
 });

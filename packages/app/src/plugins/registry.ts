@@ -13,6 +13,7 @@ import { runPluginClientBundle } from "./evaluate";
 import type { InstalledPlugin } from "./types";
 
 type CatalogPlugin = Awaited<ReturnType<DaemonClient["getPluginCatalog"]>>[number];
+export type PluginCatalogStatus = "loading" | "ready" | "error";
 
 export class PluginRegistry {
   private readonly byHost = new Map<string, InstalledPlugin[]>();
@@ -20,6 +21,8 @@ export class PluginRegistry {
   private snapshot: InstalledPlugin[] = [];
   private readonly disposed = new WeakSet<InstalledPlugin>();
   private readonly evaluationErrors = new Map<string, string>();
+  private readonly catalogStatuses = new Map<string, PluginCatalogStatus>();
+  private readonly failedCatalogs = new Set<string>();
   /** The client each host's installations were bound to; their Paseo API and RPCs call it. */
   private readonly clientByHost = new Map<string, DaemonClient>();
 
@@ -38,11 +41,23 @@ export class PluginRegistry {
 
   getSnapshot = (): InstalledPlugin[] => this.snapshot;
 
-  /** Whether the host's plugins are known: its catalog was installed, or its first load failed. */
-  hasCatalog = (serverId: string): boolean => this.byHost.has(serverId);
+  /** Whether the host's plugins are known: its catalog was installed, or a load of it failed. */
+  hasCatalog = (serverId: string): boolean =>
+    this.byHost.has(serverId) || this.failedCatalogs.has(serverId);
 
   getEvaluationError(serverId: string, pluginId: string): string | undefined {
     return this.evaluationErrors.get(`${serverId}/${pluginId}`);
+  }
+
+  getCatalogStatus(serverId: string): PluginCatalogStatus {
+    return this.catalogStatuses.get(serverId) ?? "loading";
+  }
+
+  setCatalogStatus(serverId: string, status: PluginCatalogStatus): void {
+    if (this.catalogStatuses.get(serverId) === status) return;
+    this.catalogStatuses.set(serverId, status);
+    if (status === "error") this.failedCatalogs.add(serverId);
+    for (const listener of this.listeners) listener();
   }
 
   installCatalog(
@@ -54,7 +69,6 @@ export class PluginRegistry {
       audio: Pick<AudioEngine, "play">;
     },
   ): boolean {
-    const firstCatalog = !this.byHost.has(serverId);
     const previous = this.byHost.get(serverId) ?? [];
     const previousErrors = this.hostEvaluationErrors(serverId);
     // Installations call the client they were created with, so a new client replaces them all.
@@ -167,7 +181,6 @@ export class PluginRegistry {
     // An unchanged catalog keeps the snapshot, so timeline projections cached against the
     // installed transformers stay valid across a reconnect.
     const unchanged =
-      !firstCatalog &&
       installed.length === previous.length &&
       installed.every((plugin, index) => plugin === previous[index]) &&
       this.hostEvaluationErrors(serverId) === previousErrors;
@@ -182,8 +195,15 @@ export class PluginRegistry {
   }
 
   removeHost(serverId: string): void {
+    const hadCatalog = this.catalogStatuses.delete(serverId);
+    this.failedCatalogs.delete(serverId);
     const installed = this.byHost.get(serverId);
-    if (!installed) return;
+    if (!installed) {
+      if (hadCatalog) {
+        for (const listener of this.listeners) listener();
+      }
+      return;
+    }
     for (const plugin of installed) this.dispose(plugin);
     for (const key of this.evaluationErrors.keys()) {
       if (key.startsWith(`${serverId}/`)) this.evaluationErrors.delete(key);
@@ -263,6 +283,14 @@ export function useInstalledPlugin(serverId: string, pluginId: string): Installe
     useInstalledPlugins().find(
       (plugin) => plugin.serverId === serverId && plugin.id === pluginId,
     ) ?? null
+  );
+}
+
+export function usePluginCatalogStatus(serverId: string): PluginCatalogStatus {
+  return useSyncExternalStore(
+    pluginRegistry.subscribe,
+    () => pluginRegistry.getCatalogStatus(serverId),
+    () => pluginRegistry.getCatalogStatus(serverId),
   );
 }
 
