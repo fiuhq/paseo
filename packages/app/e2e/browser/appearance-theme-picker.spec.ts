@@ -101,13 +101,11 @@ test("applies the interface font size to settings text", async ({ page }) => {
 // Each built-in tile draws its preview in its own theme's colors; System draws its light theme,
 // then its dark theme. Comparing against those tiles keeps the expected colors out of the test.
 async function previewColors(page: Page, name: string): Promise<string[]> {
-  return page
-    .getByRole("radio", { name, exact: true })
-    .evaluate((tile) =>
-      Array.from(tile.querySelectorAll("div"))
-        .map((node) => getComputedStyle(node).backgroundColor)
-        .filter((color) => color !== "rgba(0, 0, 0, 0)"),
-    );
+  return page.getByRole("radio", { name, exact: true }).evaluate((tile) =>
+    Array.from(tile.querySelectorAll("div"))
+      .map((node) => getComputedStyle(node).backgroundColor)
+      .filter((color) => color !== "rgba(0, 0, 0, 0)"),
+  );
 }
 
 async function expectSystemPreviewToShow(page: Page, light: string, dark: string): Promise<void> {
