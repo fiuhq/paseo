@@ -22,6 +22,7 @@ export class PluginRegistry {
   private readonly disposed = new WeakSet<InstalledPlugin>();
   private readonly evaluationErrors = new Map<string, string>();
   private readonly catalogStatuses = new Map<string, PluginCatalogStatus>();
+  private readonly failedCatalogs = new Set<string>();
   /** The client each host's installations were bound to; their Paseo API and RPCs call it. */
   private readonly clientByHost = new Map<string, DaemonClient>();
 
@@ -40,9 +41,9 @@ export class PluginRegistry {
 
   getSnapshot = (): InstalledPlugin[] => this.snapshot;
 
-  /** Whether the host's plugins are known: its catalog was installed, or its first load failed. */
+  /** Whether the host's plugins are known: its catalog was installed, or a load of it failed. */
   hasCatalog = (serverId: string): boolean =>
-    this.byHost.has(serverId) || this.catalogStatuses.get(serverId) === "error";
+    this.byHost.has(serverId) || this.failedCatalogs.has(serverId);
 
   getEvaluationError(serverId: string, pluginId: string): string | undefined {
     return this.evaluationErrors.get(`${serverId}/${pluginId}`);
@@ -55,6 +56,7 @@ export class PluginRegistry {
   setCatalogStatus(serverId: string, status: PluginCatalogStatus): void {
     if (this.catalogStatuses.get(serverId) === status) return;
     this.catalogStatuses.set(serverId, status);
+    if (status === "error") this.failedCatalogs.add(serverId);
     for (const listener of this.listeners) listener();
   }
 
@@ -194,6 +196,7 @@ export class PluginRegistry {
 
   removeHost(serverId: string): void {
     const hadCatalog = this.catalogStatuses.delete(serverId);
+    this.failedCatalogs.delete(serverId);
     const installed = this.byHost.get(serverId);
     if (!installed) {
       if (hadCatalog) {

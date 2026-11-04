@@ -8,8 +8,8 @@ import type { PluginThemeOption } from "@/plugins/themes";
 import {
   THEME_OPTIONS,
   PLUGIN_THEME_PREFERENCE,
-  darkTheme,
-  lightTheme,
+  REGISTERED_THEMES,
+  THEME_TO_UNISTYLES,
   type Theme,
 } from "@/styles/theme";
 import { useContributedThemes } from "./provider";
@@ -187,14 +187,15 @@ function ThemePreview({ theme }: { theme: Theme }) {
   );
 }
 
-/** "System" follows the OS: light on the left half, dark on the right. */
+/** "System" follows the OS: its light theme on the left half, its dark theme on the right. */
 function SystemThemePreview() {
+  const { settings } = useAppSettings();
   return (
     <View style={styles.preview}>
-      <ThemePreview theme={lightTheme} />
+      <ThemePreview theme={REGISTERED_THEMES[THEME_TO_UNISTYLES[settings.systemLightTheme]]} />
       <View style={styles.systemDarkHalf}>
         <View style={styles.systemDarkOffset}>
-          <ThemePreview theme={darkTheme} />
+          <ThemePreview theme={REGISTERED_THEMES[THEME_TO_UNISTYLES[settings.systemDarkTheme]]} />
         </View>
       </View>
     </View>

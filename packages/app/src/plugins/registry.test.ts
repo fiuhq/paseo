@@ -89,7 +89,11 @@ describe("PluginRegistry", () => {
       registry.setCatalogStatus("host-b", "error");
       expect(registry.hasCatalog("host-b")).toBe(true);
       expect(published).toBe(1);
+      // A retry after a failed load keeps the host's plugins known while it runs.
+      registry.setCatalogStatus("host-b", "loading");
+      expect(registry.hasCatalog("host-b")).toBe(true);
       pluginRegistry.removeHost("host-b");
+      expect(registry.hasCatalog("host-b")).toBe(false);
       pluginRegistry.removeHost("host-a");
       expect(registry.hasCatalog("host-a")).toBe(false);
     } finally {
