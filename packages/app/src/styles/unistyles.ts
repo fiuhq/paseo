@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native-unistyles";
 import { isWeb } from "@/constants/platform";
-import { hasFinePointer } from "@/hooks/use-fine-pointer";
+import { hasFinePointer } from "@/hooks/pointer-capabilities";
 import { REGISTERED_THEMES } from "./theme";
 
 // `md` is both where sidebars dock beside the workspace and where desktop styles begin, so the
