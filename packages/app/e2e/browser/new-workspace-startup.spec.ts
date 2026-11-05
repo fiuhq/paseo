@@ -67,9 +67,11 @@ test.describe("New workspace startup", () => {
       const composer = page
         .getByPlaceholder("Add more — it queues behind your first message")
         .filter({ visible: true });
+      await expect(composer).toBeFocused();
       await composer.fill("Second message");
       await composer.press("Enter");
       await expect(composer).toBeFocused();
+      await expect(composer).toHaveValue("");
       await expect(page.getByText("Second message").filter({ visible: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Send queued message now" })).toHaveCount(0);
       await composer.fill("Typed but not sent");
@@ -88,6 +90,42 @@ test.describe("New workspace startup", () => {
           .filter({ hasText: "Second message" })
           .filter({ visible: true }),
       ).toBeVisible({ timeout: 60_000 });
+
+      if (created.workspaceDirectory) {
+        await archiveWorkspaceFromDaemon(client, created.workspaceDirectory).catch(() => undefined);
+      }
+    } finally {
+      gate.releaseAgent();
+      await archiveLocalWorkspaceFromDaemon(client, project.workspaceId).catch(() => undefined);
+      await client.close().catch(() => undefined);
+      await repo.cleanup();
+    }
+  });
+
+  test("puts the first message ahead of typed text when the agent fails to start", async ({
+    page,
+  }) => {
+    const repo = await createTempGitRepo("workspace-startup-agent-fail-");
+    const gate = await gateBrowserCreationPhases(page);
+    const { client, project } = await openComposer(page, repo.path);
+    try {
+      await selectWorkspaceIsolation(page, "worktree");
+      await submitNewWorkspacePrompt(page, "First message");
+      await gate.waitForCreateRequest();
+
+      gate.releaseWorkspace();
+      const created = await waitForCreatedWorkspace(client, new Set([project.workspaceId]));
+      await expect(page).toHaveURL(new RegExp(created.id), { timeout: 30_000 });
+
+      const composer = page
+        .getByPlaceholder("Add more — it queues behind your first message")
+        .filter({ visible: true });
+      await composer.fill("Typed since");
+      gate.failCreation("Unable to start agent");
+
+      await expect(
+        page.getByRole("textbox", { name: "Message agent..." }).filter({ visible: true }),
+      ).toHaveValue("First message\n\nTyped since", { timeout: 30_000 });
 
       if (created.workspaceDirectory) {
         await archiveWorkspaceFromDaemon(client, created.workspaceDirectory).catch(() => undefined);

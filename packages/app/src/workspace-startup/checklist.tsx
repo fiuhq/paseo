@@ -148,15 +148,12 @@ export function WorkspaceStartupSummary({
   agentLabel: string;
 }) {
   const { t } = useTranslation();
-  const values = useMemo(
-    () => ({
-      total: formatSeconds(view.totalSeconds),
-      workspace: formatSeconds(view.workspaceSeconds),
-      agent: agentLabel,
-      agentTime: formatSeconds(view.agentSeconds),
-    }),
-    [agentLabel, view],
-  );
+  const values = {
+    total: formatSeconds(view.totalSeconds),
+    workspace: formatSeconds(view.workspaceSeconds),
+    agent: agentLabel,
+    agentTime: formatSeconds(view.agentSeconds),
+  };
   const text = view.isWorktree
     ? t("newWorkspace.startup.summaryWorktree", values)
     : t("newWorkspace.startup.summaryWorkspace", values);
