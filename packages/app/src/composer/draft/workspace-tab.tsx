@@ -407,10 +407,6 @@ export function WorkspaceDraftAgentTab({
   });
   const draftAttachmentScopeKey = useDraftWorkspaceAttachmentScopeKey(draftId);
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
-  const attachmentScopeKeys = useMemo(
-    () => [draftAttachmentScopeKey, workspaceAttachmentScopeKey].filter(Boolean),
-    [draftAttachmentScopeKey, workspaceAttachmentScopeKey],
-  );
   const clearWorkspaceAttachments = useWorkspaceAttachmentsStore(
     (state) => state.clearWorkspaceAttachments,
   );
@@ -610,6 +606,14 @@ export function WorkspaceDraftAgentTab({
     [composerState.agentControls, handleDropdownCloseFocus, isSubmitting],
   );
   const startupQueue = useStartupQueue({ serverId, draftId, isSubmitting });
+  const attachmentScopeKeys = useMemo(
+    () =>
+      [
+        startupQueue.queueUntilReady ? "" : draftAttachmentScopeKey,
+        workspaceAttachmentScopeKey,
+      ].filter(Boolean),
+    [draftAttachmentScopeKey, startupQueue.queueUntilReady, workspaceAttachmentScopeKey],
+  );
   const dockContent = (
     <View style={styles.contentContainer}>
       {isSubmitting && draftAgent ? (
