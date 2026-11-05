@@ -165,7 +165,9 @@ test("fullscreen creation returns inline and keeps submission locked when reopen
       await expect(composerLocator(page)).toHaveValue(DRAFT);
       await expect(composerLocator(page)).not.toBeEditable();
       await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
-      await expect(page.getByRole("progressbar")).toBeVisible();
+      await expect(
+        page.getByTestId("workspace-create-submit").getByRole("progressbar"),
+      ).toBeVisible();
     });
     await test.step("fullscreen can reopen while pending without unlocking or duplicating submission", async () => {
       await enterComposerFullscreen(page);
@@ -173,7 +175,9 @@ test("fullscreen creation returns inline and keeps submission locked when reopen
       await expect(composerLocator(page)).toHaveValue(DRAFT);
       await expect(composerLocator(page)).not.toBeEditable();
       await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
-      await expect(page.getByRole("progressbar")).toBeVisible();
+      await expect(
+        page.getByTestId("workspace-create-submit").getByRole("progressbar"),
+      ).toBeVisible();
       await exitComposerFullscreen(page);
     });
     delay.release();

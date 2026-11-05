@@ -30,7 +30,7 @@ import {
   openGithubWorkspace,
 } from "../support/helpers/composer";
 import {
-  delayBrowserAgentCreatedStatus,
+  delayBrowserWorkspaceCreatedResponse,
   openNewWorkspaceComposer,
 } from "../support/helpers/new-workspace";
 import { gotoAppShell } from "../support/helpers/app";
@@ -272,11 +272,11 @@ test.describe("Composer attachments", () => {
     }
   });
 
-  test("composer is locked while new workspace agent is being created", async ({ page }) => {
+  test("composer is locked while the new workspace is being created", async ({ page }) => {
     test.setTimeout(120_000);
     const serverId = getServerId();
 
-    const agentCreatedDelay = await delayBrowserAgentCreatedStatus(page);
+    const workspaceCreatedDelay = await delayBrowserWorkspaceCreatedResponse(page);
     const workspace = await seedWorkspace({ repoPrefix: "attach-lock-" });
 
     try {
@@ -299,17 +299,16 @@ test.describe("Composer attachments", () => {
       await expect(createButton).toBeVisible({ timeout: 30_000 });
       await createButton.click();
 
-      await agentCreatedDelay.waitForCreateRequest();
-      await agentCreatedDelay.waitForDelayedCreatedStatus();
+      await workspaceCreatedDelay.waitForCreateRequest();
 
       await expectComposerDisabled(page);
       await expectAttachButtonDisabled(page);
 
-      agentCreatedDelay.release();
+      workspaceCreatedDelay.release();
 
       await expectComposerEditable(page);
     } finally {
-      agentCreatedDelay.release();
+      workspaceCreatedDelay.release();
       await workspace.cleanup();
     }
   });

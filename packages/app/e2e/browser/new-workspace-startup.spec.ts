@@ -1,5 +1,6 @@
 import { expect, test } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
+import { expectRememberedModel } from "../support/helpers/model-memory";
 import {
   archiveLocalWorkspaceFromDaemon,
   archiveWorkspaceFromDaemon,
@@ -26,6 +27,8 @@ test.describe("New workspace startup", () => {
       projectKey: project.projectKey,
       projectDisplayName: project.projectDisplayName,
     });
+    // Create refuses with "Select a model" until the provider list has resolved the saved model.
+    await expectRememberedModel(page, "Ten second stream", { timeout: 30_000 });
     return { client, project };
   }
 
@@ -143,11 +146,14 @@ test.describe("New workspace startup", () => {
     const gate = await gateBrowserCreationPhases(page);
     const { client, project } = await openComposer(page, repo.path);
     try {
+      await selectWorkspaceIsolation(page, "worktree");
       await submitNewWorkspacePrompt(page, "This one fails");
       await gate.waitForCreateRequest();
       const checklist = page.getByTestId("workspace-startup-checklist").filter({ visible: true });
       await expect(checklist).toBeVisible({ timeout: 30_000 });
 
+      // The gate fails creation for the app only, so the daemon's worktree still needs archiving.
+      const created = await waitForCreatedWorkspace(client, new Set([project.workspaceId]));
       gate.failCreation("Unable to create worktree");
 
       await expect(checklist).toHaveCount(0, { timeout: 30_000 });
@@ -156,6 +162,10 @@ test.describe("New workspace startup", () => {
       await expect(page.getByRole("textbox", { name: "Message agent..." })).toHaveValue(
         "This one fails",
       );
+
+      if (created.workspaceDirectory) {
+        await archiveWorkspaceFromDaemon(client, created.workspaceDirectory).catch(() => undefined);
+      }
     } finally {
       gate.releaseAgent();
       await archiveLocalWorkspaceFromDaemon(client, project.workspaceId).catch(() => undefined);

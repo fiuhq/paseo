@@ -62,10 +62,14 @@ export async function expectCreatedModelAgents(
   await expect(page.getByTestId(/^workspace-tab-agent_/).filter({ visible: true })).toHaveCount(1);
 }
 
-export async function expectRememberedModel(page: Page, label: string) {
+export async function expectRememberedModel(
+  page: Page,
+  label: string,
+  options?: { timeout?: number },
+) {
   await expect(
     page
       .getByRole("button", { name: `Select model (${label})`, exact: true })
       .filter({ visible: true }),
-  ).toBeVisible();
+  ).toBeVisible(options);
 }
