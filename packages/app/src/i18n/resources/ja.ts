@@ -1358,6 +1358,20 @@ export const ja: TranslationResources = {
     },
   },
   newWorkspace: {
+    startup: {
+      title: "準備中",
+      creatingWorktree: "worktree を作成中",
+      worktreeReady: "worktree {{name}}",
+      worktreeReadyUnnamed: "worktree の準備完了",
+      openingWorkspace: "ワークスペースを開いています",
+      workspaceReady: "ワークスペースの準備完了",
+      startingAgent: "{{agent}} を起動中",
+      sendsWhenReady: "{{agent}} の準備ができるとメッセージが送信されます",
+      summaryWorktree: "{{total}} で準備完了 · worktree {{workspace}} · {{agent}} {{agentTime}}",
+      summaryWorkspace:
+        "{{total}} で準備完了 · ワークスペース {{workspace}} · {{agent}} {{agentTime}}",
+      queuePlaceholder: "追加入力は最初のメッセージの後にキューされます",
+    },
     title: "新しいワークスペース",
     create: "作成",
     isolation: {

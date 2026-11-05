@@ -1362,6 +1362,20 @@ export const ru: TranslationResources = {
     },
   },
   newWorkspace: {
+    startup: {
+      title: "Подготовка",
+      creatingWorktree: "Создание worktree",
+      worktreeReady: "Worktree {{name}}",
+      worktreeReadyUnnamed: "Worktree готов",
+      openingWorkspace: "Открытие рабочего пространства",
+      workspaceReady: "Рабочее пространство готово",
+      startingAgent: "Запуск {{agent}}",
+      sendsWhenReady: "Сообщение отправится, когда {{agent}} будет готов",
+      summaryWorktree: "Готово за {{total}} · worktree {{workspace}} · {{agent}} {{agentTime}}",
+      summaryWorkspace:
+        "Готово за {{total}} · рабочее пространство {{workspace}} · {{agent}} {{agentTime}}",
+      queuePlaceholder: "Добавьте ещё — встанет в очередь после первого сообщения",
+    },
     title: "Новое рабочее пространство",
     create: "Создать",
     isolation: {

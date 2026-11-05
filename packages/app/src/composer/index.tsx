@@ -376,7 +376,8 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
 interface RenderQueueTrackArgs {
   queuedMessages: readonly QueuedMessage[];
   handleEditQueuedMessage: (id: string) => void;
-  handleSendQueuedNow: (id: string) => Promise<void>;
+  /** Null while the agent is still starting: there is nothing to send a message ahead to. */
+  handleSendQueuedNow: ((id: string) => Promise<void>) | null;
   editLabel: string;
   sendNowLabel: string;
 }
@@ -666,7 +667,7 @@ function resolveMessageInputPassthroughAction(
 interface QueuedMessageRowProps {
   item: QueuedMessage;
   onEdit: (id: string) => void;
-  onSendNow: (id: string) => void;
+  onSendNow: ((id: string) => void) | null;
   editLabel: string;
   sendNowLabel: string;
 }
@@ -682,7 +683,7 @@ function QueuedMessageRow({
     onEdit(item.id);
   }, [onEdit, item.id]);
   const handleSendNow = useCallback(() => {
-    onSendNow(item.id);
+    onSendNow?.(item.id);
   }, [onSendNow, item.id]);
   return (
     <View style={styles.queueItem}>
@@ -698,14 +699,16 @@ function QueuedMessageRow({
         >
           <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
         </Pressable>
-        <Pressable
-          onPress={handleSendNow}
-          style={[styles.queueActionButton, styles.queueSendButton]}
-          accessibilityLabel={sendNowLabel}
-          accessibilityRole="button"
-        >
-          <ThemedArrowUp size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
-        </Pressable>
+        {onSendNow ? (
+          <Pressable
+            onPress={handleSendNow}
+            style={[styles.queueActionButton, styles.queueSendButton]}
+            accessibilityLabel={sendNowLabel}
+            accessibilityRole="button"
+          >
+            <ThemedArrowUp size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -936,6 +939,12 @@ interface ComposerProps {
   submitIcon?: "arrow" | "return";
   /** Externally controlled loading state. When true, disables the submit button. */
   isSubmitLoading?: boolean;
+  /**
+   * The agent is still starting. The input stays open and every submit joins the agent's queue,
+   * which drains after its first turn; a queued message cannot be sent ahead, as there is no agent
+   * to send it to yet.
+   */
+  queueUntilReady?: boolean;
   /** When true, waits for pasted forge links to resolve before enabling submit. */
   waitForForgeAutoAttachOnSubmit?: boolean;
   submitBehavior?: "clear" | "preserve-and-lock";
@@ -1249,6 +1258,7 @@ function ComposerContentImpl({
   submitButtonTestID,
   submitIcon = "arrow",
   isSubmitLoading = false,
+  queueUntilReady = false,
   waitForForgeAutoAttachOnSubmit = false,
   submitBehavior = "clear",
   blurOnSubmit = false,
@@ -1667,7 +1677,7 @@ function ComposerContentImpl({
         allowEmptySubmit,
         forceSend,
         submitBehavior,
-        isAgentRunning,
+        isAgentRunning: isAgentRunning || queueUntilReady,
         // Parent-managed submits are still valid submit paths even when the
         // transport is disconnected, because the parent decides the failure mode.
         canSubmit: Boolean(sendAgentMessageRef.current || onSubmitMessageRef.current),
@@ -1705,6 +1715,7 @@ function ComposerContentImpl({
       hasExternalContent,
       isAgentRunning,
       queueMessage,
+      queueUntilReady,
       setSelectedAttachments,
       replaceUserInput,
       submitBehavior,
@@ -2355,11 +2366,11 @@ function ComposerContentImpl({
       renderQueueTrack({
         queuedMessages,
         handleEditQueuedMessage,
-        handleSendQueuedNow,
+        handleSendQueuedNow: queueUntilReady ? null : handleSendQueuedNow,
         editLabel: t("composer.attachments.editQueuedMessage"),
         sendNowLabel: t("composer.attachments.sendQueuedMessageNow"),
       }),
-    [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
+    [handleEditQueuedMessage, handleSendQueuedNow, queueUntilReady, queuedMessages, t],
   );
 
   const autocompleteConfiguration = useMemo(
@@ -2384,8 +2395,9 @@ function ComposerContentImpl({
     ],
   );
 
+  const isWaitingOnSubmit = isSubmitLoading && !queueUntilReady;
   const isSubmitLoadingVisible =
-    isProcessing || isSubmitLoading || isUploadingFile || pendingNativeImagePastes > 0;
+    isProcessing || isWaitingOnSubmit || isUploadingFile || pendingNativeImagePastes > 0;
   const isSubmitDisabled =
     isSubmitLoadingVisible || (waitForForgeAutoAttachOnSubmit && isForgeResolving);
 
@@ -2486,7 +2498,7 @@ function ComposerContentImpl({
                   placeholder={messagePlaceholder}
                   autoFocus={messageInputAutoFocus}
                   autoFocusKey={`${serverId}:${agentId}:${autoFocusKey ?? ""}`}
-                  disabled={isSubmitLoading}
+                  disabled={isWaitingOnSubmit}
                   leftContent={leftContent}
                   beforeVoiceContent={beforeVoiceContent}
                   rightContent={rightContent}

@@ -19,7 +19,11 @@ import {
 } from "../support/helpers/mock-agent";
 import { getServerId } from "../support/helpers/server-id";
 import { seedSavedSettingsHosts } from "../support/helpers/settings";
-import { submitNewWorkspaceEmpty } from "../support/helpers/new-workspace";
+import {
+  gateBrowserCreationPhases,
+  submitNewWorkspaceEmpty,
+  submitNewWorkspacePrompt,
+} from "../support/helpers/new-workspace";
 
 const test = base.extend<{
   seedForkWorkspace: (options: MockAgentOptions) => Promise<MockAgentWorkspace>;
@@ -219,5 +223,52 @@ test.describe("Assistant fork menu", () => {
     const userMessage = page.getByTestId("user-message").filter({ hasText: "Chat history" }).last();
     await expect(userMessage).toBeVisible({ timeout: 30_000 });
     await expect(userMessage).not.toContainText("Source agent:");
+  });
+
+  test("leaves the fork attachment out of a message queued while the new workspace starts", async ({
+    page,
+    seedForkWorkspace,
+  }) => {
+    const gate = await gateBrowserCreationPhases(page);
+    const session = await seedForkWorkspace({
+      repoPrefix: "assistant-fork-startup-queue-",
+      title: "Assistant fork startup queue",
+      initialPrompt: "emit 1 coalesced agent stream updates for assistant fork startup queue.",
+      model: "ten-second-stream",
+    });
+
+    await openAgentRoute(page, session);
+    await expectComposerVisible(page);
+    await awaitAssistantMessage(page);
+    await session.client.waitForFinish(session.agentId, 45_000);
+
+    await forkMostRecentAssistantTurnToNewWorkspace(page);
+    await expectChatHistoryAttachment(page);
+
+    await submitNewWorkspacePrompt(page, "First message");
+    await gate.waitForCreateRequest();
+    gate.releaseWorkspace();
+
+    const composer = page
+      .getByPlaceholder("Add more — it queues behind your first message")
+      .filter({ visible: true });
+    await expect(composer).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page
+        .getByTestId("message-input-root")
+        .filter({ visible: true })
+        .getByRole("button", { name: "Open chat history attachment" }),
+    ).toHaveCount(0);
+
+    await composer.fill("Second message");
+    await composer.press("Enter");
+    gate.releaseAgent();
+
+    const queued = page
+      .getByTestId("user-message")
+      .filter({ hasText: "Second message" })
+      .filter({ visible: true });
+    await expect(queued).toBeVisible({ timeout: 60_000 });
+    await expect(queued).not.toContainText("Chat history");
   });
 });

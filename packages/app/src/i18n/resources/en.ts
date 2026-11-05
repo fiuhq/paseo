@@ -1352,6 +1352,19 @@ export const en = {
     },
   },
   newWorkspace: {
+    startup: {
+      title: "Setting up",
+      creatingWorktree: "Creating worktree",
+      worktreeReady: "Worktree {{name}}",
+      worktreeReadyUnnamed: "Worktree ready",
+      openingWorkspace: "Opening workspace",
+      workspaceReady: "Workspace ready",
+      startingAgent: "Starting {{agent}}",
+      sendsWhenReady: "Your message sends when {{agent}} is ready",
+      summaryWorktree: "Ready in {{total}} · worktree {{workspace}} · {{agent}} {{agentTime}}",
+      summaryWorkspace: "Ready in {{total}} · workspace {{workspace}} · {{agent}} {{agentTime}}",
+      queuePlaceholder: "Add more — it queues behind your first message",
+    },
     title: "New workspace",
     create: "Create",
     isolation: {

@@ -117,6 +117,9 @@ import {
 } from "./workspace/terminals/state";
 import { captureWorkspaceDraftCleanup } from "./new-workspace/background-handoff";
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
+import { beginStartup } from "@/workspace-startup/progress";
+import { useWorkspaceStartupStore } from "@/workspace-startup/store";
+import { DraftStartupChecklist } from "@/workspace-startup/checklist";
 
 function useIsNewWorkspaceDraftHandoffActive(input: {
   draftId: string | undefined;
@@ -186,7 +189,7 @@ interface WorkspaceIsolationState {
   setIsolation: (value: "local" | "worktree") => void;
   effectiveIsolation: "local" | "worktree";
   canCreateWorktree: boolean;
-  showRefPicker: boolean;
+  createsWorktree: boolean;
 }
 
 // Preserve the user's worktree choice while route metadata is provisional. Once
@@ -218,7 +221,7 @@ function useWorkspaceIsolation(input: {
     setIsolation,
     effectiveIsolation: isWorktree ? "worktree" : "local",
     canCreateWorktree,
-    showRefPicker: !supportsMultiplicity || isWorktree,
+    createsWorktree: !supportsMultiplicity || isWorktree,
   };
 }
 
@@ -352,6 +355,7 @@ interface CreateChatAgentInput {
   draftKey: string;
   clearDraft: (lifecycle: "sent" | "abandoned") => void;
   draftId?: string;
+  createsWorktree: boolean;
   draftContextScopeKey: string | null;
   supportsForgeSearch: boolean;
   resolveClient: () => DaemonClient;
@@ -411,6 +415,8 @@ function buildComposerInitialValues(input: {
   return undefined;
 }
 
+type NewWorkspacePendingAction = "chat" | "empty" | "terminal" | null;
+
 const pendingWorkspaceSubmissions = new Map<string, Promise<SubmitOutcome>>();
 function runCreateChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome> {
   const key = JSON.stringify([input.serverId, input.draftId]);
@@ -444,6 +450,21 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
     format: attachmentSubmitFormat,
   });
   const images = await encodeImages(wirePayload.images);
+  const startupDraftId = input.draftId;
+  const startup = useWorkspaceStartupStore.getState();
+  if (startupDraftId) {
+    startup.begin(
+      beginStartup({
+        serverId,
+        draftId: startupDraftId,
+        agentLabel:
+          composerState.providerDefinitions.find((definition) => definition.id === provider)
+            ?.label ?? provider,
+        at: Date.now(),
+        isWorktree: input.createsWorktree,
+      }),
+    );
+  }
   let navigated = false;
   let outcome: SubmitOutcome = "background";
   const initialAgent: NonNullable<CreateWorkspaceRequestOptions["agent"]> = {
@@ -468,6 +489,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       withInitialAgent: true,
       agent: requestedAgent,
       onEvent: (snapshot) => {
+        if (startupDraftId) recordStartupPhase(startupDraftId, snapshot);
         if (!snapshot.workspace || navigated) return;
         navigated = true;
         if (!input.isStillOnCreateScreen()) return;
@@ -517,9 +539,35 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
         attachments: request.attachments,
       }),
   };
-  await agentCreation.result;
+  try {
+    await agentCreation.result;
+  } catch (error) {
+    // A failed start leaves the draft for a retry; its checklist must not claim it is still going.
+    if (startupDraftId) startup.discard({ draftId: startupDraftId });
+    throw error;
+  }
   if (outcome === "background") clearConsumedDraft();
   return outcome;
+}
+
+function recordStartupPhase(draftId: string, snapshot: CreationSnapshot): void {
+  const workspace = snapshot.workspace;
+  useWorkspaceStartupStore.getState().advance({
+    draftId,
+    event: {
+      phase: snapshot.phase,
+      at: Date.now(),
+      agentId: snapshot.agentId,
+      ...(workspace
+        ? {
+            workspace: {
+              kind: workspace.workspaceKind,
+              worktreeSlug: workspace.worktreeSlug ?? null,
+            },
+          }
+        : {}),
+    },
+  });
 }
 
 function buildComposerConfig(input: {
@@ -892,7 +940,7 @@ export function NewWorkspaceScreen({
   const [creationResult, setCreationResult] = useState<
     WorkspaceCreationResult | { workspace: null }
   >({ workspace: null });
-  const [pendingAction, setPendingAction] = useState<"chat" | "empty" | "terminal" | null>(null);
+  const [pendingAction, setPendingAction] = useState<NewWorkspacePendingAction>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const openAddProjectPicker = useOpenAddProject();
@@ -1037,7 +1085,7 @@ export function NewWorkspaceScreen({
     ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
     : "unsupported";
   const isPending = isNewWorkspacePending({ pendingAction, isDraftHandoffActive });
-  const { effectiveIsolation, setIsolation, canCreateWorktree, showRefPicker } =
+  const { effectiveIsolation, setIsolation, canCreateWorktree, createsWorktree } =
     useWorkspaceIsolation({
       supportsMultiplicity: supportsWorkspaceMultiplicity,
       worktreeSupport,
@@ -1233,7 +1281,6 @@ export function NewWorkspaceScreen({
         throw new Error("Choose a host for this project");
       }
       const connectedClient = withConnectedClient();
-      const createsWorktree = !supportsWorkspaceMultiplicity || effectiveIsolation === "worktree";
       const checkoutStatusForCreate = createsWorktree
         ? await ensureCheckoutStatus({
             queryClient,
@@ -1268,16 +1315,15 @@ export function NewWorkspaceScreen({
       return normalizedWorkspace;
     },
     [
+      createsWorktree,
       creationIdentity,
       creationResult,
-      effectiveIsolation,
       mergeWorkspaces,
       queryClient,
       selectedItem,
       selectedProject,
       selectedServerId,
       selectedSourceDirectory,
-      supportsWorkspaceMultiplicity,
       t,
       withConnectedClient,
     ],
@@ -1323,6 +1369,7 @@ export function NewWorkspaceScreen({
           clearDraft: chatDraft.clear,
           draftKey,
           draftId: creationIdentity.draftId,
+          createsWorktree,
           draftContextScopeKey,
           supportsForgeSearch,
           resolveClient: withConnectedClient,
@@ -1344,6 +1391,7 @@ export function NewWorkspaceScreen({
     },
     [
       composerState,
+      createsWorktree,
       draftContextScopeKey,
       creationIdentity,
       chatDraft.clear,
@@ -1506,7 +1554,7 @@ export function NewWorkspaceScreen({
       onSelect: handleSelectOption,
       setSearchQuery: setPickerSearchQuery,
       emptyText: pickerEmptyText,
-      showRefPicker,
+      showRefPicker: createsWorktree,
     },
     launch: {
       serverId: selectedServerId,
@@ -1587,6 +1635,9 @@ export function NewWorkspaceScreen({
         fullscreen={isComposerFullscreen}
         title={t("newWorkspace.title")}
         formStack={formStack}
+        pendingAction={pendingAction}
+        serverId={selectedServerId}
+        draftId={creationIdentity.draftId}
         onImportSession={importSession.open}
       >
         {composer}
@@ -1623,6 +1674,9 @@ function NewWorkspaceLayout({
   fullscreen,
   title,
   formStack,
+  pendingAction,
+  serverId,
+  draftId,
   onImportSession,
   children,
 }: {
@@ -1631,6 +1685,10 @@ function NewWorkspaceLayout({
   fullscreen: boolean;
   title: string;
   formStack: ReactNode;
+  /** Once a chat workspace is submitted, what it is doing replaces the fields that set it up. */
+  pendingAction: NewWorkspacePendingAction;
+  serverId: string;
+  draftId: string;
   onImportSession: () => void;
   children: ReactNode;
 }) {
@@ -1659,7 +1717,11 @@ function NewWorkspaceLayout({
       <View style={styles.content}>
         <TitlebarDragRegion />
         <ComposerDock centered={!isCompact} fullscreen={fullscreen}>
-          {setupFields}
+          {pendingAction === "chat" ? (
+            <DraftStartupChecklist serverId={serverId} draftId={draftId} />
+          ) : (
+            setupFields
+          )}
           <>
             {children}
             {isCompact || fullscreen ? null : importSessionButton}

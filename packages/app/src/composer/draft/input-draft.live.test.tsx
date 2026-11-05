@@ -486,6 +486,96 @@ describe("useAgentInputDraft live contract", () => {
     });
   });
 
+  async function mountDraft(draftKey: string) {
+    const queryClient = new QueryClient();
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing root container");
+    let latest: ReturnType<typeof useAgentInputDraft> | null = null;
+    function Probe() {
+      latest = useAgentInputDraft({
+        draftKey,
+        composer: { initialServerId: "host-1", isVisible: true, lockedWorkingDir: "/repo" },
+      });
+      return null;
+    }
+    const root = createTestRoot(container);
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Probe />
+        </QueryClientProvider>,
+      );
+    });
+    return (): ReturnType<typeof useAgentInputDraft> => {
+      if (!latest) throw new Error("Probe did not render");
+      return latest;
+    };
+  }
+
+  const metadata = (id: string): AttachmentMetadata => ({
+    id,
+    mimeType: "image/png",
+    storageType: "web-indexeddb",
+    storageKey: id,
+    createdAt: 1,
+  });
+
+  it("carries unsent text and attachments to another draft, before their publication lands", async () => {
+    const draft = await mountDraft("draft:host-1:draft-1");
+    const image: ComposerAttachment = { kind: "image", metadata: metadata("typed-image") };
+
+    await act(async () => {
+      draft().setAttachments([image]);
+      draft().editText("Typed but not sent");
+      draft().carryTo("agent:host-1:agent-1");
+      draft().clear("sent");
+    });
+
+    expect(useDraftStore.getState().getDraftInput("agent:host-1:agent-1")).toEqual({
+      text: "Typed but not sent",
+      attachments: [image],
+    });
+    expect(useDraftStore.getState().getDraftInput("draft:host-1:draft-1")).toBeUndefined();
+  });
+
+  it("carries nothing when the draft is empty", async () => {
+    const draft = await mountDraft("draft:host-1:draft-1");
+
+    await act(async () => {
+      draft().carryTo("agent:host-1:agent-1");
+    });
+
+    expect(useDraftStore.getState().drafts["agent:host-1:agent-1"]).toBeUndefined();
+  });
+
+  it("restores a failed message ahead of what was typed since, keeping both", async () => {
+    const draft = await mountDraft("draft:host-1:draft-1");
+    const typed: ComposerAttachment = { kind: "image", metadata: metadata("typed-image") };
+    const first: ComposerAttachment = { kind: "image", metadata: metadata("first-image") };
+
+    await act(async () => {
+      draft().setAttachments([typed]);
+      draft().editText("Typed since");
+      draft().restoreUnsent({ text: "First message", attachments: [first] });
+    });
+
+    expect(draft().textSource.getSnapshot()).toBe("First message\n\nTyped since");
+    expect(draft().textReplacement.kind).toBe("replace");
+    expect(draft().textReplacement.text).toBe("First message\n\nTyped since");
+    expect(draft().attachments).toEqual([typed, first]);
+  });
+
+  it("restores a failed message unchanged when nothing was typed since", async () => {
+    const draft = await mountDraft("draft:host-1:draft-1");
+
+    await act(async () => {
+      draft().restoreUnsent({ text: "First message", attachments: [] });
+    });
+
+    expect(draft().textSource.getSnapshot()).toBe("First message");
+    expect(draft().textReplacement.text).toBe("First message");
+  });
+
   it("clear resets text and attachments", async () => {
     let latest: ReturnType<typeof useAgentInputDraft> | null = null;
     const image: AttachmentMetadata = {

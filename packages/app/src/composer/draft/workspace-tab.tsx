@@ -16,10 +16,17 @@ import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
-import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import {
+  getHostRuntimeStore,
+  useHostRuntimeClient,
+  useHostRuntimeIsConnected,
+} from "@/runtime/host-runtime";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
+import { DraftStartupChecklist, useStartupQueue } from "@/workspace-startup/checklist";
+import { getDraftStartup } from "@/workspace-startup/store";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
@@ -355,8 +362,8 @@ export function WorkspaceDraftAgentTab({
   const draftOnSetFeature = composerState.agentControls.onSetFeature;
 
   const clearDraftInput = draftInput.clear;
-  const replaceDraftText = draftInput.replaceText;
-  const setDraftAttachments = draftInput.setAttachments;
+  const carryDraftTo = draftInput.carryTo;
+  const restoreUnsentDraft = draftInput.restoreUnsent;
   const pendingAutoSubmit = useWorkspaceDraftSubmissionStore((state) => {
     const pending = state.pendingByDraftId[draftId] ?? null;
     return pending?.serverId === serverId && pending.workspaceId === workspaceId ? pending : null;
@@ -400,10 +407,6 @@ export function WorkspaceDraftAgentTab({
   });
   const draftAttachmentScopeKey = useDraftWorkspaceAttachmentScopeKey(draftId);
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
-  const attachmentScopeKeys = useMemo(
-    () => [draftAttachmentScopeKey, workspaceAttachmentScopeKey].filter(Boolean),
-    [draftAttachmentScopeKey, workspaceAttachmentScopeKey],
-  );
   const clearWorkspaceAttachments = useWorkspaceAttachmentsStore(
     (state) => state.clearWorkspaceAttachments,
   );
@@ -450,6 +453,7 @@ export function WorkspaceDraftAgentTab({
     },
     onBeforeSubmit: async () => {
       await composerState.persistFormPreferences();
+      if (getDraftStartup({ serverId, draftId })) return;
       if (isWeb) {
         (document.activeElement as HTMLElement | null)?.blur?.();
       }
@@ -487,10 +491,12 @@ export function WorkspaceDraftAgentTab({
       });
     },
     onCreateSuccess: ({ result }) => {
+      carryDraftTo(buildDraftStoreKey({ serverId, agentId: result.id }));
       clearDraftInput("sent");
       clearWorkspaceAttachments({ scopeKey: draftAttachmentScopeKey });
       useWorkspaceDraftSubmissionStore.getState().clearDraftSetup({ draftId });
       onCreated(result);
+      handOverStartupQueue({ serverId, fromId: tabId, toId: result.id });
     },
   });
   const turnPresentation = useMemo(
@@ -548,8 +554,6 @@ export function WorkspaceDraftAgentTab({
       return;
     }
     autoSubmitKeyRef.current = submitKey;
-    replaceDraftText("");
-    setDraftAttachments([]);
     const preparedAttempt =
       initialCreateAttempt?.clientMessageId === submission.clientMessageId
         ? initialCreateAttempt
@@ -565,8 +569,10 @@ export function WorkspaceDraftAgentTab({
           cwd: submission.cwd,
         });
     void createPromise.catch(() => {
-      replaceDraftText(submission.text);
-      setDraftAttachments(composerWorkspaceAttachment.userAttachmentsOnly(submission.attachments));
+      restoreUnsentDraft({
+        text: submission.text,
+        attachments: composerWorkspaceAttachment.userAttachmentsOnly(submission.attachments),
+      });
       autoSubmitKeyRef.current = null;
     });
   }, [
@@ -576,9 +582,8 @@ export function WorkspaceDraftAgentTab({
     handleCreateFromInput,
     initialCreateAttempt,
     isReadyForPendingAutoSubmit,
+    restoreUnsentDraft,
     serverId,
-    setDraftAttachments,
-    replaceDraftText,
     workspaceId,
   ]);
 
@@ -600,6 +605,15 @@ export function WorkspaceDraftAgentTab({
     }),
     [composerState.agentControls, handleDropdownCloseFocus, isSubmitting],
   );
+  const startupQueue = useStartupQueue({ serverId, draftId, isSubmitting });
+  const attachmentScopeKeys = useMemo(
+    () =>
+      [
+        startupQueue.queueUntilReady ? "" : draftAttachmentScopeKey,
+        workspaceAttachmentScopeKey,
+      ].filter(Boolean),
+    [draftAttachmentScopeKey, startupQueue.queueUntilReady, workspaceAttachmentScopeKey],
+  );
   const dockContent = (
     <View style={styles.contentContainer}>
       {isSubmitting && draftAgent ? (
@@ -614,6 +628,7 @@ export function WorkspaceDraftAgentTab({
             pendingPermissions={EMPTY_PENDING_PERMISSIONS}
             onOpenWorkspaceFile={onOpenWorkspaceFile}
           />
+          <DraftStartupChecklist serverId={serverId} draftId={draftId} />
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.configScrollContent}>
@@ -648,7 +663,9 @@ export function WorkspaceDraftAgentTab({
             isPaneFocused={isPaneFocused}
             onSubmitMessage={handleCreateFromInput}
             isSubmitLoading={isSubmitting}
-            blurOnSubmit={true}
+            queueUntilReady={startupQueue.queueUntilReady}
+            placeholder={startupQueue.placeholder}
+            blurOnSubmit={!startupQueue.queueUntilReady}
             textSource={draftInput.textSource}
             onChangeText={draftInput.editText}
             textReplacement={draftInput.textReplacement}
@@ -659,7 +676,10 @@ export function WorkspaceDraftAgentTab({
             cwd={composerState.workingDir}
             clearDraft={draftInput.clear}
             editingSession={editingSession}
-            autoFocus={shouldAutoFocusWorkspaceDraftComposer({ isPaneFocused, isSubmitting })}
+            autoFocus={shouldAutoFocusWorkspaceDraftComposer({
+              isPaneFocused,
+              isSubmitting: isSubmitting && !startupQueue.queueUntilReady,
+            })}
             autoFocusKey={String(draftInput.attachmentFocusRequestId)}
             onFocusInput={handleFocusInputCallback}
             commandDraft={composerState.commandDraft}
@@ -735,3 +755,21 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.destructive,
   },
 }));
+
+/** Messages queued while the agent was starting wait in the draft's queue; they belong to the agent now. */
+function handOverStartupQueue(input: { serverId: string; fromId: string; toId: string }): void {
+  const { serverId, fromId, toId } = input;
+  useSessionStore.getState().setQueuedMessages(serverId, (previous) => {
+    const waiting = previous.get(fromId);
+    if (!waiting?.length) return previous;
+    const next = new Map(previous);
+    next.delete(fromId);
+    next.set(toId, [...(previous.get(toId) ?? []), ...waiting]);
+    return next;
+  });
+  // The queue drains when a turn ends. A first turn that already ended will not end again.
+  const session = useSessionStore.getState().sessions[serverId];
+  if (!selectAgentTurnPresentation(session, toId).isActive) {
+    getHostRuntimeStore().drainQueuedAgentMessage(serverId, toId);
+  }
+}
