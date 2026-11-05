@@ -28,15 +28,25 @@ export const useWorkspaceStartupStore = create<WorkspaceStartupState>((set) => (
     }),
 }));
 
-export function useDraftStartup(input: {
+interface DraftStartupKey {
   serverId: string;
   draftId: string | null | undefined;
-}): StartupProgress | null {
-  const { serverId, draftId } = input;
-  return useWorkspaceStartupStore((state) => {
-    const progress = draftId ? state.byDraftId[draftId] : undefined;
-    return progress?.serverId === serverId ? progress : null;
-  });
+}
+
+function selectDraftStartup(
+  state: WorkspaceStartupState,
+  { serverId, draftId }: DraftStartupKey,
+): StartupProgress | null {
+  const progress = draftId ? state.byDraftId[draftId] : undefined;
+  return progress?.serverId === serverId ? progress : null;
+}
+
+export function useDraftStartup(input: DraftStartupKey): StartupProgress | null {
+  return useWorkspaceStartupStore((state) => selectDraftStartup(state, input));
+}
+
+export function getDraftStartup(input: DraftStartupKey): StartupProgress | null {
+  return selectDraftStartup(useWorkspaceStartupStore.getState(), input);
 }
 
 export function useAgentStartup(input: {

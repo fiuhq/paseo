@@ -69,6 +69,7 @@ test.describe("New workspace startup", () => {
         .filter({ visible: true });
       await composer.fill("Second message");
       await composer.press("Enter");
+      await expect(composer).toBeFocused();
       await expect(page.getByText("Second message").filter({ visible: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Send queued message now" })).toHaveCount(0);
       await composer.fill("Typed but not sent");

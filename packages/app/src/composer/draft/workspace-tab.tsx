@@ -26,6 +26,7 @@ import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
 import { DraftStartupChecklist, useStartupQueue } from "@/workspace-startup/checklist";
+import { getDraftStartup } from "@/workspace-startup/store";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
@@ -361,8 +362,6 @@ export function WorkspaceDraftAgentTab({
   const draftOnSetFeature = composerState.agentControls.onSetFeature;
 
   const clearDraftInput = draftInput.clear;
-  const replaceDraftText = draftInput.replaceText;
-  const setDraftAttachments = draftInput.setAttachments;
   const carryDraftTo = draftInput.carryTo;
   const restoreUnsentDraft = draftInput.restoreUnsent;
   const pendingAutoSubmit = useWorkspaceDraftSubmissionStore((state) => {
@@ -458,6 +457,7 @@ export function WorkspaceDraftAgentTab({
     },
     onBeforeSubmit: async () => {
       await composerState.persistFormPreferences();
+      if (getDraftStartup({ serverId, draftId })) return;
       if (isWeb) {
         (document.activeElement as HTMLElement | null)?.blur?.();
       }
@@ -558,8 +558,6 @@ export function WorkspaceDraftAgentTab({
       return;
     }
     autoSubmitKeyRef.current = submitKey;
-    replaceDraftText("");
-    setDraftAttachments([]);
     const preparedAttempt =
       initialCreateAttempt?.clientMessageId === submission.clientMessageId
         ? initialCreateAttempt
@@ -590,8 +588,6 @@ export function WorkspaceDraftAgentTab({
     isReadyForPendingAutoSubmit,
     restoreUnsentDraft,
     serverId,
-    setDraftAttachments,
-    replaceDraftText,
     workspaceId,
   ]);
 
@@ -665,7 +661,7 @@ export function WorkspaceDraftAgentTab({
             isSubmitLoading={isSubmitting}
             queueUntilReady={startupQueue.queueUntilReady}
             placeholder={startupQueue.placeholder}
-            blurOnSubmit={true}
+            blurOnSubmit={!startupQueue.queueUntilReady}
             textSource={draftInput.textSource}
             onChangeText={draftInput.editText}
             textReplacement={draftInput.textReplacement}

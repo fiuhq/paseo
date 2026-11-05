@@ -189,7 +189,7 @@ interface WorkspaceIsolationState {
   setIsolation: (value: "local" | "worktree") => void;
   effectiveIsolation: "local" | "worktree";
   canCreateWorktree: boolean;
-  showRefPicker: boolean;
+  createsWorktree: boolean;
 }
 
 // Preserve the user's worktree choice while route metadata is provisional. Once
@@ -221,7 +221,7 @@ function useWorkspaceIsolation(input: {
     setIsolation,
     effectiveIsolation: isWorktree ? "worktree" : "local",
     canCreateWorktree,
-    showRefPicker: !supportsMultiplicity || isWorktree,
+    createsWorktree: !supportsMultiplicity || isWorktree,
   };
 }
 
@@ -1085,7 +1085,7 @@ export function NewWorkspaceScreen({
     ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
     : "unsupported";
   const isPending = isNewWorkspacePending({ pendingAction, isDraftHandoffActive });
-  const { effectiveIsolation, setIsolation, canCreateWorktree, showRefPicker } =
+  const { effectiveIsolation, setIsolation, canCreateWorktree, createsWorktree } =
     useWorkspaceIsolation({
       supportsMultiplicity: supportsWorkspaceMultiplicity,
       worktreeSupport,
@@ -1281,7 +1281,6 @@ export function NewWorkspaceScreen({
         throw new Error("Choose a host for this project");
       }
       const connectedClient = withConnectedClient();
-      const createsWorktree = !supportsWorkspaceMultiplicity || effectiveIsolation === "worktree";
       const checkoutStatusForCreate = createsWorktree
         ? await ensureCheckoutStatus({
             queryClient,
@@ -1316,16 +1315,15 @@ export function NewWorkspaceScreen({
       return normalizedWorkspace;
     },
     [
+      createsWorktree,
       creationIdentity,
       creationResult,
-      effectiveIsolation,
       mergeWorkspaces,
       queryClient,
       selectedItem,
       selectedProject,
       selectedServerId,
       selectedSourceDirectory,
-      supportsWorkspaceMultiplicity,
       t,
       withConnectedClient,
     ],
@@ -1371,7 +1369,7 @@ export function NewWorkspaceScreen({
           clearDraft: chatDraft.clear,
           draftKey,
           draftId: creationIdentity.draftId,
-          createsWorktree: !supportsWorkspaceMultiplicity || effectiveIsolation === "worktree",
+          createsWorktree,
           draftContextScopeKey,
           supportsForgeSearch,
           resolveClient: withConnectedClient,
@@ -1393,11 +1391,11 @@ export function NewWorkspaceScreen({
     },
     [
       composerState,
+      createsWorktree,
       draftContextScopeKey,
       creationIdentity,
       chatDraft.clear,
       draftKey,
-      effectiveIsolation,
       ensureWorkspace,
       forkDraftSetup,
       isStillOnCreateScreen,
@@ -1405,7 +1403,6 @@ export function NewWorkspaceScreen({
       leaveFullscreen,
       selectedServerId,
       supportsForgeSearch,
-      supportsWorkspaceMultiplicity,
       t,
       toast,
       updateFormPreferences,
@@ -1557,7 +1554,7 @@ export function NewWorkspaceScreen({
       onSelect: handleSelectOption,
       setSearchQuery: setPickerSearchQuery,
       emptyText: pickerEmptyText,
-      showRefPicker,
+      showRefPicker: createsWorktree,
     },
     launch: {
       serverId: selectedServerId,
