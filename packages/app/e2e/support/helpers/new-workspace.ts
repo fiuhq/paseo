@@ -713,6 +713,103 @@ export async function delayBrowserWorkspaceCreatedResponse(
   };
 }
 
+export interface CreationPhaseGate {
+  releaseWorkspace(): void;
+  releaseAgent(): void;
+  failCreation(error: string): void;
+  waitForCreateRequest(): Promise<void>;
+}
+
+/**
+ * Holds a workspace creation at a phase boundary, in order: nothing past `accepted` reaches the app
+ * until `releaseWorkspace`, and nothing past `workspace_ready` until `releaseAgent`.
+ */
+export async function gateBrowserCreationPhases(page: Page): Promise<CreationPhaseGate> {
+  const frames = await loadSessionMessageReaders();
+  const creationKeys = new Set<string>();
+  const createRequestIds = new Set<string>();
+  const held: { isWorkspaceReady: boolean; forward: () => void }[] = [];
+  let gate: "workspace" | "agent" | "open" = "workspace";
+  let failWith: (error: string) => void = () => undefined;
+  let resolveCreateRequest: (() => void) | null = null;
+  const createRequestSeen = new Promise<void>((resolve) => {
+    resolveCreateRequest = resolve;
+  });
+
+  function flush() {
+    while (held.length > 0) {
+      const next = held[0];
+      if (gate === "workspace" || (gate === "agent" && !next.isWorkspaceReady)) return;
+      held.shift();
+      next.forward();
+    }
+  }
+
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+
+    ws.onMessage((message) => {
+      const sessionMessage = frames.client(message);
+      if (sessionMessage?.type === "workspace.create.request") {
+        createRequestIds.add(sessionMessage.requestId);
+        if (sessionMessage.idempotencyKey) creationKeys.add(sessionMessage.idempotencyKey);
+        failWith = (error) => {
+          held.length = 0;
+          ws.send(
+            JSON.stringify({
+              type: "session",
+              message: {
+                type: "workspace.create.response",
+                payload: {
+                  requestId: sessionMessage.requestId,
+                  workspace: null,
+                  error,
+                  setupTerminalId: null,
+                },
+              },
+            }),
+          );
+        };
+        resolveCreateRequest?.();
+      }
+      server.send(message);
+    });
+
+    server.onMessage((message) => {
+      const sessionMessage = frames.server(message);
+      const isResponse =
+        sessionMessage?.type === "workspace.create.response" &&
+        createRequestIds.has(sessionMessage.payload.requestId);
+      const isUpdate =
+        sessionMessage?.type === "workspace.create.update" &&
+        creationKeys.has(sessionMessage.payload.idempotencyKey) &&
+        sessionMessage.payload.phase !== "accepted";
+      if (!isResponse && !isUpdate) {
+        ws.send(message);
+        return;
+      }
+      held.push({
+        isWorkspaceReady: isUpdate && sessionMessage.payload.phase === "workspace_ready",
+        forward: () => ws.send(message),
+      });
+      flush();
+    });
+  });
+
+  return {
+    releaseWorkspace() {
+      gate = "agent";
+      flush();
+    },
+    releaseAgent() {
+      gate = "open";
+      flush();
+    },
+    failCreation: (error) => failWith(error),
+    waitForCreateRequest: () => createRequestSeen,
+  };
+}
+
 type WorkspaceEntry = Awaited<
   ReturnType<NewWorkspaceDaemonClient["fetchWorkspaces"]>
 >["entries"][number];

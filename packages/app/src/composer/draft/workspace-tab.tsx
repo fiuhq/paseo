@@ -16,11 +16,15 @@ import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
-import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import {
+  getHostRuntimeStore,
+  useHostRuntimeClient,
+  useHostRuntimeIsConnected,
+} from "@/runtime/host-runtime";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
-import { useSessionStore } from "@/stores/session-store";
+import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
 import { DraftStartupChecklist, useStartupQueue } from "@/workspace-startup/checklist";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
@@ -754,4 +758,9 @@ function handOverStartupQueue(input: { serverId: string; fromId: string; toId: s
     next.set(toId, [...(previous.get(toId) ?? []), ...waiting]);
     return next;
   });
+  // The queue drains when a turn ends. A first turn that already ended will not end again.
+  const session = useSessionStore.getState().sessions[serverId];
+  if (!selectAgentTurnPresentation(session, toId).isActive) {
+    getHostRuntimeStore().drainQueuedAgentMessage(serverId, toId);
+  }
 }
