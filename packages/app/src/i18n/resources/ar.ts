@@ -1344,6 +1344,19 @@ export const ar: TranslationResources = {
     },
   },
   newWorkspace: {
+    startup: {
+      title: "جارٍ الإعداد",
+      creatingWorktree: "جارٍ إنشاء worktree",
+      worktreeReady: "worktree {{name}}",
+      worktreeReadyUnnamed: "worktree جاهز",
+      openingWorkspace: "جارٍ فتح مساحة العمل",
+      workspaceReady: "مساحة العمل جاهزة",
+      startingAgent: "جارٍ تشغيل {{agent}}",
+      sendsWhenReady: "ستُرسل رسالتك عندما يصبح {{agent}} جاهزًا",
+      summaryWorktree: "جاهز خلال {{total}} · worktree {{workspace}} · {{agent}} {{agentTime}}",
+      summaryWorkspace: "جاهز خلال {{total}} · مساحة العمل {{workspace}} · {{agent}} {{agentTime}}",
+      queuePlaceholder: "أضف المزيد — سيُضاف إلى الطابور بعد رسالتك الأولى",
+    },
     title: "مساحة عمل جديدة",
     create: "يخلق",
     isolation: {

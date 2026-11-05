@@ -1380,6 +1380,20 @@ export const es: TranslationResources = {
     },
   },
   newWorkspace: {
+    startup: {
+      title: "Preparando",
+      creatingWorktree: "Creando worktree",
+      worktreeReady: "Worktree {{name}}",
+      worktreeReadyUnnamed: "Worktree listo",
+      openingWorkspace: "Abriendo espacio de trabajo",
+      workspaceReady: "Espacio de trabajo listo",
+      startingAgent: "Iniciando {{agent}}",
+      sendsWhenReady: "Tu mensaje se enviará cuando {{agent}} esté listo",
+      summaryWorktree: "Listo en {{total}} · worktree {{workspace}} · {{agent}} {{agentTime}}",
+      summaryWorkspace:
+        "Listo en {{total}} · espacio de trabajo {{workspace}} · {{agent}} {{agentTime}}",
+      queuePlaceholder: "Añade más: se pondrá en cola tras tu primer mensaje",
+    },
     title: "Nuevo espacio de trabajo",
     create: "Crear",
     isolation: {

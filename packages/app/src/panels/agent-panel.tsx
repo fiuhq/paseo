@@ -82,6 +82,7 @@ import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks } from "@/panels/agent-tracks";
 import { ParentAgentCallout, useParentAgentId } from "@/subagents/parent";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { AgentStartupSummary } from "@/workspace-startup/checklist";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import {
   selectAgentTimelineState,
@@ -1185,6 +1186,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const streamContent = (
     <View style={animatedStaticStyles.content}>
       {showsComposer ? null : <SheetAgentFacts serverId={serverId} agentId={agentId} />}
+      <AgentStartupSummary serverId={serverId} agentId={agentId} />
       <RenderProfile id={`AgentStreamSection:${agentId}`}>
         <AgentStreamSection
           streamViewRef={streamViewRef}

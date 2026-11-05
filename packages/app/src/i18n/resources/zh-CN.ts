@@ -1333,6 +1333,19 @@ export const zhCN: TranslationResources = {
     },
   },
   newWorkspace: {
+    startup: {
+      title: "正在准备",
+      creatingWorktree: "正在创建 worktree",
+      worktreeReady: "worktree {{name}}",
+      worktreeReadyUnnamed: "worktree 已就绪",
+      openingWorkspace: "正在打开工作区",
+      workspaceReady: "工作区已就绪",
+      startingAgent: "正在启动 {{agent}}",
+      sendsWhenReady: "{{agent}} 就绪后将发送你的消息",
+      summaryWorktree: "{{total}} 内就绪 · worktree {{workspace}} · {{agent}} {{agentTime}}",
+      summaryWorkspace: "{{total}} 内就绪 · 工作区 {{workspace}} · {{agent}} {{agentTime}}",
+      queuePlaceholder: "继续输入会排在第一条消息之后",
+    },
     title: "新建 workspace",
     create: "创建",
     isolation: {

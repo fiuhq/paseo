@@ -1351,6 +1351,20 @@ export const ko: TranslationResources = {
     },
   },
   newWorkspace: {
+    startup: {
+      title: "준비 중",
+      creatingWorktree: "worktree 생성 중",
+      worktreeReady: "worktree {{name}}",
+      worktreeReadyUnnamed: "worktree 준비됨",
+      openingWorkspace: "워크스페이스 여는 중",
+      workspaceReady: "워크스페이스 준비됨",
+      startingAgent: "{{agent}} 시작 중",
+      sendsWhenReady: "{{agent}}이(가) 준비되면 메시지가 전송됩니다",
+      summaryWorktree: "{{total}} 만에 준비됨 · worktree {{workspace}} · {{agent}} {{agentTime}}",
+      summaryWorkspace:
+        "{{total}} 만에 준비됨 · 워크스페이스 {{workspace}} · {{agent}} {{agentTime}}",
+      queuePlaceholder: "더 입력하면 첫 메시지 뒤에 대기열로 들어갑니다",
+    },
     title: "새 워크스페이스",
     create: "생성",
     isolation: {

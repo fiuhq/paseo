@@ -20,6 +20,8 @@ import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { useSessionStore } from "@/stores/session-store";
+import { DraftStartupChecklist, useStartupQueue } from "@/workspace-startup/checklist";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
@@ -487,6 +489,7 @@ export function WorkspaceDraftAgentTab({
       });
     },
     onCreateSuccess: ({ result }) => {
+      handOverStartupQueue({ serverId, fromId: tabId, toId: result.id });
       clearDraftInput("sent");
       clearWorkspaceAttachments({ scopeKey: draftAttachmentScopeKey });
       useWorkspaceDraftSubmissionStore.getState().clearDraftSetup({ draftId });
@@ -600,6 +603,7 @@ export function WorkspaceDraftAgentTab({
     }),
     [composerState.agentControls, handleDropdownCloseFocus, isSubmitting],
   );
+  const startupQueue = useStartupQueue({ serverId, draftId, isSubmitting });
   const dockContent = (
     <View style={styles.contentContainer}>
       {isSubmitting && draftAgent ? (
@@ -614,6 +618,7 @@ export function WorkspaceDraftAgentTab({
             pendingPermissions={EMPTY_PENDING_PERMISSIONS}
             onOpenWorkspaceFile={onOpenWorkspaceFile}
           />
+          <DraftStartupChecklist serverId={serverId} draftId={draftId} />
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.configScrollContent}>
@@ -648,6 +653,8 @@ export function WorkspaceDraftAgentTab({
             isPaneFocused={isPaneFocused}
             onSubmitMessage={handleCreateFromInput}
             isSubmitLoading={isSubmitting}
+            queueUntilReady={startupQueue.queueUntilReady}
+            placeholder={startupQueue.placeholder}
             blurOnSubmit={true}
             textSource={draftInput.textSource}
             onChangeText={draftInput.editText}
@@ -735,3 +742,16 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.destructive,
   },
 }));
+
+/** Messages queued while the agent was starting wait in the draft's queue; they belong to the agent now. */
+function handOverStartupQueue(input: { serverId: string; fromId: string; toId: string }): void {
+  const { serverId, fromId, toId } = input;
+  useSessionStore.getState().setQueuedMessages(serverId, (previous) => {
+    const waiting = previous.get(fromId);
+    if (!waiting?.length) return previous;
+    const next = new Map(previous);
+    next.delete(fromId);
+    next.set(toId, [...(previous.get(toId) ?? []), ...waiting]);
+    return next;
+  });
+}
