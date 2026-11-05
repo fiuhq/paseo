@@ -7,6 +7,7 @@ import {
   gateBrowserCreationPhases,
   openNewWorkspaceComposer,
   openProjectViaDaemon,
+  selectWorkspaceIsolation,
   submitNewWorkspacePrompt,
   waitForCreatedWorkspace,
 } from "../support/helpers/new-workspace";
@@ -35,6 +36,7 @@ test.describe("New workspace startup", () => {
     const gate = await gateBrowserCreationPhases(page);
     const { client, project } = await openComposer(page, repo.path);
     try {
+      await selectWorkspaceIsolation(page, "worktree");
       await submitNewWorkspacePrompt(page, "First message");
       await gate.waitForCreateRequest();
 

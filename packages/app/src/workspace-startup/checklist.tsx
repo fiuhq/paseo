@@ -53,15 +53,13 @@ function StepTime({ state, seconds, since }: Pick<StepRowProps, "state" | "secon
 
 function StepRow({ id, state, label, seconds, since, isFirst }: StepRowProps) {
   const isWaiting = state === "waiting";
-  // An agent reads each step's state off the accessibility tree: busy while running, its name as the value.
-  const accessibilityState = useMemo(() => ({ busy: state === "running" }), [state]);
-  const accessibilityValue = useMemo(() => ({ text: state }), [state]);
   return (
     <View
       style={isFirst ? styles.row : [styles.row, settingsStyles.rowBorder]}
       testID={`workspace-startup-step-${id}`}
-      accessibilityState={accessibilityState}
-      accessibilityValue={accessibilityValue}
+      // An agent reads each step's state here, in the DOM and the accessibility tree.
+      aria-busy={state === "running"}
+      aria-valuetext={state}
     >
       <View style={styles.icon}>
         <StepIcon state={state} />
