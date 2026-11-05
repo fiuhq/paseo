@@ -2,16 +2,22 @@ import { describe, expect, it } from "vitest";
 import { advanceStartup, beginStartup, describeStartup, formatSeconds } from "./progress";
 
 const begin = () =>
-  beginStartup({ serverId: "srv", draftId: "draft-1", agentLabel: "Claude", at: 1_000 });
-const worktree = { id: "wks_1", kind: "worktree", worktreeSlug: "nice-bear" } as const;
+  beginStartup({
+    serverId: "srv",
+    draftId: "draft-1",
+    agentLabel: "Claude",
+    at: 1_000,
+    isWorktree: true,
+  });
+const worktree = { kind: "worktree", worktreeSlug: "nice-bear" } as const;
 
 describe("workspace startup progress", () => {
   it("shows the workspace step running from the moment of submit", () => {
-    expect(describeStartup(begin(), 3_400)).toEqual({
+    expect(describeStartup(begin())).toEqual({
       kind: "starting",
       workspace: {
         state: "running",
-        seconds: 2.4,
+        seconds: null,
         since: 1_000,
         isWorktree: true,
         worktreeSlug: null,
@@ -26,7 +32,7 @@ describe("workspace startup progress", () => {
       at: 5_100,
       workspace: worktree,
     });
-    expect(describeStartup(progress, 7_100)).toEqual({
+    expect(describeStartup(progress)).toEqual({
       kind: "starting",
       workspace: {
         state: "done",
@@ -35,7 +41,7 @@ describe("workspace startup progress", () => {
         isWorktree: true,
         worktreeSlug: "nice-bear",
       },
-      agent: { state: "running", seconds: 2, since: 5_100 },
+      agent: { state: "running", seconds: null, since: 5_100 },
     });
   });
 
@@ -43,9 +49,9 @@ describe("workspace startup progress", () => {
     const progress = advanceStartup(begin(), {
       phase: "workspace_ready",
       at: 1_200,
-      workspace: { id: "wks_1", kind: "directory", worktreeSlug: null },
+      workspace: { kind: "directory", worktreeSlug: null },
     });
-    expect(describeStartup(progress, 1_200)).toMatchObject({
+    expect(describeStartup(progress)).toMatchObject({
       workspace: { state: "done", seconds: 0.2, isWorktree: false, worktreeSlug: null },
     });
   });
@@ -57,7 +63,7 @@ describe("workspace startup progress", () => {
       workspace: worktree,
     });
     progress = advanceStartup(progress, { phase: "agent_ready", at: 6_900, agentId: "agent-1" });
-    expect(describeStartup(progress, 60_000)).toEqual({
+    expect(describeStartup(progress)).toEqual({
       kind: "ready",
       totalSeconds: 5.9,
       workspaceSeconds: 4.1,
@@ -74,7 +80,7 @@ describe("workspace startup progress", () => {
       agentId: "agent-1",
       workspace: worktree,
     });
-    expect(describeStartup(progress, 4_000)).toEqual({
+    expect(describeStartup(progress)).toEqual({
       kind: "ready",
       totalSeconds: 3,
       workspaceSeconds: 3,
@@ -102,7 +108,7 @@ describe("workspace startup progress", () => {
     expect(advanceStartup(progress, { phase: "accepted", at: 1_500 })).toBe(progress);
   });
 
-  it("assumes a worktree until the daemon says otherwise", () => {
+  it("labels the workspace step from the submit until the daemon reports the workspace", () => {
     const local = beginStartup({
       serverId: "srv",
       draftId: "d",
@@ -110,7 +116,7 @@ describe("workspace startup progress", () => {
       at: 0,
       isWorktree: false,
     });
-    expect(describeStartup(local, 0)).toMatchObject({ workspace: { isWorktree: false } });
+    expect(describeStartup(local)).toMatchObject({ workspace: { isWorktree: false } });
   });
 });
 
@@ -119,5 +125,11 @@ describe("formatSeconds", () => {
     expect(formatSeconds(3)).toBe("3s");
     expect(formatSeconds(4.1)).toBe("4.1s");
     expect(formatSeconds(0)).toBe("0s");
+  });
+
+  it("reads like the running clock from a minute up", () => {
+    expect(formatSeconds(59.9)).toBe("59.9s");
+    expect(formatSeconds(60)).toBe("1m");
+    expect(formatSeconds(94.2)).toBe("1m 34s");
   });
 });

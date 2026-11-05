@@ -363,6 +363,8 @@ export function WorkspaceDraftAgentTab({
   const clearDraftInput = draftInput.clear;
   const replaceDraftText = draftInput.replaceText;
   const setDraftAttachments = draftInput.setAttachments;
+  const carryDraftTo = draftInput.carryTo;
+  const restoreUnsentDraft = draftInput.restoreUnsent;
   const pendingAutoSubmit = useWorkspaceDraftSubmissionStore((state) => {
     const pending = state.pendingByDraftId[draftId] ?? null;
     return pending?.serverId === serverId && pending.workspaceId === workspaceId ? pending : null;
@@ -493,11 +495,12 @@ export function WorkspaceDraftAgentTab({
       });
     },
     onCreateSuccess: ({ result }) => {
-      handOverStartupQueue({ serverId, fromId: tabId, toId: result.id });
+      carryDraftTo(buildDraftStoreKey({ serverId, agentId: result.id }));
       clearDraftInput("sent");
       clearWorkspaceAttachments({ scopeKey: draftAttachmentScopeKey });
       useWorkspaceDraftSubmissionStore.getState().clearDraftSetup({ draftId });
       onCreated(result);
+      handOverStartupQueue({ serverId, fromId: tabId, toId: result.id });
     },
   });
   const turnPresentation = useMemo(
@@ -572,8 +575,10 @@ export function WorkspaceDraftAgentTab({
           cwd: submission.cwd,
         });
     void createPromise.catch(() => {
-      replaceDraftText(submission.text);
-      setDraftAttachments(composerWorkspaceAttachment.userAttachmentsOnly(submission.attachments));
+      restoreUnsentDraft({
+        text: submission.text,
+        attachments: composerWorkspaceAttachment.userAttachmentsOnly(submission.attachments),
+      });
       autoSubmitKeyRef.current = null;
     });
   }, [
@@ -583,6 +588,7 @@ export function WorkspaceDraftAgentTab({
     handleCreateFromInput,
     initialCreateAttempt,
     isReadyForPendingAutoSubmit,
+    restoreUnsentDraft,
     serverId,
     setDraftAttachments,
     replaceDraftText,

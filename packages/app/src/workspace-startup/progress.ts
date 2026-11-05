@@ -1,4 +1,5 @@
 import type { CreationSnapshot, WorkspaceDescriptorPayload } from "@getpaseo/protocol/messages";
+import { formatDuration } from "@/utils/time";
 
 /**
  * What a new workspace is doing between Enter and its agent's first turn, timed from the daemon's
@@ -11,7 +12,6 @@ export interface StartupProgress {
   agentLabel: string;
   submittedAt: number;
   isWorktree: boolean;
-  workspaceId: string | null;
   worktreeSlug: string | null;
   workspaceReadyAt: number | null;
   agentId: string | null;
@@ -19,7 +19,6 @@ export interface StartupProgress {
 }
 
 export interface StartupWorkspace {
-  id: string;
   kind: WorkspaceDescriptorPayload["workspaceKind"];
   worktreeSlug: string | null;
 }
@@ -35,7 +34,7 @@ export type StepState = "waiting" | "running" | "done";
 
 export interface StartupStep {
   state: StepState;
-  /** Whole duration once done, elapsed so far while running, null while waiting. */
+  /** Whole duration once done, null until then. */
   seconds: number | null;
   /** When a running step started, for a live clock; null otherwise. */
   since: number | null;
@@ -74,15 +73,14 @@ export function beginStartup(input: {
   draftId: string;
   agentLabel: string;
   at: number;
-  isWorktree?: boolean;
+  isWorktree: boolean;
 }): StartupProgress {
   return {
     serverId: input.serverId,
     draftId: input.draftId,
     agentLabel: input.agentLabel,
     submittedAt: input.at,
-    isWorktree: input.isWorktree ?? true,
-    workspaceId: null,
+    isWorktree: input.isWorktree,
     worktreeSlug: null,
     workspaceReadyAt: null,
     agentId: null,
@@ -100,7 +98,6 @@ export function advanceStartup(progress: StartupProgress, event: StartupEvent): 
   if (reachesWorkspace) {
     next.workspaceReadyAt = event.at;
     if (event.workspace) {
-      next.workspaceId = event.workspace.id;
       next.isWorktree = event.workspace.kind === "worktree";
       next.worktreeSlug = event.workspace.worktreeSlug;
     }
@@ -116,7 +113,7 @@ function secondsBetween(from: number, to: number): number {
   return Math.round((to - from) / 100) / 10;
 }
 
-export function describeStartup(progress: StartupProgress, now: number): StartupView {
+export function describeStartup(progress: StartupProgress): StartupView {
   const { submittedAt, workspaceReadyAt, agentReadyAt } = progress;
   if (workspaceReadyAt !== null && agentReadyAt !== null) {
     return {
@@ -132,7 +129,7 @@ export function describeStartup(progress: StartupProgress, now: number): Startup
       kind: "starting",
       workspace: {
         state: "running",
-        seconds: secondsBetween(submittedAt, now),
+        seconds: null,
         since: submittedAt,
         isWorktree: progress.isWorktree,
         worktreeSlug: null,
@@ -151,12 +148,13 @@ export function describeStartup(progress: StartupProgress, now: number): Startup
     },
     agent: {
       state: "running",
-      seconds: secondsBetween(workspaceReadyAt, now),
+      seconds: null,
       since: workspaceReadyAt,
     },
   };
 }
 
 export function formatSeconds(seconds: number): string {
+  if (seconds >= 60) return formatDuration(seconds * 1000);
   return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
 }

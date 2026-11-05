@@ -551,13 +551,8 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
 }
 
 function recordStartupPhase(draftId: string, snapshot: CreationSnapshot): void {
-  const store = useWorkspaceStartupStore.getState();
-  if (snapshot.phase === "failed") {
-    store.discard({ draftId });
-    return;
-  }
   const workspace = snapshot.workspace;
-  store.advance({
+  useWorkspaceStartupStore.getState().advance({
     draftId,
     event: {
       phase: snapshot.phase,
@@ -566,7 +561,6 @@ function recordStartupPhase(draftId: string, snapshot: CreationSnapshot): void {
       ...(workspace
         ? {
             workspace: {
-              id: workspace.id,
               kind: workspace.workspaceKind,
               worktreeSlug: workspace.worktreeSlug ?? null,
             },

@@ -62,6 +62,10 @@ export interface AgentInputDraft {
   textReplacement: TextReplacement;
   attachments: UserComposerAttachment[];
   setAttachments: (updater: AttachmentUpdater) => void;
+  /** Saves what is unsent to another draft, ahead of this one being cleared. */
+  carryTo: (targetDraftKey: string) => void;
+  /** Puts a message that failed to send back, ahead of anything typed since. */
+  restoreUnsent: (unsent: { text: string; attachments: UserComposerAttachment[] }) => void;
   clear: (lifecycle: "sent" | "abandoned") => void;
   isHydrated: boolean;
   attachmentFocusRequestId: number;
@@ -189,6 +193,31 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       }));
     },
     [saveDraft],
+  );
+
+  const carryTo = useCallback(
+    (targetDraftKey: string) => {
+      textPublication.flush();
+      const store = useDraftStore.getState();
+      const current = store.getDraftInput(draftKey);
+      if (current && hasDraftContent(current)) {
+        store.saveDraftInput({ draftKey: targetDraftKey, draft: current });
+      }
+    },
+    [draftKey, textPublication],
+  );
+
+  const restoreUnsent = useCallback(
+    (unsent: { text: string; attachments: UserComposerAttachment[] }) => {
+      textPublication.flush();
+      const text = [unsent.text, textSource.getSnapshot()].filter(Boolean).join("\n\n");
+      saveDraft((current) => ({
+        text,
+        attachments: [...current.attachments, ...unsent.attachments],
+      }));
+      publishTextReplacement("replace", text);
+    },
+    [publishTextReplacement, saveDraft, textPublication, textSource],
   );
 
   const clear = useCallback(
@@ -355,6 +384,8 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     textReplacement,
     attachments,
     setAttachments,
+    carryTo,
+    restoreUnsent,
     clear,
     isHydrated,
     attachmentFocusRequestId,

@@ -71,12 +71,16 @@ test.describe("New workspace startup", () => {
       await composer.press("Enter");
       await expect(page.getByText("Second message").filter({ visible: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Send queued message now" })).toHaveCount(0);
+      await composer.fill("Typed but not sent");
 
       gate.releaseAgent();
       await expect(
         page.getByTestId("workspace-startup-summary").filter({ visible: true }),
       ).toContainText(/Ready in .+ · worktree .+/, { timeout: 30_000 });
       await expect(checklist).toHaveCount(0);
+      await expect(
+        page.getByRole("textbox", { name: "Message agent..." }).filter({ visible: true }),
+      ).toHaveValue("Typed but not sent");
       await expect(
         page
           .getByTestId("user-message")

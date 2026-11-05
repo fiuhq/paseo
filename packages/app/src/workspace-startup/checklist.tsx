@@ -75,15 +75,9 @@ function StepRow({ id, state, label, seconds, since, isFirst }: StepRowProps) {
  * frozen composer between Enter and the agent's first turn; folds into a one-line summary once the
  * agent is ready.
  */
-export function WorkspaceStartupChecklist({
-  progress,
-  now = Date.now(),
-}: {
-  progress: StartupProgress;
-  now?: number;
-}) {
+export function WorkspaceStartupChecklist({ progress }: { progress: StartupProgress }) {
   const { t } = useTranslation();
-  const view = describeStartup(progress, now);
+  const view = describeStartup(progress);
   if (view.kind === "ready")
     return <WorkspaceStartupSummary view={view} agentLabel={progress.agentLabel} />;
 
@@ -212,7 +206,7 @@ export function DraftStartupChecklist({
 export function AgentStartupSummary({ serverId, agentId }: { serverId: string; agentId: string }) {
   const progress = useAgentStartup({ serverId, agentId });
   if (!progress) return null;
-  const view = describeStartup(progress, Date.now());
+  const view = describeStartup(progress);
   return view.kind === "ready" ? (
     <WorkspaceStartupSummary view={view} agentLabel={progress.agentLabel} />
   ) : null;
