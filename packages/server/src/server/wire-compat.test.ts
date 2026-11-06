@@ -567,7 +567,7 @@ describe("wire compatibility", () => {
       refName: undefined,
       action: undefined,
       githubPrNumber: undefined,
-
+      noInitialAgent: true,
       paseoHome: "/tmp/paseo-home",
     });
   });

@@ -1,7 +1,9 @@
 import type { PluginLifecycle } from "../../plugins/lifecycle/index.js";
 import { describeHookWorkspace } from "../../plugins/lifecycle/index.js";
+import { buildAgentBranchNameSeed } from "../../agent/prompt-attachments.js";
+import { HELD_TITLE_STATE } from "../../workspace-title-gate.js";
 import { basename, resolve } from "node:path";
-import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
+import type { FirstAgentContext, ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
 import type { Logger } from "pino";
 import {
   generateWorkspaceId,
@@ -51,6 +53,8 @@ export interface CreateWorktreeWorkspaceInput {
   branch: string | null;
   baseBranch: string | null;
   title: string | null;
+  /** Set when the title is only this prompt's first line: a plugin's judge may hold it back. */
+  promptTitleContext?: FirstAgentContext;
   expectsInitialAgent?: boolean;
   untrustedSource?: UntrustedWorkspaceSource;
   background?: boolean;
@@ -69,6 +73,7 @@ export interface WorkspaceProvisioningService {
     title?: string | null,
     projectId?: string,
     context?: {
+      promptTitleContext?: FirstAgentContext;
       expectsInitialAgent?: boolean;
       workspaceId?: string;
       background?: boolean;
@@ -244,11 +249,19 @@ export function createWorkspaceProvisioningService(deps: {
     };
   }
 
+  function titleFields(title: string | null, promptTitleContext: FirstAgentContext | undefined) {
+    return buildAgentBranchNameSeed(promptTitleContext) &&
+      deps.lifecycle?.handles("workspace.title.before")
+      ? { title: null, titleState: HELD_TITLE_STATE }
+      : { title };
+  }
+
   async function createWorkspaceForDirectory(
     cwd: string,
     title?: string | null,
     projectId?: string,
     context?: {
+      promptTitleContext?: FirstAgentContext;
       expectsInitialAgent?: boolean;
       workspaceId?: string;
       background?: boolean;
@@ -272,7 +285,7 @@ export function createWorkspaceProvisioningService(deps: {
         projectId: project.projectId,
         ...initialWorkspacePlacement({ source: "checkout", cwd: normalizedCwd, checkout }),
         baseBranch: baseMetadata?.baseRef ?? baseMetadata?.baseRefName ?? null,
-        title: title?.trim() || null,
+        ...titleFields(title?.trim() || null, context?.promptTitleContext),
         createdAt: timestamp,
         updatedAt: timestamp,
         ...(await resolveCreationMetadata(context)),
@@ -312,7 +325,7 @@ export function createWorkspaceProvisioningService(deps: {
         baseBranch: input.baseBranch,
         mainRepoRoot: repoRoot,
       }),
-      title: input.title,
+      ...titleFields(input.title, input.untrustedSource ? undefined : input.promptTitleContext),
       createdAt: timestamp,
       updatedAt: timestamp,
       ...(input.untrustedSource ? { untrustedSource: input.untrustedSource } : {}),
@@ -402,6 +415,7 @@ export function createWorkspaceProvisioningService(deps: {
     if (input.requestedWorkspaceId) return input.requestedWorkspaceId;
     return (
       await createWorkspaceForDirectory(input.cwd, input.initialTitle, undefined, {
+        promptTitleContext: { prompt: input.initialTitle ?? undefined },
         expectsInitialAgent: true,
         background: input.background,
         callerWorkspaceId: input.callerWorkspaceId,

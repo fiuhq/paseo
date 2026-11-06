@@ -442,6 +442,15 @@ export const ar: TranslationResources = {
     },
   },
   workspace: {
+    titleState: {
+      naming: "جارٍ التسمية…",
+      refused: 'تم رفض "{{title}}" ({{score}}): بانتظار الوكيل',
+      noReply: "لا يوجد عنوان بعد: لم يرد الوكيل",
+      exhausted: "لا يوجد عنوان بعد: رُفضت {{tries}} محاولات",
+      unchecked: "لم يتم التحقق: تعذر الوصول إلى {{judge}}",
+      judgeFallback: "المُقيّم",
+      rename: "إعادة تسمية",
+    },
     route: {
       loading: "جارٍ تحميل مساحة العمل",
       connecting: "الاتصال",

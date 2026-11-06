@@ -4,6 +4,7 @@ import {
   AgentStatusSchema,
   AgentTimelineItemPayloadSchema,
   WorkspaceGitHubRuntimePayloadSchema,
+  WorkspaceTitleStateSchema,
 } from "@getpaseo/protocol/messages";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
 import type { PluginTimelineData } from "@getpaseo/plugin";
@@ -317,6 +318,8 @@ const StoredWorkspaceSchema = z.strictObject({
   background: z.boolean(),
   name: z.string(),
   title: z.string().nullable(),
+  // Optional because entries written before it existed have none.
+  titleState: WorkspaceTitleStateSchema.nullable().optional(),
   pinnedAt: z.string().nullable(),
   // Optional because entries written before labels existed have none. A cached workspace that
   // dropped them painted its row without its chips and stayed that way: the directory cursor is
@@ -724,6 +727,7 @@ function serializeWorkspace(workspace: WorkspaceDescriptor): StoredWorkspace {
     background: workspace.background ?? false,
     name: workspace.name,
     title: workspace.title ?? null,
+    titleState: workspace.titleState ?? null,
     pinnedAt: workspace.pinnedAt ?? null,
     labels: workspace.labels,
     status: workspace.status,

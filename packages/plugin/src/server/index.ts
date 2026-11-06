@@ -17,6 +17,7 @@ export type {
   PluginHooks,
   PluginHookEvents,
   PluginHookRequests,
+  PluginWorkspaceTitleRequest,
   PluginHookPayload,
   PluginHookResult,
   PluginHookContext,

@@ -447,6 +447,15 @@ export const es: TranslationResources = {
     },
   },
   workspace: {
+    titleState: {
+      naming: "Poniendo nombre…",
+      refused: 'Rechazado "{{title}}" ({{score}}): esperando al agente',
+      noReply: "Aún sin título: el agente no respondió",
+      exhausted: "Aún sin título: {{tries}} intentos rechazados",
+      unchecked: "Sin comprobar: {{judge}} no disponible",
+      judgeFallback: "el evaluador",
+      rename: "Renombrar",
+    },
     route: {
       loading: "Cargando espacio de trabajo",
       connecting: "Conectando",

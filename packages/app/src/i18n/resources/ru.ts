@@ -446,6 +446,15 @@ export const ru: TranslationResources = {
     },
   },
   workspace: {
+    titleState: {
+      naming: "Подбираем название…",
+      refused: "Отклонено «{{title}}» ({{score}}): ждём агента",
+      noReply: "Названия пока нет: агент не ответил",
+      exhausted: "Названия пока нет: отклонено попыток: {{tries}}",
+      unchecked: "Не проверено: {{judge}} недоступен",
+      judgeFallback: "оценщик",
+      rename: "Переименовать",
+    },
     route: {
       loading: "Загрузка рабочего пространства",
       connecting: "Подключение",

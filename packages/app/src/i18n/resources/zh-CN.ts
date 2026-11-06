@@ -442,6 +442,15 @@ export const zhCN: TranslationResources = {
     },
   },
   workspace: {
+    titleState: {
+      naming: "正在命名…",
+      refused: "已拒绝“{{title}}”({{score}}):等待智能体",
+      noReply: "暂无标题:智能体未回复",
+      exhausted: "暂无标题:已拒绝 {{tries}} 次",
+      unchecked: "未检查:无法连接 {{judge}}",
+      judgeFallback: "评审器",
+      rename: "重命名",
+    },
     route: {
       loading: "正在加载 workspace",
       connecting: "正在连接",

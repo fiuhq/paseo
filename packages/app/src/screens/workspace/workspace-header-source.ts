@@ -1,4 +1,6 @@
 import type { WorkspaceDescriptor } from "@/stores/session-store";
+import { isWorkspaceTitleHeld } from "@getpaseo/protocol/messages";
+import { workspaceHeldTitleLabel } from "@/utils/workspace-title-state";
 
 export type WorkspaceHeaderCheckoutState =
   | { kind: "pending" }
@@ -46,7 +48,9 @@ export function resolveWorkspaceHeader(input: { workspace: WorkspaceDescriptor }
   subtitle: string;
 } {
   return {
-    title: input.workspace.name,
+    title: isWorkspaceTitleHeld(input.workspace.titleState)
+      ? workspaceHeldTitleLabel()
+      : input.workspace.name,
     subtitle: input.workspace.projectDisplayName,
   };
 }

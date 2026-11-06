@@ -18,7 +18,12 @@ import {
   validateBranchSlug,
   type WorktreeConfig,
 } from "../utils/worktree.js";
-import { getCurrentBranch, localBranchExists, renameCurrentBranch } from "../utils/checkout-git.js";
+import {
+  getCurrentBranch,
+  isBranchPublished,
+  localBranchExists,
+  renameCurrentBranch,
+} from "../utils/checkout-git.js";
 import {
   markPaseoWorktreeFirstAgentBranchAutoNameAttempted,
   readPaseoWorktreeMetadata,
@@ -34,6 +39,8 @@ export interface CreatePaseoWorktreeInput extends CreateWorktreeCoreInput {
   workspaceId?: string;
   projectId?: string;
   title?: string;
+  /** No agent will reply, so a title judge has nothing better to wait for. */
+  noInitialAgent?: boolean;
   background?: boolean;
   callerWorkspaceId?: string;
 }
@@ -113,6 +120,8 @@ async function createPaseoWorktreeWithPriority(
       branch: createdWorktree.worktree.branchName || null,
       baseBranch: createdWorktree.worktree.comparisonBaseRef,
       title: input.title?.trim() || resolveFirstAgentPromptTitle(input.firstAgentContext),
+      promptTitleContext:
+        input.title?.trim() || input.noInitialAgent ? undefined : input.firstAgentContext,
       expectsInitialAgent: Boolean(input.firstAgentContext),
       background: input.background,
       callerWorkspaceId: input.callerWorkspaceId,
@@ -228,6 +237,9 @@ export async function attemptFirstAgentBranchAutoName(options: {
     return { attempted: true, renamed: false, branchName: null };
   }
   if ((await getCurrentBranchImpl(options.cwd)) !== placeholderBranchName) {
+    return { attempted: true, renamed: false, branchName: null };
+  }
+  if (await isBranchPublished(options.cwd, placeholderBranchName)) {
     return { attempted: true, renamed: false, branchName: null };
   }
 

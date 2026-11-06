@@ -28,6 +28,7 @@ import {
 import { shouldRenderSyncedStatusLoader } from "@/utils/status-loader";
 import { StatusRing } from "@/components/status-ring";
 import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
+import { isWorkspaceTitleHeld } from "@getpaseo/protocol/messages";
 import { DensityIcon } from "@/components/ui/density-icon";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
@@ -121,6 +122,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     settings: { workspaceTitleSource },
   } = useAppSettings();
   const workspaceLabel = resolveSidebarWorkspacePrimaryLabel({ workspace, workspaceTitleSource });
+  const titleHeld = workspaceTitleSource !== "branch" && isWorkspaceTitleHeld(workspace.titleState);
   // The workspace carries label names; their colors live in its host's catalog, so the row is
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
@@ -129,8 +131,9 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
       styles.workspaceBranchText,
       isHovered && styles.workspaceBranchTextHovered,
       isCreating && styles.workspaceBranchTextCreating,
+      titleHeld && styles.workspaceBranchTextHeld,
     ],
-    [isHovered, isCreating],
+    [isHovered, isCreating, titleHeld],
   );
 
   return (
@@ -525,6 +528,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   workspaceBranchTextCreating: {
     opacity: 0.92,
+  },
+  workspaceBranchTextHeld: {
+    color: theme.colors.foregroundMuted,
   },
   workspaceBranchTextHovered: {
     opacity: 1,

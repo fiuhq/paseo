@@ -1126,7 +1126,7 @@ export async function createPaseoDaemon(
       cwd,
       resolveFirstAgentPromptTitle(firstAgentContext),
       undefined,
-      context,
+      { ...context, promptTitleContext: firstAgentContext },
     );
     if (firstAgentContext) {
       workspaceAutoName.scheduleForDirectory({
@@ -1201,6 +1201,7 @@ export async function createPaseoDaemon(
       await emitWorkspaceUpdatesExternal([workspaceId]);
     },
     logger,
+    titleGate: { lifecycle: pluginRuntime, workspaceRegistry },
   });
 
   setupAutoArchiveOnMerge({
@@ -1390,6 +1391,8 @@ export async function createPaseoDaemon(
     const workspace = await workspaceProvisioning.createWorkspaceForDirectory(
       input.cwd,
       resolveFirstAgentPromptTitle(input.firstAgentContext),
+      undefined,
+      { promptTitleContext: input.firstAgentContext },
     );
     workspaceAutoName.scheduleForDirectory({
       workspaceId: workspace.workspaceId,

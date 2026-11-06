@@ -16,7 +16,11 @@ import type { Logger } from "pino";
 
 import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-types.js";
 import type { AgentManager } from "../agent-manager.js";
-import { ActiveTurnBehaviorSchema, AgentProfileSchema } from "@getpaseo/protocol/messages";
+import {
+  ActiveTurnBehaviorSchema,
+  AgentProfileSchema,
+  WorkspaceTitleStateSchema,
+} from "@getpaseo/protocol/messages";
 import type { DaemonConfigStore } from "../../daemon-config-store.js";
 import {
   AgentFeatureSchema,
@@ -195,6 +199,8 @@ const WorkspaceAutomationSummarySchema = z.object({
   isolation: z.enum(["local", "worktree"]),
   kind: z.enum(["directory", "local_checkout", "worktree"]),
   title: z.string().nullable(),
+  // Why there is no title yet: the judge's score and what it refused.
+  titleState: WorkspaceTitleStateSchema.nullable().optional(),
   background: z.boolean().optional(),
 });
 
@@ -206,6 +212,7 @@ function toWorkspaceAutomationSummary(workspace: PersistedWorkspaceRecord) {
     isolation: workspace.kind === "worktree" ? ("worktree" as const) : ("local" as const),
     kind: workspace.kind,
     title: workspace.title,
+    titleState: workspace.titleState,
     background: workspace.background,
     parentWorkspaceId: workspace.parentWorkspaceId,
   };
@@ -2373,6 +2380,7 @@ function createToolCatalog(
       await options.workspaceRegistry.upsert({
         ...existing,
         title,
+        titleState: null,
         updatedAt: new Date().toISOString(),
       });
       await options.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);

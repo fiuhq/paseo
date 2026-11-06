@@ -89,6 +89,28 @@ export type PluginTurnOutcome =
   | { kind: "failed"; error: { message: string; code?: string } }
   | { kind: "canceled"; reason: string };
 
+/**
+ * One candidate title for a new workspace. Filling in `verdict` is the only change a
+ * handler may make. Registering this hook makes Paseo hold new workspaces' titles until
+ * a candidate is accepted; with no handler, titles go on as they always did.
+ */
+export interface PluginWorkspaceTitleRequest {
+  workspaceId: string;
+  candidate: { title: string; branch: string | null };
+  /** `prompt`: written from the first prompt alone. `reply`: also from the agent's reply. */
+  source: "prompt" | "reply";
+  /** The prompt, or the reply followed by the prompt, clipped. */
+  sourceText: string;
+  attempt: number;
+  verdict: {
+    /** `unchecked`: the judge could not decide; the title goes on, marked as such. */
+    decision: "accept" | "refuse" | "unchecked";
+    score: number | null;
+    /** The judge's name, shown to the user. */
+    judge: string | null;
+  } | null;
+}
+
 export interface PluginHookEvents {
   "agent.turn.before": { agent: PluginHookAgent; turnId: string | null };
   "agent.turn.after": {
@@ -119,6 +141,7 @@ export interface PluginHookRequests {
   "agent.create.before": { config: AgentSessionConfig; env?: Record<string, string> };
   "agent.open.before": PluginSessionOpenRequest;
   "workspace.create.before": Omit<WorkspaceCreateRequest, "type" | "requestId">;
+  "workspace.title.before": PluginWorkspaceTitleRequest;
 }
 
 export type PluginHooks = {
@@ -174,6 +197,7 @@ export interface PluginLifecycleRegistration {
 export const pluginHookRegistry = {
   "workspace.create.before": { waits: true },
   "workspace.create.after": { waits: false },
+  "workspace.title.before": { waits: true },
   "workspace.archive.after": { waits: false },
   "worktree.create.before": { waits: true },
   "worktree.create.after": { waits: true },

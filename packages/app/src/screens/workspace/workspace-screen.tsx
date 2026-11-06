@@ -90,6 +90,8 @@ import {
 import { openWorkspacePullRequest } from "@/workspace-tabs/open-supporting-view";
 import { traceInstant } from "@/performance/native-trace";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
+import { isWorkspaceTitleHeld } from "@getpaseo/protocol/messages";
+import { WorkspaceTitleStateChip } from "@/screens/workspace/workspace-title-state-chip";
 import {
   canDismissPaneInLayout,
   collectAllTabs,
@@ -482,6 +484,7 @@ function useCloseTabs(): UseCloseTabsResult {
 interface WorkspaceHeaderTitleBarProps {
   isLoading: boolean;
   title: string;
+  workspace: WorkspaceDescriptor | null | undefined;
   subtitle: string;
   isSubtitleDistinct: boolean;
   currentBranchName: string | null;
@@ -498,6 +501,7 @@ interface WorkspaceHeaderTitleBarProps {
 function WorkspaceHeaderTitleBar({
   isLoading,
   title,
+  workspace,
   subtitle,
   isSubtitleDistinct,
   currentBranchName,
@@ -519,12 +523,18 @@ function WorkspaceHeaderTitleBar({
         </View>
       ) : (
         <View style={styles.headerTitleTextGroup}>
-          <ScreenTitle testID="workspace-header-title">{title}</ScreenTitle>
+          <ScreenTitle
+            testID="workspace-header-title"
+            style={isWorkspaceTitleHeld(workspace?.titleState) ? styles.headerTitleHeld : undefined}
+          >
+            {title}
+          </ScreenTitle>
           <WorkspaceHeaderProjectRow
             subtitle={subtitle}
             isSubtitleDistinct={isSubtitleDistinct}
             serverId={normalizedServerId}
           />
+          <WorkspaceTitleStateChip serverId={normalizedServerId} workspace={workspace} />
         </View>
       )}
       {actionsInBar ? null : (
@@ -3333,6 +3343,7 @@ function WorkspaceScreenContent({
               <WorkspaceHeaderTitleBar
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}
+                workspace={workspaceDescriptor}
                 subtitle={workspaceHeaderSubtitle}
                 isSubtitleDistinct={isWorkspaceHeaderSubtitleDistinct}
                 currentBranchName={currentBranchName}
@@ -3365,6 +3376,7 @@ function WorkspaceScreenContent({
       workspaceDirectory,
       workspaceHeaderSubtitle,
       workspaceHeaderTitle,
+      workspaceDescriptor,
       isWorkspaceHeaderSubtitleDistinct,
     ],
   );
@@ -3445,6 +3457,7 @@ function WorkspaceScreenContent({
           tabSwitcher={tabSwitcher}
           isLoading={isWorkspaceHeaderLoading}
           title={workspaceHeaderTitle}
+          workspace={workspaceDescriptor}
           subtitle={workspaceHeaderSubtitle}
           isSubtitleDistinct={isWorkspaceHeaderSubtitleDistinct}
           serverId={normalizedServerId}
@@ -3499,6 +3512,7 @@ function WorkspaceScreenContent({
       openImportSheet,
       showCreateBrowserTab,
       showWorkspaceSetup,
+      workspaceDescriptor,
       workspaceDirectory,
       workspaceHeaderSubtitle,
       workspaceHeaderTitle,
@@ -3951,6 +3965,9 @@ const styles = StyleSheet.create((theme) => ({
       xs: 0,
       md: theme.spacing[2],
     },
+  },
+  headerTitleHeld: {
+    color: theme.colors.foregroundMuted,
   },
   headerTitleSkeleton: {
     width: 220,

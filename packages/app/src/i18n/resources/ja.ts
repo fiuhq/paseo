@@ -447,6 +447,15 @@ export const ja: TranslationResources = {
     },
   },
   workspace: {
+    titleState: {
+      naming: "名前を付けています…",
+      refused: "「{{title}}」を却下 ({{score}}): エージェントを待っています",
+      noReply: "タイトルなし: エージェントが応答しませんでした",
+      exhausted: "タイトルなし: {{tries}} 回却下されました",
+      unchecked: "未確認: {{judge}} に接続できません",
+      judgeFallback: "判定者",
+      rename: "名前を変更",
+    },
     route: {
       loading: "ワークスペースを読み込み中",
       connecting: "接続中",
