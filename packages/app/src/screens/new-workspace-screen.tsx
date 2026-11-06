@@ -599,7 +599,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
   try {
     await agentCreation.result;
   } catch (error) {
-    // A failed start leaves the draft for a retry; its checklist must not claim it is still going.
+    // A failed start's checklist must not claim it is still going.
     if (startupDraftId) startup.discard({ draftId: startupDraftId });
     if (starting) {
       abandonStartingWorkspace({

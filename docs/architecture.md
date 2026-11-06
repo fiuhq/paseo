@@ -344,10 +344,13 @@ Example: adding a new enum value
 ### Creation ownership
 
 Creation is owned by the daemon across socket lifetimes. A workspace request can include
-its initial agent and prompt. Workspace readiness is published before provider startup;
-the app keeps its existing disk-ready navigation and observes the remaining creation.
-Callbacks do not advance the workflow. Resource reservations in acknowledgement are
-identities, not ready workspace records.
+its initial agent and prompt. Workspace readiness is published before provider startup.
+On a host with `creationLifecycle`, the app mints the workspace ID, opens a starting
+workspace at Enter, and observes creation until the daemon's row replaces it. That row
+is client-only: it has no folder and is never cached. If creation fails, the app removes
+the row and returns the prompt to New workspace. On an older host, the app navigates once
+the workspace is ready on disk. Callbacks do not advance the workflow. Resource
+reservations in acknowledgement are identities, not ready workspace records.
 
 The creation journal (`server/creation/`) owns identity and execution for both legacy and
 modern creation RPCs. Requesting progress never selects a different journal. Existing
