@@ -1,5 +1,9 @@
 import type pino from "pino";
-import type { FirstAgentContext, WorkspaceTitleState } from "@getpaseo/protocol/messages";
+import {
+  isWorkspaceTitleHeld,
+  type FirstAgentContext,
+  type WorkspaceTitleState,
+} from "@getpaseo/protocol/messages";
 
 import { resolveFirstAgentPromptTitle } from "./agent/create-agent-title.js";
 import type { AgentManager } from "./agent/agent-manager.js";
@@ -266,6 +270,10 @@ export class WorkspaceAutoName {
     },
   ): Promise<void> {
     await this.workspaceRegistry.update(workspaceId, (current) => {
+      const branch = input.branch ? { branch: input.branch } : {};
+      if (input.titleState !== undefined && !isWorkspaceTitleHeld(current.titleState)) {
+        return { ...current, ...branch, updatedAt: new Date().toISOString() };
+      }
       let title = current.title;
       if (!title || (input.promptTitle && title === input.promptTitle)) {
         title = input.title;
@@ -273,7 +281,7 @@ export class WorkspaceAutoName {
       return {
         ...current,
         title,
-        ...(input.branch ? { branch: input.branch } : {}),
+        ...branch,
         ...(input.titleState !== undefined ? { titleState: input.titleState } : {}),
         updatedAt: new Date().toISOString(),
       };

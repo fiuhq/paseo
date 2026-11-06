@@ -710,6 +710,56 @@ test("a judged title goes on when git refuses the branch rename", async () => {
   expect(workspace).toMatchObject({ title: "Fix the login flow", titleState: null });
 });
 
+test.each([
+  { rename: "Typed by hand", description: "a rename" },
+  { rename: null, description: "a cleared title" },
+])(
+  "$description that lands during the branch rename survives the judged title",
+  async ({ rename }) => {
+    const { repoDir, tempDir } = createGitRepo();
+    cleanupPaths.push(tempDir);
+    const created = await createPaseoWorktree(
+      { cwd: repoDir, worktreeSlug: "dazzling-yak", paseoHome: path.join(tempDir, ".paseo") },
+      createDeps(),
+    );
+    const held = { ...created.workspace, title: null, titleState: HELD_TITLE_STATE };
+    let workspace: PersistedWorkspaceRecord = held;
+
+    await new Promise<void>((settled) => {
+      new WorkspaceAutoName({
+        agentManager: { subscribe: () => () => {} } as unknown as AgentManager,
+        workspaceRegistry: {
+          update: async (_workspaceId, updater) => {
+            workspace = updater({ ...workspace, title: rename, titleState: null });
+            return workspace;
+          },
+        },
+        workspaceGitService: {} as WorkspaceGitService,
+        providerSnapshotManager: {} as ProviderSnapshotManager,
+        readDaemonConfig: () => ({}),
+        gitMutation: { notifyGitMutation: async () => {} },
+        emitWorkspaceUpdateForCwd: async () => settled(),
+        emitWorkspaceUpdateForWorkspaceId: async () => {},
+        logger: createTestLogger(),
+        generateWorkspaceName: async () => ({ title: "Fix the login flow", branch: "fix-login" }),
+        titleGate: {
+          lifecycle: {
+            before: async () => {
+              throw new Error("judge down");
+            },
+          },
+          workspaceRegistry: { get: async () => workspace },
+        },
+      }).scheduleForWorktree({
+        workspace: held,
+        firstAgentContext: { prompt: "Fix the login flow" },
+      });
+    });
+
+    expect(workspace).toMatchObject({ title: rename, titleState: null, branch: "fix-login" });
+  },
+);
+
 test("a title judge holds a worktree whose agent will reply, and not one with no agent", async () => {
   const { repoDir, tempDir } = createGitRepo();
   cleanupPaths.push(tempDir);

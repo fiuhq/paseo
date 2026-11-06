@@ -172,7 +172,7 @@ export function normalizeWorkspaceDescriptor(
     parentWorkspaceId: payload.parentWorkspaceId,
     name: payload.name,
     title: payload.title ?? null,
-    // COMPAT(workspaceTitleState): old daemons omit it.
+    // COMPAT(workspaceTitleState): added in v0.15.3, remove after 2027-05-06. Old daemons omit it.
     titleState: payload.titleState ?? null,
     pinnedAt: payload.pinnedAt ?? null,
     // COMPAT(workspaceLabels): old daemons omit assignments.
