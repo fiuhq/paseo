@@ -272,11 +272,13 @@ test.describe("Composer attachments", () => {
     }
   });
 
-  test("composer is locked while the new workspace is being created", async ({ page }) => {
+  test("composer is locked while an older host creates the new workspace", async ({ page }) => {
     test.setTimeout(120_000);
     const serverId = getServerId();
 
-    const workspaceCreatedDelay = await delayBrowserWorkspaceCreatedResponse(page);
+    const workspaceCreatedDelay = await delayBrowserWorkspaceCreatedResponse(page, {
+      olderHost: true,
+    });
     const workspace = await seedWorkspace({ repoPrefix: "attach-lock-" });
 
     try {

@@ -2,6 +2,7 @@ import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import {
+  hideCreationLifecycle,
   openNewWorkspaceComposer,
   selectWorkspaceIsolation,
 } from "../support/helpers/new-workspace";
@@ -84,7 +85,7 @@ async function installSyntheticMicrophone(page: Page): Promise<void> {
   });
 }
 
-async function installDictationFailureHarness(page: Page) {
+async function installDictationFailureHarness(page: Page, options: { olderHost?: boolean } = {}) {
   let resolveAudioChunk!: () => void;
   let resolveCreateRequest!: () => void;
   const audioChunk = new Promise<void>((resolve) => {
@@ -150,7 +151,10 @@ async function installDictationFailureHarness(page: Page) {
       server.send(message);
     });
 
-    server.onMessage((message) => ws.send(enableDictationCapability(message)));
+    server.onMessage((message) => {
+      const withDictation = enableDictationCapability(message);
+      ws.send(options.olderHost ? hideCreationLifecycle(withDictation) : withDictation);
+    });
   });
 
   return {
@@ -174,10 +178,14 @@ async function dictateAndSend(page: Page, waitForAudio: () => Promise<void>): Pr
 test.describe("New Workspace dictation submit", () => {
   test.describe.configure({ timeout: 240_000 });
 
-  test("keeps the spoken prompt visible while pending and after failure", async ({ page }) => {
+  async function dictateNewWorkspace(
+    page: Page,
+    options: { olderHost?: boolean },
+    verify: (harness: Awaited<ReturnType<typeof installDictationFailureHarness>>) => Promise<void>,
+  ): Promise<void> {
     const seeded = await seedWorkspace({ repoPrefix: "dictation-submit-" });
     await installSyntheticMicrophone(page);
-    const harness = await installDictationFailureHarness(page);
+    const harness = await installDictationFailureHarness(page, options);
 
     try {
       await gotoAppShell(page);
@@ -191,6 +199,35 @@ test.describe("New Workspace dictation submit", () => {
       await dictateAndSend(page, harness.waitForAudio);
       await harness.waitForCreateRequest();
 
+      await verify(harness);
+    } finally {
+      await seeded.cleanup();
+    }
+  }
+
+  test("opens the workspace on the spoken prompt and hands it back after failure", async ({
+    page,
+  }) => {
+    await dictateNewWorkspace(page, {}, async (harness) => {
+      await expect(page).toHaveURL(/\/workspace\/wks_/, { timeout: 30_000 });
+      await expect(
+        page.getByTestId("user-message").filter({ hasText: TRANSCRIPT }).filter({ visible: true }),
+      ).toBeVisible();
+
+      harness.failWorkspaceCreation();
+
+      await expect(page).toHaveURL(/\/new/, { timeout: 30_000 });
+      const composer = page.getByRole("textbox", { name: "Message agent..." });
+      await expect(composer).toHaveValue(TRANSCRIPT);
+      await expect(composer).toBeEditable();
+      await expect(page.getByTestId("workspace-startup-failure")).toHaveText(CREATE_FAILURE);
+    });
+  });
+
+  test("keeps the spoken prompt visible on an older host while pending and after failure", async ({
+    page,
+  }) => {
+    await dictateNewWorkspace(page, { olderHost: true }, async (harness) => {
       const composer = page.getByRole("textbox", { name: "Message agent..." });
       await expect(composer).toHaveValue(TRANSCRIPT);
       await expect(composer).not.toBeEditable();
@@ -200,9 +237,7 @@ test.describe("New Workspace dictation submit", () => {
       await expect(composer).toBeEditable();
       await expect(composer).toHaveValue(TRANSCRIPT);
       await expect(page.getByText(CREATE_FAILURE).first()).toBeVisible();
-    } finally {
-      await seeded.cleanup();
-    }
+    });
   });
 });
 

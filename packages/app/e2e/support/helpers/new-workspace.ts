@@ -655,8 +655,23 @@ export interface WorkspaceCreatedDelayControl {
  * Holds workspace readiness events and responses so a test can act while the daemon is still
  * running `git worktree add` — most importantly, navigate somewhere else.
  */
+/**
+ * Reads as a host from before `creationLifecycle`, where Enter stays on New workspace until the
+ * workspace exists. The in-place pending and failure states only happen on such a host.
+ */
+export function hideCreationLifecycle(message: WebSocketMessage): WebSocketMessage {
+  const envelope = parseWebSocketJson(message) as {
+    message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
+  } | null;
+  const payload = envelope?.message?.payload;
+  if (payload?.status !== "server_info" || !payload.features) return message;
+  delete payload.features.creationLifecycle;
+  return JSON.stringify(envelope);
+}
+
 export async function delayBrowserWorkspaceCreatedResponse(
   page: Page,
+  options: { olderHost?: boolean } = {},
 ): Promise<WorkspaceCreatedDelayControl> {
   const frames = await loadSessionMessageReaders();
   const daemonPortPattern = daemonWsRoutePattern();
@@ -697,7 +712,7 @@ export async function delayBrowserWorkspaceCreatedResponse(
         return;
       }
 
-      ws.send(message);
+      ws.send(options.olderHost ? hideCreationLifecycle(message) : message);
     });
   });
 
