@@ -1,5 +1,8 @@
 import { create } from "zustand";
+import type { AgentInputDraft } from "@/composer/draft/input-draft";
 import { advanceStartup, type StartupEvent, type StartupProgress } from "./progress";
+
+export type FailedDraft = Parameters<AgentInputDraft["restoreUnsent"]>[0];
 
 export interface StartupFailure {
   serverId: string;
@@ -7,6 +10,9 @@ export interface StartupFailure {
   /** Where the draft went back to: New workspace, for whoever is still on the workspace. */
   returnRoute: string;
   message: string;
+  draftKey: string;
+  /** Null once a composer has it back. */
+  draft: FailedDraft | null;
 }
 
 interface WorkspaceStartupState {
@@ -18,6 +24,7 @@ interface WorkspaceStartupState {
   discard: (input: { draftId: string }) => void;
   fail: (failure: StartupFailure) => void;
   clearFailure: () => void;
+  takeFailedDraft: () => void;
 }
 
 export const useWorkspaceStartupStore = create<WorkspaceStartupState>((set) => ({
@@ -30,6 +37,8 @@ export const useWorkspaceStartupStore = create<WorkspaceStartupState>((set) => (
     })),
   fail: (failure) => set({ failure }),
   clearFailure: () => set((state) => (state.failure ? { failure: null } : state)),
+  takeFailedDraft: () =>
+    set((state) => (state.failure ? { failure: { ...state.failure, draft: null } } : state)),
   advance: ({ draftId, event }) =>
     set((state) => {
       const current = state.byDraftId[draftId];

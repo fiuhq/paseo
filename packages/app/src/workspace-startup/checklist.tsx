@@ -21,6 +21,7 @@ import {
   useDraftStartup,
   useFailedStartupRoute,
   useWorkspaceStartupStore,
+  type FailedDraft,
 } from "./store";
 
 const ThemedCheck = withUnistyles(Check);
@@ -176,6 +177,25 @@ export function useReturnFromFailedStartup(input: { serverId: string; workspaceI
   useEffect(() => {
     if (route) router.replace(route as Href);
   }, [route]);
+}
+
+/**
+ * Hands a failed start's message back to the composer on its draft, ahead of anything typed since.
+ * New workspace shares one draft, so that composer may already hold the next task.
+ */
+export function useRestoreFailedDraft(input: {
+  draftKey: string;
+  isReady: boolean;
+  restore: (draft: FailedDraft) => void;
+}): void {
+  const { draftKey, isReady, restore } = input;
+  const failure = useWorkspaceStartupStore((state) => state.failure);
+  const draft = failure?.draftKey === draftKey ? failure.draft : null;
+  useEffect(() => {
+    if (!draft || !isReady) return;
+    useWorkspaceStartupStore.getState().takeFailedDraft();
+    restore(draft);
+  }, [draft, isReady, restore]);
 }
 
 export interface StartupQueue {

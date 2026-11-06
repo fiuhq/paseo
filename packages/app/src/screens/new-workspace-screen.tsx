@@ -123,11 +123,13 @@ import {
 import { captureWorkspaceDraftCleanup } from "./new-workspace/background-handoff";
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
 import { beginStartup } from "@/workspace-startup/progress";
-import { useWorkspaceStartupStore } from "@/workspace-startup/store";
-import { useDraftStore } from "@/stores/draft-store";
-import type { DraftInput } from "@/stores/draft-store/state";
+import { useWorkspaceStartupStore, type FailedDraft } from "@/workspace-startup/store";
 import { userAttachmentsOnly } from "@/attachments/workspace-attachment-utils";
-import { DraftStartupChecklist, WorkspaceStartupFailure } from "@/workspace-startup/checklist";
+import {
+  DraftStartupChecklist,
+  useRestoreFailedDraft,
+  WorkspaceStartupFailure,
+} from "@/workspace-startup/checklist";
 import { buildStartingWorkspace, mintWorkspaceId } from "@/workspace-startup/starting-workspace";
 
 function useIsNewWorkspaceDraftHandoffActive(input: {
@@ -369,6 +371,8 @@ interface CreateChatAgentInput {
   clearDraft: (lifecycle: "sent" | "abandoned") => void;
   draftId?: string;
   createsWorktree: boolean;
+  /** The draft this screen's route names, as distinct from the id minted for a route with none. */
+  routeDraftId: string | undefined;
   /** Null on a host too old to accept a client-chosen id: the workspace opens once it exists. */
   startingWorkspace: WorkspaceDescriptor | null;
   draftContextScopeKey: string | null;
@@ -608,7 +612,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
           serverId,
           sourceDirectory: cwd,
           projectId: starting.projectId,
-          ...(input.forkDraftSetup ? { draftId: input.draftId } : {}),
+          ...(input.routeDraftId ? { draftId: input.routeDraftId } : {}),
         }),
         message: toErrorMessage(error),
       });
@@ -653,22 +657,13 @@ function resolveStartingWorkspace(input: {
   });
 }
 
-/** New workspace shares one draft: what was typed since Enter stays, behind the failed message. */
-function withNewerDraft(failed: DraftInput, current: DraftInput | null | undefined): DraftInput {
-  if (!current?.text && !current?.attachments.length) return failed;
-  return {
-    text: `${failed.text}\n\n${current.text}`,
-    attachments: [...failed.attachments, ...current.attachments],
-  };
-}
-
 /** The daemon never made it: take the row away and hand the draft back where it was written. */
 function abandonStartingWorkspace(input: {
   serverId: string;
   workspace: WorkspaceDescriptor;
   draftId: string | undefined;
   draftKey: string;
-  draft: DraftInput;
+  draft: FailedDraft;
   returnRoute: string;
   message: string;
 }): void {
@@ -676,15 +671,13 @@ function abandonStartingWorkspace(input: {
   const session = useSessionStore.getState().sessions[serverId];
   if (!session?.workspaces.get(workspace.id)?.isStarting) return;
   getHostRuntimeStore().removeWorkspaceSnapshot(serverId, workspace.id);
-  useDraftStore.getState().saveDraftInput({
-    draftKey,
-    draft: withNewerDraft(draft, useDraftStore.getState().getDraftInput(draftKey)),
-  });
   useWorkspaceStartupStore.getState().fail({
     serverId,
     workspaceId: workspace.id,
     returnRoute,
     message,
+    draftKey,
+    draft,
   });
   if (draftId) {
     useCreateFlowStore.getState().clear({ draftId });
@@ -1520,6 +1513,7 @@ export function NewWorkspaceScreen({
           clearDraft: chatDraft.clear,
           draftKey,
           draftId: creationIdentity.draftId,
+          routeDraftId: draftId,
           createsWorktree,
           startingWorkspace: resolveStartingWorkspace({
             client: withConnectedClient(),
@@ -1555,6 +1549,7 @@ export function NewWorkspaceScreen({
       draftContextScopeKey,
       creationIdentity,
       chatDraft.clear,
+      draftId,
       draftKey,
       ensureWorkspace,
       forkDraftSetup,
@@ -1728,6 +1723,11 @@ export function NewWorkspaceScreen({
   });
 
   const importSession = useImportSession({ serverId: selectedServerId });
+  useRestoreFailedDraft({
+    draftKey,
+    isReady: chatDraft.isHydrated,
+    restore: chatDraft.restoreUnsent,
+  });
 
   const isComposerFullscreen = composerEditing.isFullscreen(isTerminalLaunch);
   const composer = isTerminalLaunch ? (
