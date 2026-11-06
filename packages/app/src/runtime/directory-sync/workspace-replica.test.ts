@@ -387,12 +387,12 @@ function startingWorkspace(id: string) {
   };
 }
 
-it("keeps a starting workspace through a resync, and never hands it to the cache", () => {
+it("keeps a starting workspace through a resync", () => {
   const serverId = "workspace-replica-starting";
   useSessionStore.getState().initializeSession(serverId, null as unknown as DaemonClient);
   const replica = new WorkspaceDirectoryReplica(serverId);
 
-  expect(replica.acceptWorkspaces([startingWorkspace("starting")])).toEqual([]);
+  replica.acceptWorkspaces([startingWorkspace("starting")]);
   replica.commitSnapshot(
     {
       workspaces: new Map([["kept", normalizeWorkspaceDescriptor(workspace("kept"))]]),

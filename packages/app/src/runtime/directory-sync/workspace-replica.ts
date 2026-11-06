@@ -101,9 +101,7 @@ export class WorkspaceDirectoryReplica {
     return workspaces.flatMap((workspace) => {
       const existing = this.workspaces.get(workspace.id);
       if (existing && (workspace.isStarting || !existing.isStarting)) return [];
-      const mutations = this.upsertWorkspace(workspace);
-      // A starting workspace is this session's; a cached one would outlive a failed creation.
-      return workspace.isStarting ? [] : mutations;
+      return this.upsertWorkspace(workspace);
     });
   }
 

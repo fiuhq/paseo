@@ -653,6 +653,15 @@ function resolveStartingWorkspace(input: {
   });
 }
 
+/** New workspace shares one draft: what was typed since Enter stays, behind the failed message. */
+function withNewerDraft(failed: DraftInput, current: DraftInput | null | undefined): DraftInput {
+  if (!current?.text && !current?.attachments.length) return failed;
+  return {
+    text: `${failed.text}\n\n${current.text}`,
+    attachments: [...failed.attachments, ...current.attachments],
+  };
+}
+
 /** The daemon never made it: take the row away and hand the draft back where it was written. */
 function abandonStartingWorkspace(input: {
   serverId: string;
@@ -667,7 +676,10 @@ function abandonStartingWorkspace(input: {
   const session = useSessionStore.getState().sessions[serverId];
   if (!session?.workspaces.get(workspace.id)?.isStarting) return;
   getHostRuntimeStore().removeWorkspaceSnapshot(serverId, workspace.id);
-  useDraftStore.getState().saveDraftInput({ draftKey, draft });
+  useDraftStore.getState().saveDraftInput({
+    draftKey,
+    draft: withNewerDraft(draft, useDraftStore.getState().getDraftInput(draftKey)),
+  });
   useWorkspaceStartupStore.getState().fail({
     serverId,
     workspaceId: workspace.id,
@@ -1431,7 +1443,8 @@ export function NewWorkspaceScreen({
           )
         : undefined;
       const normalizedWorkspace = await createMultiplicityWorkspace({
-        idempotencyKey: creationIdentity.draftId,
+        // A workspace id is per screen, so a returned screen starts over and a retry keeps its key.
+        idempotencyKey: input.workspaceId ?? creationIdentity.draftId,
         workspaceId: input.workspaceId,
         worktreeSlug: creationIdentity.worktreeSlug,
         client: connectedClient,
