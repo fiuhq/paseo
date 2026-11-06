@@ -133,6 +133,11 @@ export interface WorkspaceDescriptor {
   githubRuntime?: WorkspaceDescriptorPayload["githubRuntime"];
   forge?: WorkspaceDescriptorPayload["forge"];
   project?: ProjectPlacementPayload;
+  /**
+   * Made by this app at Enter and not yet confirmed by the daemon, so it has no folder. Never comes
+   * from the wire: the daemon's row replaces it, and it is never cached.
+   */
+  isStarting?: boolean;
 }
 
 export function normalizeWorkspaceDescriptor(

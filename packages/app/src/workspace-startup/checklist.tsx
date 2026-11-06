@@ -1,5 +1,6 @@
+import { router, type Href } from "expo-router";
 import { Check, Circle } from "lucide-react-native";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -15,7 +16,13 @@ import {
   type StartupProgress,
   type StepState,
 } from "./progress";
-import { useAgentStartup, useDraftStartup } from "./store";
+import {
+  useAgentStartup,
+  useDraftStartup,
+  useFailedStartupRoute,
+  useWorkspaceStartupStore,
+  type FailedDraft,
+} from "./store";
 
 const ThemedCheck = withUnistyles(Check);
 const ThemedCircle = withUnistyles(Circle);
@@ -164,6 +171,33 @@ export function WorkspaceStartupSummary({
   );
 }
 
+/** Whoever is still on a workspace that failed to start goes back to their draft. */
+export function useReturnFromFailedStartup(input: { serverId: string; workspaceId: string }): void {
+  const route = useFailedStartupRoute(input);
+  useEffect(() => {
+    if (route) router.replace(route as Href);
+  }, [route]);
+}
+
+/**
+ * Hands a failed start's message back to the composer on its draft, ahead of anything typed since.
+ * New workspace shares one draft, so that composer may already hold the next task.
+ */
+export function useRestoreFailedDraft(input: {
+  draftKey: string;
+  isReady: boolean;
+  restore: (draft: FailedDraft) => void;
+}): void {
+  const { draftKey, isReady, restore } = input;
+  const failure = useWorkspaceStartupStore((state) => state.failure);
+  const draft = failure?.draftKey === draftKey ? failure.draft : null;
+  useEffect(() => {
+    if (!draft || !isReady) return;
+    useWorkspaceStartupStore.getState().takeFailedDraft();
+    restore(draft);
+  }, [draft, isReady, restore]);
+}
+
 export interface StartupQueue {
   queueUntilReady: boolean;
   placeholder: string | undefined;
@@ -209,6 +243,19 @@ export function AgentStartupSummary({ serverId, agentId }: { serverId: string; a
   ) : null;
 }
 
+/** The last start's failure, beside the draft it handed back. */
+export function WorkspaceStartupFailure({ serverId }: { serverId: string }) {
+  const failure = useWorkspaceStartupStore((state) => state.failure);
+  // Read once, here: it must not greet someone on a later New workspace.
+  useEffect(() => () => useWorkspaceStartupStore.getState().clearFailure(), []);
+  if (failure?.serverId !== serverId) return null;
+  return (
+    <Text style={styles.failure} testID="workspace-startup-failure">
+      {failure.message}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
@@ -249,6 +296,11 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     fontVariant: ["tabular-nums"],
+  },
+  failure: {
+    color: theme.colors.destructive,
+    fontSize: theme.fontSize.sm,
+    marginTop: theme.spacing[2],
   },
   summary: {
     width: "100%",

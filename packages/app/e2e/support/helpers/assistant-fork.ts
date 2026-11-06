@@ -1,6 +1,9 @@
 import { expect, type Page } from "@playwright/test";
 import { scrollAgentChatToBottom } from "./agent-bottom-anchor";
 import { getE2EDaemonPort } from "./daemon-port";
+import { parseWorkspaceIdFromPageUrl } from "./new-workspace";
+import type { SeedDaemonClient } from "./seed-client";
+import { getServerId } from "./server-id";
 
 type WebSocketMessage = string | Buffer;
 
@@ -21,6 +24,26 @@ function readSessionMessage(message: WebSocketMessage): SessionMessage | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The prompt shows as soon as the workspace opens, before the daemon has created anything. Wait for
+ * the agent so test cleanup cannot remove the project under a creation still in flight.
+ */
+export async function expectOpenWorkspaceHasOneAgent(
+  page: Page,
+  client: SeedDaemonClient,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const workspaceId = parseWorkspaceIdFromPageUrl(page, getServerId());
+        const { entries } = await client.fetchAgents();
+        return entries.filter((entry) => entry.agent.workspaceId === workspaceId).length;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(1);
 }
 
 export function observeForkAttachment(page: Page): {

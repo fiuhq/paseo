@@ -1,17 +1,44 @@
 import { create } from "zustand";
+import type { AgentInputDraft } from "@/composer/draft/input-draft";
 import { advanceStartup, type StartupEvent, type StartupProgress } from "./progress";
+
+export type FailedDraft = Parameters<AgentInputDraft["restoreUnsent"]>[0];
+
+export interface StartupFailure {
+  serverId: string;
+  workspaceId: string;
+  /** Where the draft went back to: New workspace, for whoever is still on the workspace. */
+  returnRoute: string;
+  message: string;
+  draftKey: string;
+  /** Null once a composer has it back. */
+  draft: FailedDraft | null;
+}
 
 interface WorkspaceStartupState {
   byDraftId: Record<string, StartupProgress>;
+  /** Why the last start failed, shown on New workspace, where its draft went back to. */
+  failure: StartupFailure | null;
   begin: (progress: StartupProgress) => void;
   advance: (input: { draftId: string; event: StartupEvent }) => void;
   discard: (input: { draftId: string }) => void;
+  fail: (failure: StartupFailure) => void;
+  clearFailure: () => void;
+  takeFailedDraft: () => void;
 }
 
 export const useWorkspaceStartupStore = create<WorkspaceStartupState>((set) => ({
   byDraftId: {},
+  failure: null,
   begin: (progress) =>
-    set((state) => ({ byDraftId: { ...state.byDraftId, [progress.draftId]: progress } })),
+    set((state) => ({
+      byDraftId: { ...state.byDraftId, [progress.draftId]: progress },
+      failure: null,
+    })),
+  fail: (failure) => set({ failure }),
+  clearFailure: () => set((state) => (state.failure ? { failure: null } : state)),
+  takeFailedDraft: () =>
+    set((state) => (state.failure ? { failure: { ...state.failure, draft: null } } : state)),
   advance: ({ draftId, event }) =>
     set((state) => {
       const current = state.byDraftId[draftId];
@@ -59,5 +86,31 @@ export function useAgentStartup(input: {
       if (progress.serverId === serverId && progress.agentId === agentId) return progress;
     }
     return null;
+  });
+}
+
+/** Whether a workspace is still on its way to an agent that can take the first message. */
+export function useIsWorkspaceStarting(input: { serverId: string; workspaceId: string }): boolean {
+  const { serverId, workspaceId } = input;
+  return useWorkspaceStartupStore((state) => {
+    for (const progress of Object.values(state.byDraftId)) {
+      const isThisWorkspace =
+        progress.serverId === serverId && progress.workspaceId === workspaceId;
+      if (isThisWorkspace) return progress.agentReadyAt === null;
+    }
+    return false;
+  });
+}
+
+/** The address of a workspace that failed to start, while someone may still be looking at it. */
+export function useFailedStartupRoute(input: {
+  serverId: string;
+  workspaceId: string;
+}): string | null {
+  const { serverId, workspaceId } = input;
+  return useWorkspaceStartupStore((state) => {
+    const failure = state.failure;
+    const isThisWorkspace = failure?.serverId === serverId && failure.workspaceId === workspaceId;
+    return isThisWorkspace ? failure.returnRoute : null;
   });
 }

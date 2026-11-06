@@ -378,3 +378,63 @@ it("restores a missing workspace after an archive failure without replacing a li
     store.clearSession(serverId);
   }
 });
+
+function startingWorkspace(id: string) {
+  return {
+    ...normalizeWorkspaceDescriptor(workspace(id)),
+    workspaceDirectory: "",
+    isStarting: true,
+  };
+}
+
+it("keeps a starting workspace through a resync", () => {
+  const serverId = "workspace-replica-starting";
+  useSessionStore.getState().initializeSession(serverId, null as unknown as DaemonClient);
+  const replica = new WorkspaceDirectoryReplica(serverId);
+
+  replica.acceptWorkspaces([startingWorkspace("starting")]);
+  replica.commitSnapshot(
+    {
+      workspaces: new Map([["kept", normalizeWorkspaceDescriptor(workspace("kept"))]]),
+      projects: new Map(),
+    },
+    [],
+  );
+
+  const session = useSessionStore.getState().sessions[serverId];
+  expect(Array.from(session?.workspaces.keys() ?? []).sort()).toEqual(["kept", "starting"]);
+});
+
+it("replaces a starting workspace with the daemon's, but never the reverse", () => {
+  const serverId = "workspace-replica-replace";
+  useSessionStore.getState().initializeSession(serverId, null as unknown as DaemonClient);
+  const replica = new WorkspaceDirectoryReplica(serverId);
+  const real = normalizeWorkspaceDescriptor(workspace("wks"));
+
+  replica.acceptWorkspaces([startingWorkspace("wks")]);
+  expect(replica.acceptWorkspaces([real])).not.toEqual([]);
+  const stored = () => useSessionStore.getState().sessions[serverId]?.workspaces.get("wks");
+  expect(stored()?.workspaceDirectory).toBe("/repo/project/wks");
+  expect(stored()?.isStarting).toBeUndefined();
+
+  replica.acceptWorkspaces([startingWorkspace("wks")]);
+  expect(stored()?.workspaceDirectory).toBe("/repo/project/wks");
+});
+
+it("drops a starting workspace the snapshot already carries for real", () => {
+  const serverId = "workspace-replica-landed";
+  useSessionStore.getState().initializeSession(serverId, null as unknown as DaemonClient);
+  const replica = new WorkspaceDirectoryReplica(serverId);
+
+  replica.acceptWorkspaces([startingWorkspace("wks")]);
+  replica.commitSnapshot(
+    {
+      workspaces: new Map([["wks", normalizeWorkspaceDescriptor(workspace("wks"))]]),
+      projects: new Map(),
+    },
+    [],
+  );
+
+  const stored = useSessionStore.getState().sessions[serverId]?.workspaces.get("wks");
+  expect(stored?.isStarting).toBeUndefined();
+});

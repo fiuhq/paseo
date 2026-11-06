@@ -145,11 +145,11 @@ test.describe("New workspace composer draft", () => {
   });
 });
 
-test("fullscreen creation returns inline and keeps submission locked when reopened", async ({
+test("fullscreen creation on an older host returns inline and keeps submission locked when reopened", async ({
   page,
 }) => {
   const project = await seedWorkspace({ repoPrefix: "fullscreen-submit-pending-" });
-  const delay = await delayBrowserWorkspaceCreatedResponse(page);
+  const delay = await delayBrowserWorkspaceCreatedResponse(page, { olderHost: true });
   try {
     await gotoAppShell(page);
     await waitForSidebarHydration(page);

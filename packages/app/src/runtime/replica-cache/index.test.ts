@@ -1207,3 +1207,16 @@ it("retains semantic agent messages across disk-cache reconstruction", async () 
   await writer.flush();
   expect(await createCache(storage).readTimeline(SERVER_ID, "agent-1")).toEqual(value);
 });
+
+it("never writes a starting workspace to the cache", async () => {
+  const storage = new MemoryStorage();
+  const cache = createCache(storage);
+  const value = directory();
+  const [cached] = value.workspaces.values();
+  value.workspaces.set(cached.id, { ...cached, isStarting: true });
+
+  commitDirectory(cache, SERVER_ID, value);
+  await cache.flush();
+
+  expect([...storage.rows.keys()].some((key) => key.includes(":workspace:"))).toBe(false);
+});

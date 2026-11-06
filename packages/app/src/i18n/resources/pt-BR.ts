@@ -1375,6 +1375,7 @@ export const ptBR: TranslationResources = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "preparando",
       title: "Preparando",
       creatingWorktree: "Criando worktree",
       worktreeReady: "Worktree {{name}}",

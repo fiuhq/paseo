@@ -1356,6 +1356,7 @@ export const ko: TranslationResources = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "준비 중",
       title: "준비 중",
       creatingWorktree: "worktree 생성 중",
       worktreeReady: "worktree {{name}}",

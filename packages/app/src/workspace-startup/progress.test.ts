@@ -5,6 +5,7 @@ const begin = () =>
   beginStartup({
     serverId: "srv",
     draftId: "draft-1",
+    workspaceId: "wks_1",
     agentLabel: "Claude",
     at: 1_000,
     isWorktree: true,
@@ -112,6 +113,7 @@ describe("workspace startup progress", () => {
     const local = beginStartup({
       serverId: "srv",
       draftId: "d",
+      workspaceId: null,
       agentLabel: "Claude",
       at: 0,
       isWorktree: false,

@@ -101,7 +101,7 @@ async function waitForWorkspaceDescriptor(
   throw new Error(`Workspace descriptor not found: ${workspaceId}`);
 }
 
-function parseWorkspaceIdFromPageUrl(page: Page, serverId: string): string | null {
+export function parseWorkspaceIdFromPageUrl(page: Page, serverId: string): string | null {
   const pathname = new URL(page.url()).pathname;
   const match = pathname.match(
     new RegExp(`^/h/${serverId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/workspace/([^/?#]+)`),
@@ -655,8 +655,23 @@ export interface WorkspaceCreatedDelayControl {
  * Holds workspace readiness events and responses so a test can act while the daemon is still
  * running `git worktree add` — most importantly, navigate somewhere else.
  */
+/**
+ * Reads as a host from before `creationLifecycle`, where Enter stays on New workspace until the
+ * workspace exists. The in-place pending and failure states only happen on such a host.
+ */
+export function hideCreationLifecycle(message: WebSocketMessage): WebSocketMessage {
+  const envelope = parseWebSocketJson(message) as {
+    message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
+  } | null;
+  const payload = envelope?.message?.payload;
+  if (payload?.status !== "server_info" || !payload.features) return message;
+  delete payload.features.creationLifecycle;
+  return JSON.stringify(envelope);
+}
+
 export async function delayBrowserWorkspaceCreatedResponse(
   page: Page,
+  options: { olderHost?: boolean } = {},
 ): Promise<WorkspaceCreatedDelayControl> {
   const frames = await loadSessionMessageReaders();
   const daemonPortPattern = daemonWsRoutePattern();
@@ -697,7 +712,7 @@ export async function delayBrowserWorkspaceCreatedResponse(
         return;
       }
 
-      ws.send(message);
+      ws.send(options.olderHost ? hideCreationLifecycle(message) : message);
     });
   });
 
@@ -723,9 +738,15 @@ export interface CreationPhaseGate {
 /**
  * Holds a workspace creation at a phase boundary, in order: nothing past `accepted` reaches the app
  * until `releaseWorkspace`, and nothing past `workspace_ready` until `releaseAgent`.
+ * `keepFromDaemon` stops the request itself, for a creation that fails before it makes anything.
+ * It holds until `failCreation`, so a retry reaches the daemon.
  */
-export async function gateBrowserCreationPhases(page: Page): Promise<CreationPhaseGate> {
+export async function gateBrowserCreationPhases(
+  page: Page,
+  options: { keepFromDaemon?: boolean } = {},
+): Promise<CreationPhaseGate> {
   const frames = await loadSessionMessageReaders();
+  let keepFromDaemon = options.keepFromDaemon === true;
   const creationKeys = new Set<string>();
   const createRequestIds = new Set<string>();
   const held: { isWorkspaceReady: boolean; forward: () => void }[] = [];
@@ -771,6 +792,8 @@ export async function gateBrowserCreationPhases(page: Page): Promise<CreationPha
           );
         };
         resolveCreateRequest?.();
+        // The daemon never hears of it, so nothing it makes can overtake the failure under test.
+        if (keepFromDaemon) return;
       }
       server.send(message);
     });
@@ -805,7 +828,10 @@ export async function gateBrowserCreationPhases(page: Page): Promise<CreationPha
       gate = "open";
       flush();
     },
-    failCreation: (error) => failWith(error),
+    failCreation(error) {
+      keepFromDaemon = false;
+      failWith(error);
+    },
     waitForCreateRequest: () => createRequestSeen,
   };
 }

@@ -37,22 +37,23 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function reservePort() {
-  return await new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close((error) => {
-        if (error) return reject(error);
-        if (!address || typeof address === "string") {
-          return reject(new Error("Failed to reserve a local port"));
-        }
-        resolve(address.port);
-      });
-    });
-  });
+async function reservePorts(count) {
+  const servers = await Promise.all(
+    Array.from(
+      { length: count },
+      () =>
+        new Promise((resolve, reject) => {
+          const server = net.createServer();
+          server.unref();
+          server.once("error", reject);
+          server.listen(0, "127.0.0.1", () => resolve(server));
+        }),
+    ),
+  );
+  // Close only once all are bound, or the kernel can hand a released port out again.
+  const ports = servers.map((server) => server.address().port);
+  await Promise.all(servers.map(closeServer));
+  return ports;
 }
 
 async function waitForPort(port, label, processInfo) {
@@ -1120,16 +1121,12 @@ async function main() {
   const workspaceRoot = path.join(runtimeDir, "workspaces");
   fs.mkdirSync(paseoHome, { recursive: true });
 
-  const [daemonPort, expoPort, cdpPort, inspectorPort, remotePort] = await Promise.all([
-    reservePort(),
-    reservePort(),
-    reservePort(),
-    reservePort(),
-    reservePort(),
-  ]);
+  // Bind first: a reserved port is free until its owner starts, so a later port 0 listener could
+  // take it, and waitForPort would then pass on the wrong server.
+  const target = await startTargetPage();
+  const [daemonPort, expoPort, cdpPort, inspectorPort, remotePort] = await reservePorts(5);
   const listen = `127.0.0.1:${daemonPort}`;
   seedPaseoHome(paseoHome, listen, workspaceRoot);
-  const target = await startTargetPage();
   seedPluginLinks(paseoHome, workspaceIds[0], target.url, workspaceIds[1]);
   const remoteHome = path.join(runtimeDir, "remote-home");
   seedPaseoHome(remoteHome, `127.0.0.1:${remotePort}`, path.join(runtimeDir, "remote-workspaces"));

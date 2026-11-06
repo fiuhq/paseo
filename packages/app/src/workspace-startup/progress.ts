@@ -8,6 +8,8 @@ import { formatDuration } from "@/utils/time";
 export interface StartupProgress {
   serverId: string;
   draftId: string;
+  /** Known from Enter when the app opened the workspace itself. */
+  workspaceId: string | null;
   /** The provider's display name, e.g. "Claude". */
   agentLabel: string;
   submittedAt: number;
@@ -71,6 +73,7 @@ const AGENT_READY_PHASES: ReadonlySet<CreationSnapshot["phase"]> = new Set([
 export function beginStartup(input: {
   serverId: string;
   draftId: string;
+  workspaceId: string | null;
   agentLabel: string;
   at: number;
   isWorktree: boolean;
@@ -78,6 +81,7 @@ export function beginStartup(input: {
   return {
     serverId: input.serverId,
     draftId: input.draftId,
+    workspaceId: input.workspaceId,
     agentLabel: input.agentLabel,
     submittedAt: input.at,
     isWorktree: input.isWorktree,

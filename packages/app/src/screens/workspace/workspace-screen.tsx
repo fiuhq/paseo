@@ -42,6 +42,7 @@ import { useIsFocused } from "expo-router/react-navigation";
 import { BackHandler, Text, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
+import { useReturnFromFailedStartup } from "@/workspace-startup/checklist";
 import * as Clipboard from "expo-clipboard";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -434,6 +435,7 @@ export const WorkspaceScreen = memo(function WorkspaceScreen({
   // panels before any of them renders. A reader importing the registration instead would import
   // every panel, and the panels render readers.
   ensurePanelsRegistered();
+  useReturnFromFailedStartup({ serverId, workspaceId });
   const navigationFocused = useIsFocused();
   useEffect(() => {
     traceInstant("paseo.workspace.mount", { serverId, workspaceId });
@@ -760,6 +762,11 @@ function useResolvedWorkspaceRouteState(input: {
   );
 }
 
+/** A starting workspace has no folder yet by design; any other workspace without one is broken. */
+function isWorkspaceDirectoryMissing(workspace: WorkspaceDescriptor | null | undefined): boolean {
+  return Boolean(workspace) && !workspace?.workspaceDirectory && !workspace?.isStarting;
+}
+
 function shouldInspectWorkspaceRecovery(
   hasHydratedWorkspaces: boolean,
   workspace: WorkspaceDescriptor | null,
@@ -1078,7 +1085,7 @@ function WorkspaceScreenContent({
     (state) => state.sessions[normalizedServerId]?.serverInfo?.features?.providersSnapshot === true,
   );
   const workspaceDirectory = workspaceDescriptor?.workspaceDirectory || null;
-  const isMissingWorkspaceDirectory = Boolean(workspaceDescriptor) && !workspaceDirectory;
+  const isMissingWorkspaceDirectory = isWorkspaceDirectoryMissing(workspaceDescriptor);
   const [isImportSheetVisible, setIsImportSheetVisible] = useState(false);
   const canOpenImportSheet = [client, isConnected, workspaceDirectory].every(Boolean);
   const openImportSheet = useCallback(() => {

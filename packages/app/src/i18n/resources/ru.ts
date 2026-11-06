@@ -1367,6 +1367,7 @@ export const ru: TranslationResources = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "подготовка",
       title: "Подготовка",
       creatingWorktree: "Создание worktree",
       worktreeReady: "Worktree {{name}}",

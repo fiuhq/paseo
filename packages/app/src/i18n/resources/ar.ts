@@ -1349,6 +1349,7 @@ export const ar: TranslationResources = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "جارٍ الإعداد",
       title: "جارٍ الإعداد",
       creatingWorktree: "جارٍ إنشاء worktree",
       worktreeReady: "worktree {{name}}",

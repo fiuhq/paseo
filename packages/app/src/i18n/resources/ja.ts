@@ -1363,6 +1363,7 @@ export const ja: TranslationResources = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "準備中",
       title: "準備中",
       creatingWorktree: "worktree を作成中",
       worktreeReady: "worktree {{name}}",

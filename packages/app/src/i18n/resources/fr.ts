@@ -1379,6 +1379,7 @@ export const fr: TranslationResources = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "préparation",
       title: "Préparation",
       creatingWorktree: "Création du worktree",
       worktreeReady: "Worktree {{name}}",

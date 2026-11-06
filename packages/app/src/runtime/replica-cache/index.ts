@@ -1306,6 +1306,8 @@ export class ReplicaCache {
   }
 
   private queueUpsert(row: StructuredReplicaUpsert): void {
+    // Every cache write lands here. A cached starting workspace would outlive a failed creation.
+    if (row.kind === "workspace" && row.value.isStarting) return;
     this.invalidateRowReads(row);
     const key = pendingRowKey(row);
     this.pendingDeletes.delete(key);

@@ -1338,6 +1338,7 @@ export const zhCN: TranslationResources = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "正在准备",
       title: "正在准备",
       creatingWorktree: "正在创建 worktree",
       worktreeReady: "worktree {{name}}",
