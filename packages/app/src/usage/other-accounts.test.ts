@@ -134,7 +134,7 @@ describe("the composer popover's accounts", () => {
 
   it("asks the host for its accounts only beside an account of ZeroSub's", () => {
     const askedHosts = () =>
-      new Set(vi.mocked(useUsageHostReports).mock.calls.map(([serverId]) => serverId));
+      new Set(vi.mocked(useUsageHostReports).mock.calls.map(([{ serverId }]) => serverId));
     const zeroSub = account("z:own", []);
     const daemon: UsageReportEntry = { ...zeroSub, id: "claude:x", presentation: undefined };
     renderHook(() => OtherAccounts({ serverId: "host", agentReports: [daemon] }));
