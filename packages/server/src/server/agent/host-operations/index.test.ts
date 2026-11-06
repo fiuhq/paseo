@@ -15,7 +15,7 @@ class OlderHostSocket {
   onerror: Handler = null;
   private readonly createSent = Promise.withResolvers<Record<string, unknown>>();
 
-  constructor() {
+  constructor(private readonly entry: object = workspace) {
     queueMicrotask(() => this.onopen?.());
   }
 
@@ -51,7 +51,7 @@ class OlderHostSocket {
         type: "fetch_workspaces_response",
         payload: {
           requestId: message.requestId,
-          entries: [workspace],
+          entries: [this.entry],
           pageInfo: emptyPage,
         },
       });
@@ -94,8 +94,8 @@ afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 
-async function olderHost() {
-  const socket = new OlderHostSocket();
+async function olderHost(entry?: object) {
+  const socket = new OlderHostSocket(entry);
   const client = new DaemonClient({
     url: "ws://older.test",
     clientId: "older-host-test",
@@ -146,4 +146,23 @@ test("a background caller's remote child asks the host to update instead of turn
     resolverFor(client, true).use("srv_older", (host) => host.createAgent(createArgs, {} as never)),
   ).rejects.toThrow("Update the host to use background agents.");
   expect(socket.requests.map((request) => request.type)).not.toContain("create_agent_request");
+});
+
+test("a remote workspace list says why a held workspace has no title", async () => {
+  const titleState = {
+    status: "refused",
+    attempts: 1,
+    refusedTitle: "Open a link",
+    score: 0.24,
+    judge: "title-judge",
+  };
+  const { client } = await olderHost({ ...workspace, title: null, titleState });
+
+  const listed = await resolverFor(client, false).use("srv_older", (host) =>
+    host.listWorkspaces({}, {} as never),
+  );
+
+  expect(listed.structuredContent).toMatchObject({
+    workspaces: [{ workspaceId: workspace.id, title: null, titleState }],
+  });
 });

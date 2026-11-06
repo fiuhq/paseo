@@ -391,6 +391,7 @@ function workspaceSummary(workspace: FetchWorkspacesEntry) {
     isolation: workspace.workspaceKind === "worktree" ? "worktree" : "local",
     kind: workspace.workspaceKind === "checkout" ? "local_checkout" : workspace.workspaceKind,
     title: workspace.title,
+    titleState: workspace.titleState,
     background: workspace.background,
   };
 }
