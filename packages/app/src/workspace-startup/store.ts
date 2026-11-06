@@ -3,6 +3,9 @@ import { advanceStartup, type StartupEvent, type StartupProgress } from "./progr
 
 export interface StartupFailure {
   serverId: string;
+  workspaceId: string;
+  /** Where the draft went back to: New workspace, for whoever is still on the workspace. */
+  returnRoute: string;
   message: string;
 }
 
@@ -14,6 +17,7 @@ interface WorkspaceStartupState {
   advance: (input: { draftId: string; event: StartupEvent }) => void;
   discard: (input: { draftId: string }) => void;
   fail: (failure: StartupFailure) => void;
+  clearFailure: () => void;
 }
 
 export const useWorkspaceStartupStore = create<WorkspaceStartupState>((set) => ({
@@ -25,6 +29,7 @@ export const useWorkspaceStartupStore = create<WorkspaceStartupState>((set) => (
       failure: null,
     })),
   fail: (failure) => set({ failure }),
+  clearFailure: () => set((state) => (state.failure ? { failure: null } : state)),
   advance: ({ draftId, event }) =>
     set((state) => {
       const current = state.byDraftId[draftId];
@@ -85,5 +90,18 @@ export function useIsWorkspaceStarting(input: { serverId: string; workspaceId: s
       if (isThisWorkspace) return progress.agentReadyAt === null;
     }
     return false;
+  });
+}
+
+/** The address of a workspace that failed to start, while someone may still be looking at it. */
+export function useFailedStartupRoute(input: {
+  serverId: string;
+  workspaceId: string;
+}): string | null {
+  const { serverId, workspaceId } = input;
+  return useWorkspaceStartupStore((state) => {
+    const failure = state.failure;
+    const isThisWorkspace = failure?.serverId === serverId && failure.workspaceId === workspaceId;
+    return isThisWorkspace ? failure.returnRoute : null;
   });
 }

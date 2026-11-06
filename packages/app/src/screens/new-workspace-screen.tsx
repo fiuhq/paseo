@@ -6,7 +6,6 @@ import type {
 import type { AgentSnapshotPayload, CreationSnapshot } from "@getpaseo/protocol/messages";
 import { encodeImages } from "@/utils/encode-images";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
-import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -46,7 +45,6 @@ import {
 import { useHostFeature, useHostFeatureMap } from "@/runtime/host-features";
 import type { HostProfile } from "@/types/host-connection";
 import {
-  getLastWorkspaceSelection,
   navigateToWorkspace,
   useLastWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
@@ -126,6 +124,9 @@ import { captureWorkspaceDraftCleanup } from "./new-workspace/background-handoff
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
 import { beginStartup } from "@/workspace-startup/progress";
 import { useWorkspaceStartupStore } from "@/workspace-startup/store";
+import { useDraftStore } from "@/stores/draft-store";
+import type { DraftInput } from "@/stores/draft-store/state";
+import { userAttachmentsOnly } from "@/attachments/workspace-attachment-utils";
 import { DraftStartupChecklist, WorkspaceStartupFailure } from "@/workspace-startup/checklist";
 import { buildStartingWorkspace, mintWorkspaceId } from "@/workspace-startup/starting-workspace";
 
@@ -481,6 +482,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
   }
   let navigated = starting !== null;
   let isDraftConsumed = false;
+  let clearConfirmedDraft = clearConsumedDraft;
   let outcome: SubmitOutcome = "background";
   const initialAgent: NonNullable<CreateWorkspaceRequestOptions["agent"]> = {
     config: {
@@ -502,7 +504,6 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
   const openWorkspaceDraft = (target: {
     workspaceId: string;
     workspaceDirectory: string;
-    clearSubmittedDraft: SubmitDraftInput["clearDraft"];
     initialSetup: WorkspaceDraftTabSetup | undefined;
   }): SubmitOutcome =>
     submitWorkspaceDraft({
@@ -512,7 +513,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       resolveClient: input.resolveClient,
       isStillOnCreateScreen: input.isStillOnCreateScreen,
       serverId,
-      clearDraft: target.clearSubmittedDraft,
+      clearDraft,
       draftId: input.draftId,
       initialSetup: target.initialSetup,
       workspaceId: target.workspaceId,
@@ -538,7 +539,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
         const workspace = normalizeWorkspaceDescriptor(snapshot.workspace);
         if (starting) {
           confirmWorkspace(workspace);
-          if (!isDraftConsumed) clearConsumedDraft();
+          if (!isDraftConsumed) clearConfirmedDraft();
           isDraftConsumed = true;
           return;
         }
@@ -549,7 +550,6 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
         outcome = openWorkspaceDraft({
           workspaceId: workspace.id,
           workspaceDirectory: workspace.workspaceDirectory,
-          clearSubmittedDraft: clearDraft,
           initialSetup: buildWorkspaceDraftSetupForCreatedWorkspace({
             forkDraftSetup: input.forkDraftSetup,
             workspaceDirectory: workspace.workspaceDirectory,
@@ -579,8 +579,6 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
     outcome = openWorkspaceDraft({
       workspaceId: starting.id,
       workspaceDirectory: cwd,
-      // The draft survives until the daemon confirms the workspace, so a failure can hand it back.
-      clearSubmittedDraft: keepDraft,
       // There is no folder yet: the source directory stands in for reading models and modes.
       initialSetup:
         buildWorkspaceDraftSetupForCreatedWorkspace({
@@ -590,6 +588,9 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
           composerState,
         }) ?? buildWorkspaceDraftSetupFromComposer({ cwd, provider, composerState }),
     });
+    // The text left at Enter so the next workspace starts empty. Its context stays until the
+    // daemon confirms this one, unless a newer draft has taken it over by then.
+    clearConfirmedDraft = captureWorkspaceDraftCleanup(input);
   }
   try {
     await agentCreation.result;
@@ -601,7 +602,14 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
         serverId,
         workspace: starting,
         draftId: input.draftId,
-        sourceDirectory: cwd,
+        draftKey: input.draftKey,
+        draft: { text, attachments: userAttachmentsOnly(attachments) },
+        returnRoute: buildNewWorkspaceRoute({
+          serverId,
+          sourceDirectory: cwd,
+          projectId: starting.projectId,
+          ...(input.forkDraftSetup ? { draftId: input.draftId } : {}),
+        }),
         message: toErrorMessage(error),
       });
     }
@@ -618,8 +626,6 @@ function resolveProviderLabel(
   const definition = composerState.providerDefinitions.find(({ id }) => id === provider);
   return definition?.label ?? provider;
 }
-
-function keepDraft(): void {}
 
 function resolveStartingWorkspace(input: {
   client: DaemonClient;
@@ -652,14 +658,22 @@ function abandonStartingWorkspace(input: {
   serverId: string;
   workspace: WorkspaceDescriptor;
   draftId: string | undefined;
-  sourceDirectory: string;
+  draftKey: string;
+  draft: DraftInput;
+  returnRoute: string;
   message: string;
 }): void {
-  const { serverId, workspace, draftId, sourceDirectory, message } = input;
+  const { serverId, workspace, draftId, draftKey, draft, returnRoute, message } = input;
   const session = useSessionStore.getState().sessions[serverId];
   if (!session?.workspaces.get(workspace.id)?.isStarting) return;
   getHostRuntimeStore().removeWorkspaceSnapshot(serverId, workspace.id);
-  useWorkspaceStartupStore.getState().fail({ serverId, message });
+  useDraftStore.getState().saveDraftInput({ draftKey, draft });
+  useWorkspaceStartupStore.getState().fail({
+    serverId,
+    workspaceId: workspace.id,
+    returnRoute,
+    message,
+  });
   if (draftId) {
     useCreateFlowStore.getState().clear({ draftId });
     useWorkspaceDraftSubmissionStore.getState().consumePending({
@@ -668,10 +682,6 @@ function abandonStartingWorkspace(input: {
       draftId,
     });
   }
-  if (getLastWorkspaceSelection()?.workspaceId !== workspace.id) return;
-  router.replace(
-    buildNewWorkspaceRoute({ serverId, sourceDirectory, projectId: workspace.projectId }),
-  );
 }
 
 function recordStartupPhase(draftId: string, snapshot: CreationSnapshot): void {
@@ -1460,6 +1470,7 @@ export function NewWorkspaceScreen({
     async (payload: MessagePayload) => {
       try {
         setErrorMessage(null);
+        useWorkspaceStartupStore.getState().clearFailure();
         await composerState?.persistFormPreferences();
         await updateFormPreferences({ launchTarget });
         if (isEmptyWorkspaceSubmission(payload)) {
@@ -1550,6 +1561,7 @@ export function NewWorkspaceScreen({
   const handleSubmitTerminalLaunch = useCallback(async () => {
     try {
       setErrorMessage(null);
+      useWorkspaceStartupStore.getState().clearFailure();
       await updateFormPreferences({ launchTarget });
       setPendingAction("terminal");
       let outcome: SubmitOutcome = "background";

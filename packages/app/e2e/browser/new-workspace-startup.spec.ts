@@ -72,6 +72,8 @@ test.describe("New workspace startup", () => {
         workspaceId: project.workspaceId,
       });
       await expect(checklist).toHaveCount(0);
+      await page.getByTestId("sidebar-global-new-workspace").click();
+      await expect(page.getByRole("textbox", { name: "Message agent..." })).toHaveValue("");
       await row.click();
       await expect(page).toHaveURL(new RegExp(startedId));
       await expect(checklist).toBeVisible({ timeout: 30_000 });
