@@ -724,12 +724,14 @@ export interface CreationPhaseGate {
  * Holds a workspace creation at a phase boundary, in order: nothing past `accepted` reaches the app
  * until `releaseWorkspace`, and nothing past `workspace_ready` until `releaseAgent`.
  * `keepFromDaemon` stops the request itself, for a creation that fails before it makes anything.
+ * It holds until `failCreation`, so a retry reaches the daemon.
  */
 export async function gateBrowserCreationPhases(
   page: Page,
   options: { keepFromDaemon?: boolean } = {},
 ): Promise<CreationPhaseGate> {
   const frames = await loadSessionMessageReaders();
+  let keepFromDaemon = options.keepFromDaemon === true;
   const creationKeys = new Set<string>();
   const createRequestIds = new Set<string>();
   const held: { isWorkspaceReady: boolean; forward: () => void }[] = [];
@@ -776,7 +778,7 @@ export async function gateBrowserCreationPhases(
         };
         resolveCreateRequest?.();
         // The daemon never hears of it, so nothing it makes can overtake the failure under test.
-        if (options.keepFromDaemon) return;
+        if (keepFromDaemon) return;
       }
       server.send(message);
     });
@@ -811,7 +813,10 @@ export async function gateBrowserCreationPhases(
       gate = "open";
       flush();
     },
-    failCreation: (error) => failWith(error),
+    failCreation(error) {
+      keepFromDaemon = false;
+      failWith(error);
+    },
     waitForCreateRequest: () => createRequestSeen,
   };
 }

@@ -170,6 +170,35 @@ test.describe("New workspace startup", () => {
     }
   });
 
+  test("puts a failed prompt ahead of text typed on the next New workspace", async ({ page }) => {
+    const repo = await createTempGitRepo("workspace-startup-typed-since-");
+    const gate = await gateBrowserCreationPhases(page, { keepFromDaemon: true });
+    const { client, project } = await openComposer(page, repo.path);
+    try {
+      await selectWorkspaceIsolation(page, "worktree");
+      await submitNewWorkspacePrompt(page, "This one fails");
+      await gate.waitForCreateRequest();
+      await expect(page).toHaveURL(/\/workspace\/wks_/, { timeout: 30_000 });
+
+      await page.getByTestId("sidebar-global-new-workspace").click();
+      const composer = page.getByRole("textbox", { name: "Message agent..." });
+      await expect(composer).toHaveValue("");
+      await composer.fill("Typed since");
+
+      gate.failCreation("Unable to create worktree");
+
+      await expect(composer).toHaveValue("This one fails\n\nTyped since", { timeout: 30_000 });
+      await expect(page.getByTestId("workspace-startup-failure")).toHaveText(
+        "Unable to create worktree",
+      );
+    } finally {
+      gate.releaseAgent();
+      await archiveLocalWorkspaceFromDaemon(client, project.workspaceId).catch(() => undefined);
+      await client.close().catch(() => undefined);
+      await repo.cleanup();
+    }
+  });
+
   test("puts the fields back and keeps the error visible when creation fails", async ({ page }) => {
     const repo = await createTempGitRepo("workspace-startup-fail-");
     const gate = await gateBrowserCreationPhases(page, { keepFromDaemon: true });

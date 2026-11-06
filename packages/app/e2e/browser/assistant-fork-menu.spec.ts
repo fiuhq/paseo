@@ -271,4 +271,48 @@ test.describe("Assistant fork menu", () => {
     await expect(queued).toBeVisible({ timeout: 60_000 });
     await expect(queued).not.toContainText("Chat history");
   });
+
+  test("keeps the fork attachment for a retry when the new workspace fails to start", async ({
+    page,
+    seedForkWorkspace,
+  }) => {
+    const gate = await gateBrowserCreationPhases(page, { keepFromDaemon: true });
+    const session = await seedForkWorkspace({
+      repoPrefix: "assistant-fork-failed-start-",
+      title: "Assistant fork failed start",
+      initialPrompt: "emit 1 coalesced agent stream updates for assistant fork failed start.",
+      model: "ten-second-stream",
+    });
+
+    await openAgentRoute(page, session);
+    await expectComposerVisible(page);
+    await awaitAssistantMessage(page);
+    await session.client.waitForFinish(session.agentId, 45_000);
+
+    await forkMostRecentAssistantTurnToNewWorkspace(page);
+    await expectChatHistoryAttachment(page);
+
+    await submitNewWorkspacePrompt(page, "Forked prompt");
+    await gate.waitForCreateRequest();
+    await expect(page).toHaveURL(/\/workspace\/wks_/, { timeout: 30_000 });
+    gate.failCreation("Unable to create worktree");
+
+    await expect(page).toHaveURL(/\/new\?.*draftId=/, { timeout: 30_000 });
+    await expect(page.getByTestId("workspace-startup-failure")).toHaveText(
+      "Unable to create worktree",
+    );
+    await expect(page.getByRole("textbox", { name: "Message agent..." })).toHaveValue(
+      "Forked prompt",
+    );
+    await expectChatHistoryAttachment(page);
+
+    gate.releaseAgent();
+    await submitNewWorkspacePrompt(page, "Forked prompt");
+
+    const retried = page
+      .getByTestId("user-message")
+      .filter({ hasText: "Forked prompt" })
+      .filter({ visible: true });
+    await expect(retried).toContainText("Chat history", { timeout: 30_000 });
+  });
 });

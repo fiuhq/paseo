@@ -1537,10 +1537,10 @@ export function NewWorkspaceScreen({
           setPendingAction(null);
         }
       } catch (error) {
-        const message = toErrorMessage(error);
         setPendingAction(null);
-        setErrorMessage(message);
-        toast.error(message);
+        toast.error(toErrorMessage(error));
+        // The composer shows it, and only drops sent context when told the submit worked.
+        throw error;
       }
     },
     [
