@@ -302,15 +302,29 @@ describe("WorkspaceTitleGate", () => {
     expect(h.record().title).toBe("My own name");
   });
 
-  test("a generator that fails counts as a try, so the workspace cannot wait forever", async () => {
+  test("a generator that keeps failing ends in one turn, so the workspace cannot wait forever", async () => {
     const h = harness({ verdicts: [], generated: () => null });
 
     await h.gate.start(h.record(), PROMPT);
     await h.endTurn("turn_completed");
-    await h.endTurn("turn_completed");
 
     expect(h.judged).toEqual([]);
+    expect(h.contexts).toHaveLength(3);
     expect(h.record().titleState).toMatchObject({ status: "exhausted", attempts: 3 });
+  });
+
+  test("a failed try after a reply is retried at once, with no refusal to mention", async () => {
+    const titles = [null, null, { title: "Fix preset child lookup", branch: "fix-preset" }];
+    const h = harness({ verdicts: [accept(0.9)], generated: () => titles.shift() ?? null });
+
+    await h.gate.start(h.record(), PROMPT);
+    await h.endTurn("turn_completed");
+
+    expect(h.applied).toEqual([
+      { title: "Fix preset child lookup", branch: "fix-preset", unchecked: false },
+    ]);
+    expect(h.contexts[2]?.prompt).toContain("Preset child lookup crashes on one type.");
+    expect(h.contexts[2]?.prompt).not.toContain("A reviewer refused");
   });
 
   test("only a held workspace reacts to turns", async () => {

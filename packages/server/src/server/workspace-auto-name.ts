@@ -171,21 +171,28 @@ export class WorkspaceAutoName {
     }
     const worktreeRoot = input.workspace.worktreeRoot ?? input.workspace.cwd;
     let generated: GeneratedWorkspaceName | null = input.judged?.generated ?? null;
-    const result: AttemptFirstAgentBranchAutoNameResult = await attemptFirstAgentBranchAutoName({
-      cwd: worktreeRoot,
-      firstAgentContext: input.firstAgentContext,
-      generateBranchNameFromContext: ({ firstAgentContext }) => {
-        if (input.judged) return Promise.resolve(input.judged.generated.branch);
-        return this.generateFromContext({
-          cwd: input.workspace.cwd,
-          firstAgentContext,
-          currentSelection: input.currentSelection,
-        }).then((nextGenerated) => {
-          generated = nextGenerated;
-          return nextGenerated?.branch ?? null;
-        });
-      },
-    });
+    const renameBranch = () =>
+      attemptFirstAgentBranchAutoName({
+        cwd: worktreeRoot,
+        firstAgentContext: input.firstAgentContext,
+        generateBranchNameFromContext: ({ firstAgentContext }) => {
+          if (input.judged) return Promise.resolve(input.judged.generated.branch);
+          return this.generateFromContext({
+            cwd: input.workspace.cwd,
+            firstAgentContext,
+            currentSelection: input.currentSelection,
+          }).then((nextGenerated) => {
+            generated = nextGenerated;
+            return nextGenerated?.branch ?? null;
+          });
+        },
+      });
+    const result: AttemptFirstAgentBranchAutoNameResult = input.judged
+      ? await renameBranch().catch((error) => {
+          this.logger.warn({ err: error, cwd: worktreeRoot }, "Failed to rename judged branch");
+          return { attempted: true, renamed: false, branchName: null };
+        })
+      : await renameBranch();
 
     if (!generated) {
       generated = await this.generateFromContext({

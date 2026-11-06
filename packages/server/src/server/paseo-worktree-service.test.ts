@@ -21,6 +21,7 @@ import {
   type CreatePaseoWorktreeDeps,
 } from "./paseo-worktree-service.js";
 import { WorkspaceAutoName } from "./workspace-auto-name.js";
+import { HELD_TITLE_STATE } from "./workspace-title-gate.js";
 import type { AgentManager } from "./agent/agent-manager.js";
 import type { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import { readPaseoWorktreeMetadata } from "../utils/worktree-metadata.js";
@@ -655,6 +656,58 @@ test.each([
     .trim();
   expect(branch).toBe("dazzling-yak");
   expect(workspace.title).toBe("Fix the login flow");
+});
+
+test("a judged title goes on when git refuses the branch rename", async () => {
+  const { repoDir, tempDir } = createGitRepo();
+  cleanupPaths.push(tempDir);
+  execFileSync("git", ["branch", "fix"], { cwd: repoDir, stdio: "pipe" });
+  const created = await createPaseoWorktree(
+    { cwd: repoDir, worktreeSlug: "dazzling-yak", paseoHome: path.join(tempDir, ".paseo") },
+    createDeps(),
+  );
+  const held = { ...created.workspace, title: null, titleState: HELD_TITLE_STATE };
+  let workspace: PersistedWorkspaceRecord = held;
+
+  await new Promise<void>((settled) => {
+    new WorkspaceAutoName({
+      agentManager: { subscribe: () => () => {} } as unknown as AgentManager,
+      workspaceRegistry: {
+        update: async (_workspaceId, updater) => {
+          workspace = updater(workspace);
+          return workspace;
+        },
+      },
+      workspaceGitService: {} as WorkspaceGitService,
+      providerSnapshotManager: {} as ProviderSnapshotManager,
+      readDaemonConfig: () => ({}),
+      gitMutation: { notifyGitMutation: async () => {} },
+      emitWorkspaceUpdateForCwd: async () => settled(),
+      emitWorkspaceUpdateForWorkspaceId: async () => {},
+      logger: createTestLogger(),
+      generateWorkspaceName: async () => ({ title: "Fix the login flow", branch: "fix/login" }),
+      titleGate: {
+        lifecycle: {
+          before: async (_name, request) => ({
+            ...request,
+            verdict: { decision: "accept", score: 0.9, judge: "Jev" },
+          }),
+        },
+        workspaceRegistry: { get: async () => workspace },
+      },
+    }).scheduleForWorktree({
+      workspace: held,
+      firstAgentContext: { prompt: "Fix the login flow" },
+    });
+  });
+
+  const branch = execFileSync("git", ["branch", "--show-current"], {
+    cwd: created.worktree.worktreePath,
+  })
+    .toString()
+    .trim();
+  expect(branch).toBe("dazzling-yak");
+  expect(workspace).toMatchObject({ title: "Fix the login flow", titleState: null });
 });
 
 test("a title judge holds a worktree whose agent will reply, and not one with no agent", async () => {
