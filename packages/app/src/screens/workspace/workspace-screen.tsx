@@ -3457,6 +3457,7 @@ function WorkspaceScreenContent({
           tabSwitcher={tabSwitcher}
           isLoading={isWorkspaceHeaderLoading}
           title={workspaceHeaderTitle}
+          workspace={workspaceDescriptor}
           subtitle={workspaceHeaderSubtitle}
           isSubtitleDistinct={isWorkspaceHeaderSubtitleDistinct}
           serverId={normalizedServerId}
@@ -3511,6 +3512,7 @@ function WorkspaceScreenContent({
       openImportSheet,
       showCreateBrowserTab,
       showWorkspaceSetup,
+      workspaceDescriptor,
       workspaceDirectory,
       workspaceHeaderSubtitle,
       workspaceHeaderTitle,

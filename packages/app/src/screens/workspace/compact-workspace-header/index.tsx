@@ -1,11 +1,16 @@
 import { Fragment, useMemo, type ReactNode } from "react";
+import { isWorkspaceTitleHeld } from "@getpaseo/protocol/messages";
 import { useTranslation } from "react-i18next";
+import { View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { CompactHeader } from "@/components/headers/compact-header";
 import {
   EXPLORER_TOGGLE_KEYS,
   WorkspaceExplorerToggle,
 } from "@/screens/workspace/workspace-explorer-toggle";
 import { WorkspaceHeaderProjectRow } from "@/screens/workspace/workspace-header-project-row";
+import { WorkspaceTitleStateChip } from "@/screens/workspace/workspace-title-state-chip";
+import type { WorkspaceDescriptor } from "@/stores/session-store";
 import {
   useWindowLayout,
   resolveWorkspaceActionPlacement,
@@ -20,6 +25,7 @@ interface CompactWorkspaceHeaderProps {
   serverId: string;
   isLoading: boolean;
   title: string;
+  workspace: WorkspaceDescriptor | null | undefined;
   subtitle: string;
   isSubtitleDistinct: boolean;
   onToggleExplorer: () => void;
@@ -36,6 +42,7 @@ interface CompactWorkspaceHeaderProps {
 export function CompactWorkspaceHeader({
   isLoading,
   title,
+  workspace,
   subtitle,
   isSubtitleDistinct,
   onToggleExplorer,
@@ -49,15 +56,18 @@ export function CompactWorkspaceHeader({
 }: CompactWorkspaceHeaderProps) {
   const { t } = useTranslation();
   const actionsInBar = resolveWorkspaceActionPlacement(useWindowLayout()) === "vertical-bar";
-  const projectRow = useMemo(
+  const subtitleRow = useMemo(
     () => (
-      <WorkspaceHeaderProjectRow
-        subtitle={subtitle}
-        isSubtitleDistinct={isSubtitleDistinct}
-        serverId={serverId}
-      />
+      <View style={styles.subtitleRow}>
+        <WorkspaceHeaderProjectRow
+          subtitle={subtitle}
+          isSubtitleDistinct={isSubtitleDistinct}
+          serverId={serverId}
+        />
+        <WorkspaceTitleStateChip serverId={serverId} workspace={workspace} />
+      </View>
     ),
-    [subtitle, isSubtitleDistinct, serverId],
+    [subtitle, isSubtitleDistinct, serverId, workspace],
   );
   const symbols = {
     "tab-count": tabSwitcher,
@@ -84,7 +94,8 @@ export function CompactWorkspaceHeader({
           navigation="menu"
           title={title}
           titleTestID="workspace-header-title"
-          subtitle={projectRow}
+          titleMuted={isWorkspaceTitleHeld(workspace?.titleState)}
+          subtitle={subtitleRow}
           loading={isLoading}
           actions={actionsInBar ? undefined : actions}
         />
@@ -93,3 +104,14 @@ export function CompactWorkspaceHeader({
     </IconButtonChromeProvider>
   );
 }
+
+const styles = StyleSheet.create((theme) => ({
+  // The header row has one line left under the title, so the project and chip share it.
+  subtitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
+    minWidth: 0,
+    overflow: "hidden",
+  },
+}));

@@ -13,6 +13,7 @@ import type {
   WorkspaceRegistry,
 } from "./workspace-registry.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
+import type { PluginLifecycle } from "./plugins/lifecycle/index.js";
 import { createTestLogger } from "../test-utils/test-logger.js";
 import {
   attemptFirstAgentBranchAutoName,
@@ -656,6 +657,33 @@ test.each([
   expect(workspace.title).toBe("Fix the login flow");
 });
 
+test("a title judge holds a worktree whose agent will reply, and not one with no agent", async () => {
+  const { repoDir, tempDir } = createGitRepo();
+  cleanupPaths.push(tempDir);
+  const deps = createDeps({
+    provisioningLifecycle: {
+      emit: () => {},
+      before: async (_name, request) => request,
+      handles: () => true,
+      wait: async () => {},
+    },
+  });
+  const request = {
+    cwd: repoDir,
+    firstAgentContext: { prompt: "Fix the login flow" },
+    paseoHome: path.join(tempDir, ".paseo"),
+  };
+
+  const withAgent = await createPaseoWorktree({ ...request, worktreeSlug: "with-agent" }, deps);
+  const withoutAgent = await createPaseoWorktree(
+    { ...request, worktreeSlug: "no-agent", noInitialAgent: true },
+    deps,
+  );
+
+  expect(withAgent.workspace).toMatchObject({ title: null, titleState: { status: "naming" } });
+  expect(withoutAgent.workspace).toMatchObject({ title: "Fix the login flow", titleState: null });
+});
+
 test("falls back to a numeric suffix when the desired branch name already exists", async () => {
   const { repoDir, tempDir } = createGitRepo();
   cleanupPaths.push(tempDir);
@@ -1113,6 +1141,7 @@ function createDeps(options?: {
   events?: string[];
   projects?: Map<string, PersistedProjectRecord>;
   workspaces?: Map<string, PersistedWorkspaceRecord>;
+  provisioningLifecycle?: PluginLifecycle;
 }): TestDeps {
   const events = options?.events ?? [];
   const projects = options?.projects ?? new Map<string, PersistedProjectRecord>();
@@ -1178,6 +1207,7 @@ function createDeps(options?: {
     workspaceGitService,
     isDirectory: async () => true,
     logger: createTestLogger(),
+    lifecycle: options?.provisioningLifecycle,
   });
 
   return {

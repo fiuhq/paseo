@@ -26,6 +26,8 @@ interface CompactHeaderProps {
   onBack?: () => void;
   title?: string;
   titleTestID?: string;
+  /** Mute the title because it is a placeholder, not a name. */
+  titleMuted?: boolean;
   /** A line under the title. */
   subtitle?: ReactNode;
   /** Show a placeholder instead of the title while it loads. */
@@ -46,6 +48,7 @@ export function CompactHeader({
   onBack,
   title,
   titleTestID,
+  titleMuted = false,
   subtitle,
   loading = false,
   actions,
@@ -75,6 +78,7 @@ export function CompactHeader({
               loading={loading}
               title={title}
               titleTestID={titleTestID}
+              titleMuted={titleMuted}
               subtitle={subtitle}
             />
           </View>
@@ -89,16 +93,20 @@ function CompactHeaderTitle({
   loading,
   title,
   titleTestID,
+  titleMuted,
   subtitle,
-}: Pick<CompactHeaderProps, "title" | "titleTestID" | "subtitle"> & { loading: boolean }) {
+}: Pick<CompactHeaderProps, "title" | "titleTestID" | "titleMuted" | "subtitle"> & {
+  loading: boolean;
+}) {
   if (loading) {
     return <View style={styles.titleSkeleton} />;
   }
+  const titleStyle = subtitle ? styles.title : styles.singleLineTitle;
   return (
     <>
       {title ? (
         <Text
-          style={subtitle ? styles.title : styles.singleLineTitle}
+          style={titleMuted ? [titleStyle, styles.titleMuted] : titleStyle}
           numberOfLines={1}
           testID={titleTestID}
         >
@@ -170,6 +178,9 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.foreground,
     textAlign: "left",
+  },
+  titleMuted: {
+    color: theme.colors.foregroundMuted,
   },
   titleSkeleton: {
     width: 140,
