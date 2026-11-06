@@ -170,7 +170,7 @@ test.describe("New workspace startup", () => {
 
   test("puts the fields back and keeps the error visible when creation fails", async ({ page }) => {
     const repo = await createTempGitRepo("workspace-startup-fail-");
-    const gate = await gateBrowserCreationPhases(page);
+    const gate = await gateBrowserCreationPhases(page, { keepFromDaemon: true });
     const { client, project } = await openComposer(page, repo.path);
     try {
       await selectWorkspaceIsolation(page, "worktree");
@@ -181,8 +181,6 @@ test.describe("New workspace startup", () => {
       await expect(page).toHaveURL(/\/workspace\/wks_/, { timeout: 30_000 });
       const startedId = /wks_[a-f0-9]{16}/.exec(page.url())?.[0] ?? "";
 
-      // The gate fails creation for the app only, so the daemon's worktree still needs archiving.
-      const created = await waitForCreatedWorkspace(client, new Set([project.workspaceId]));
       gate.failCreation("Unable to create worktree");
 
       await expect(page).toHaveURL(/\/new/, { timeout: 30_000 });
@@ -197,10 +195,6 @@ test.describe("New workspace startup", () => {
       await expect(page.getByRole("textbox", { name: "Message agent..." })).toHaveValue(
         "This one fails",
       );
-
-      if (created.workspaceDirectory) {
-        await archiveWorkspaceFromDaemon(client, created.workspaceDirectory).catch(() => undefined);
-      }
     } finally {
       gate.releaseAgent();
       await archiveLocalWorkspaceFromDaemon(client, project.workspaceId).catch(() => undefined);
