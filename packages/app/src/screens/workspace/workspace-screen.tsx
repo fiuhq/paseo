@@ -760,6 +760,11 @@ function useResolvedWorkspaceRouteState(input: {
   );
 }
 
+/** A starting workspace has no folder yet by design; any other workspace without one is broken. */
+function isWorkspaceDirectoryMissing(workspace: WorkspaceDescriptor | null | undefined): boolean {
+  return Boolean(workspace) && !workspace?.workspaceDirectory && !workspace?.isStarting;
+}
+
 function shouldInspectWorkspaceRecovery(
   hasHydratedWorkspaces: boolean,
   workspace: WorkspaceDescriptor | null,
@@ -1078,7 +1083,7 @@ function WorkspaceScreenContent({
     (state) => state.sessions[normalizedServerId]?.serverInfo?.features?.providersSnapshot === true,
   );
   const workspaceDirectory = workspaceDescriptor?.workspaceDirectory || null;
-  const isMissingWorkspaceDirectory = Boolean(workspaceDescriptor) && !workspaceDirectory;
+  const isMissingWorkspaceDirectory = isWorkspaceDirectoryMissing(workspaceDescriptor);
   const [isImportSheetVisible, setIsImportSheetVisible] = useState(false);
   const canOpenImportSheet = [client, isConnected, workspaceDirectory].every(Boolean);
   const openImportSheet = useCallback(() => {

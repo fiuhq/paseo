@@ -1357,6 +1357,7 @@ export const en = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "setting up",
       title: "Setting up",
       creatingWorktree: "Creating worktree",
       worktreeReady: "Worktree {{name}}",

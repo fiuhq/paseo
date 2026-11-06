@@ -1385,6 +1385,7 @@ export const es: TranslationResources = {
   },
   newWorkspace: {
     startup: {
+      sidebarStatus: "preparando",
       title: "Preparando",
       creatingWorktree: "Creando worktree",
       worktreeReady: "Worktree {{name}}",

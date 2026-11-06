@@ -15,7 +15,7 @@ import {
   type StartupProgress,
   type StepState,
 } from "./progress";
-import { useAgentStartup, useDraftStartup } from "./store";
+import { useAgentStartup, useDraftStartup, useWorkspaceStartupStore } from "./store";
 
 const ThemedCheck = withUnistyles(Check);
 const ThemedCircle = withUnistyles(Circle);
@@ -209,6 +209,17 @@ export function AgentStartupSummary({ serverId, agentId }: { serverId: string; a
   ) : null;
 }
 
+/** The last start's failure, beside the draft it handed back. */
+export function WorkspaceStartupFailure({ serverId }: { serverId: string }) {
+  const failure = useWorkspaceStartupStore((state) => state.failure);
+  if (failure?.serverId !== serverId) return null;
+  return (
+    <Text style={styles.failure} testID="workspace-startup-failure">
+      {failure.message}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
@@ -249,6 +260,11 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     fontVariant: ["tabular-nums"],
+  },
+  failure: {
+    color: theme.colors.destructive,
+    fontSize: theme.fontSize.sm,
+    marginTop: theme.spacing[2],
   },
   summary: {
     width: "100%",

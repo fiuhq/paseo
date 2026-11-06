@@ -1,17 +1,30 @@
 import { create } from "zustand";
 import { advanceStartup, type StartupEvent, type StartupProgress } from "./progress";
 
+export interface StartupFailure {
+  serverId: string;
+  message: string;
+}
+
 interface WorkspaceStartupState {
   byDraftId: Record<string, StartupProgress>;
+  /** Why the last start failed, shown on New workspace, where its draft went back to. */
+  failure: StartupFailure | null;
   begin: (progress: StartupProgress) => void;
   advance: (input: { draftId: string; event: StartupEvent }) => void;
   discard: (input: { draftId: string }) => void;
+  fail: (failure: StartupFailure) => void;
 }
 
 export const useWorkspaceStartupStore = create<WorkspaceStartupState>((set) => ({
   byDraftId: {},
+  failure: null,
   begin: (progress) =>
-    set((state) => ({ byDraftId: { ...state.byDraftId, [progress.draftId]: progress } })),
+    set((state) => ({
+      byDraftId: { ...state.byDraftId, [progress.draftId]: progress },
+      failure: null,
+    })),
+  fail: (failure) => set({ failure }),
   advance: ({ draftId, event }) =>
     set((state) => {
       const current = state.byDraftId[draftId];
@@ -59,5 +72,18 @@ export function useAgentStartup(input: {
       if (progress.serverId === serverId && progress.agentId === agentId) return progress;
     }
     return null;
+  });
+}
+
+/** Whether a workspace is still on its way to an agent that can take the first message. */
+export function useIsWorkspaceStarting(input: { serverId: string; workspaceId: string }): boolean {
+  const { serverId, workspaceId } = input;
+  return useWorkspaceStartupStore((state) => {
+    for (const progress of Object.values(state.byDraftId)) {
+      const isThisWorkspace =
+        progress.serverId === serverId && progress.workspaceId === workspaceId;
+      if (isThisWorkspace) return progress.agentReadyAt === null;
+    }
+    return false;
   });
 }

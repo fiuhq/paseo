@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Text } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { DiffStat } from "@/components/diff-stat";
@@ -5,6 +6,7 @@ import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list"
 import { useAppSettings } from "@/hooks/use-settings";
 import type { SidebarWorkspaceTrailing } from "@/hooks/use-settings";
 import { useCompactTimeAgo } from "@/hooks/use-time-ago";
+import { useIsWorkspaceStarting } from "@/workspace-startup/store";
 
 export type { SidebarWorkspaceTrailing };
 
@@ -49,7 +51,13 @@ export function SidebarWorkspaceTrailingContent({
     );
   }
   if (trailing === "timestamp" && workspace.statusEnteredAt) {
-    return <WorkspaceTimestamp enteredAt={workspace.statusEnteredAt} />;
+    return (
+      <WorkspaceTimestamp
+        enteredAt={workspace.statusEnteredAt}
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+      />
+    );
   }
   return null;
 }
@@ -59,11 +67,21 @@ export function SidebarWorkspaceTrailingContent({
  * re-renders the component that owns it — keeping that component down to a single `<Text>` is
  * what stops a minute tick from reaching the row, the list, or the diff stat next door.
  */
-function WorkspaceTimestamp({ enteredAt }: { enteredAt: Date }) {
+function WorkspaceTimestamp({
+  enteredAt,
+  serverId,
+  workspaceId,
+}: {
+  enteredAt: Date;
+  serverId: string;
+  workspaceId: string;
+}) {
+  const { t } = useTranslation();
   const label = useCompactTimeAgo(enteredAt);
+  const isStarting = useIsWorkspaceStarting({ serverId, workspaceId });
   return (
     <Text style={styles.timestamp} numberOfLines={1} testID="sidebar-workspace-timestamp">
-      {label}
+      {isStarting ? t("newWorkspace.startup.sidebarStatus") : label}
     </Text>
   );
 }

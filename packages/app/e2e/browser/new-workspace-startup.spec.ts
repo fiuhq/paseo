@@ -13,7 +13,11 @@ import {
   waitForCreatedWorkspace,
 } from "../support/helpers/new-workspace";
 import { createTempGitRepo } from "../support/helpers/workspace";
-import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
+import { getServerId } from "../support/helpers/server-id";
+import {
+  switchWorkspaceViaSidebar,
+  waitForSidebarHydration,
+} from "../support/helpers/workspace-ui";
 
 test.describe("New workspace startup", () => {
   test.describe.configure({ timeout: 240_000 });
@@ -44,11 +48,34 @@ test.describe("New workspace startup", () => {
       await gate.waitForCreateRequest();
 
       const checklist = page.getByTestId("workspace-startup-checklist").filter({ visible: true });
+      // Nothing has come back from the daemon yet: the gate holds every phase past accepted.
+      await expect(page).toHaveURL(/\/workspace\/wks_[a-f0-9]{16}/, { timeout: 30_000 });
+      const startedId = /wks_[a-f0-9]{16}/.exec(page.url())?.[0] ?? "";
       await expect(checklist).toBeVisible({ timeout: 30_000 });
-      await expect(page).toHaveURL(/\/new/);
       await expect(checklist.getByTestId("workspace-startup-step-workspace")).toContainText(
         "Creating worktree",
       );
+      await expect(
+        page
+          .getByTestId("user-message")
+          .filter({ hasText: "First message" })
+          .filter({ visible: true }),
+      ).toBeVisible();
+      const row = page.getByTestId(`sidebar-workspace-row-${getServerId()}:${startedId}`);
+      await expect(row).toContainText("First message");
+      await expect(row).toContainText("setting up");
+
+      // Leaving and coming back lands on the same screen, still starting.
+      await switchWorkspaceViaSidebar({
+        page,
+        serverId: getServerId(),
+        workspaceId: project.workspaceId,
+      });
+      await expect(checklist).toHaveCount(0);
+      await row.click();
+      await expect(page).toHaveURL(new RegExp(startedId));
+      await expect(checklist).toBeVisible({ timeout: 30_000 });
+
       await expect(checklist.getByTestId("workspace-startup-step-agent")).toHaveAttribute(
         "aria-valuetext",
         "waiting",
@@ -56,7 +83,7 @@ test.describe("New workspace startup", () => {
 
       gate.releaseWorkspace();
       const created = await waitForCreatedWorkspace(client, new Set([project.workspaceId]));
-      await expect(page).toHaveURL(new RegExp(created.id), { timeout: 30_000 });
+      expect(created.id).toBe(startedId);
       await expect(checklist.getByTestId("workspace-startup-step-workspace")).toHaveAttribute(
         "aria-valuetext",
         "done",
@@ -151,14 +178,22 @@ test.describe("New workspace startup", () => {
       await gate.waitForCreateRequest();
       const checklist = page.getByTestId("workspace-startup-checklist").filter({ visible: true });
       await expect(checklist).toBeVisible({ timeout: 30_000 });
+      await expect(page).toHaveURL(/\/workspace\/wks_/, { timeout: 30_000 });
+      const startedId = /wks_[a-f0-9]{16}/.exec(page.url())?.[0] ?? "";
 
       // The gate fails creation for the app only, so the daemon's worktree still needs archiving.
       const created = await waitForCreatedWorkspace(client, new Set([project.workspaceId]));
       gate.failCreation("Unable to create worktree");
 
+      await expect(page).toHaveURL(/\/new/, { timeout: 30_000 });
       await expect(checklist).toHaveCount(0, { timeout: 30_000 });
+      await expect(
+        page.getByTestId(`sidebar-workspace-row-${getServerId()}:${startedId}`),
+      ).toHaveCount(0);
       await expect(page.getByTestId("new-workspace-project-picker-trigger")).toBeVisible();
-      await expect(page.getByText("Unable to create worktree").first()).toBeVisible();
+      await expect(page.getByTestId("workspace-startup-failure")).toHaveText(
+        "Unable to create worktree",
+      );
       await expect(page.getByRole("textbox", { name: "Message agent..." })).toHaveValue(
         "This one fails",
       );

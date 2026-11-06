@@ -33,6 +33,20 @@ export interface WorkspaceDirectorySnapshot {
   touchedProjectIds?: Set<string>;
 }
 
+/** A resync lists what the daemon has, which does not yet include what the app is starting. */
+function withStartingWorkspaces(
+  snapshot: WorkspaceDirectorySnapshot,
+  current: ReadonlyMap<string, WorkspaceDescriptor>,
+): WorkspaceDirectorySnapshot {
+  const starting = [...current.values()].filter(
+    (workspace) => workspace.isStarting && !snapshot.workspaces.has(workspace.id),
+  );
+  if (starting.length === 0) return snapshot;
+  const workspaces = new Map(snapshot.workspaces);
+  for (const workspace of starting) workspaces.set(workspace.id, workspace);
+  return { ...snapshot, workspaces };
+}
+
 export class WorkspaceDirectoryReplica {
   private workspaces = new Map<string, WorkspaceDescriptor>();
   private projects = new Map<string, ProjectDescriptor>();
@@ -71,7 +85,7 @@ export class WorkspaceDirectoryReplica {
     snapshot: WorkspaceDirectorySnapshot,
     deltas: readonly WorkspaceDirectoryDelta[],
   ): DirectoryReplicaMutation[] {
-    this.replace(snapshot);
+    this.replace(withStartingWorkspaces(snapshot, this.workspaces));
     const mutations = deltas.flatMap((delta) => this.applyDelta(delta));
     useSessionStore.getState().setHasHydratedWorkspaces(this.serverId, true);
     return mutations;
@@ -85,8 +99,11 @@ export class WorkspaceDirectoryReplica {
     // Creation responses and progress snapshots can arrive after live updates.
     // They seed missing rows; the directory owns rows it has already received.
     return workspaces.flatMap((workspace) => {
-      if (this.workspaces.has(workspace.id)) return [];
-      return this.upsertWorkspace(workspace);
+      const existing = this.workspaces.get(workspace.id);
+      if (existing && (workspace.isStarting || !existing.isStarting)) return [];
+      const mutations = this.upsertWorkspace(workspace);
+      // A starting workspace is this session's; a cached one would outlive a failed creation.
+      return workspace.isStarting ? [] : mutations;
     });
   }
 
