@@ -110,13 +110,19 @@ export class WorkspaceTitleGate {
       return;
     }
     const context = this.starts.get(workspaceId)?.context;
-    const prompt = [
+    let prompt = [
       context?.prompt,
       `The agent has replied:\n${reply.trim().slice(0, REPLY_CONTEXT_CHARS)}`,
     ]
       .filter(Boolean)
       .join("\n\n");
-    await this.attempt(workspaceId, { ...context, prompt }, "reply");
+    // The agent may never take another turn, so a refusal cannot wait for one.
+    for (;;) {
+      await this.attempt(workspaceId, { ...context, prompt }, "reply");
+      const next = (await this.deps.workspaceRegistry.get(workspaceId))?.titleState;
+      if (next?.status !== "refused") return;
+      prompt = `${prompt}\n\nA reviewer refused the title "${next.refusedTitle}" as not specific enough. Name the concrete thing being fixed, built or answered.`;
+    }
   }
 
   private async attempt(

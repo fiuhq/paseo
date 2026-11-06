@@ -34,6 +34,8 @@ export interface CreatePaseoWorktreeInput extends CreateWorktreeCoreInput {
   workspaceId?: string;
   projectId?: string;
   title?: string;
+  /** No agent will reply, so a title judge has nothing better to wait for. */
+  noInitialAgent?: boolean;
   background?: boolean;
   callerWorkspaceId?: string;
 }
@@ -113,7 +115,8 @@ async function createPaseoWorktreeWithPriority(
       branch: createdWorktree.worktree.branchName || null,
       baseBranch: createdWorktree.worktree.comparisonBaseRef,
       title: input.title?.trim() || resolveFirstAgentPromptTitle(input.firstAgentContext),
-      titleFromPrompt: !input.title?.trim() && Boolean(input.firstAgentContext),
+      titleFromPrompt:
+        !input.title?.trim() && Boolean(input.firstAgentContext) && !input.noInitialAgent,
       expectsInitialAgent: Boolean(input.firstAgentContext),
       background: input.background,
       callerWorkspaceId: input.callerWorkspaceId,

@@ -5998,6 +5998,7 @@ export class Session {
         derivedDisplayName: result.worktree.branchName || result.workspace.displayName,
       }),
       title: result.workspace.title,
+      titleState: result.workspace.titleState,
       pinnedAt: result.workspace.pinnedAt,
       ...(result.workspace.labels && result.workspace.labels.length > 0
         ? { labels: result.workspace.labels }
@@ -7122,7 +7123,8 @@ export class Session {
       explicitTitle ?? promptTitle,
       request.source.projectId,
       {
-        titleFromPrompt: !explicitTitle && Boolean(request.firstAgentContext),
+        titleFromPrompt:
+          !explicitTitle && Boolean(request.firstAgentContext) && Boolean(request.agent),
         expectsInitialAgent: Boolean(request.firstAgentContext),
         workspaceId,
         ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
@@ -7187,6 +7189,7 @@ export class Session {
         checkoutSource: source.checkoutSource,
         githubPrNumber: source.githubPrNumber,
         firstAgentContext: request.firstAgentContext,
+        noInitialAgent: !request.agent,
         title: request.title,
         ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
       },

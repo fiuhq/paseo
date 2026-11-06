@@ -161,11 +161,40 @@ describe("WorkspaceTitleGate", () => {
     ]);
   });
 
-  test("three refusals end with no title and the state says so", async () => {
-    const h = harness({ verdicts: [refuse(0.1), refuse(0.2), refuse(0.3), accept(0.9)] });
+  test("a refused reply is retried at once, because the agent may never take another turn", async () => {
+    const h = harness({
+      verdicts: [refuse(0.24), refuse(0.55), accept(0.9)],
+      generated: (context) => {
+        if (context.prompt?.includes('refused the title "Second"')) {
+          return {
+            title: "Restore other accounts in the usage popover",
+            branch: "restore-accounts",
+          };
+        }
+        if (context.prompt?.includes("The agent has replied")) {
+          return { title: "Second", branch: "second" };
+        }
+        return { title: "First", branch: "first" };
+      },
+    });
 
     await h.gate.start(h.record(), PROMPT);
     await h.endTurn("turn_completed");
+
+    expect(h.judged.map((request) => request.attempt)).toEqual([1, 2, 3]);
+    expect(h.applied).toEqual([
+      {
+        title: "Restore other accounts in the usage popover",
+        branch: "restore-accounts",
+        unchecked: false,
+      },
+    ]);
+  });
+
+  test("three refusals end with no title and the state says so, in one turn", async () => {
+    const h = harness({ verdicts: [refuse(0.1), refuse(0.2), refuse(0.3), accept(0.9)] });
+
+    await h.gate.start(h.record(), PROMPT);
     await h.endTurn("turn_completed");
     await h.endTurn("turn_completed");
 
