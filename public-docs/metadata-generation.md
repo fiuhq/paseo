@@ -17,7 +17,7 @@ Paseo generates these kinds of metadata:
 - **Commit messages** — a concise message for the changes you're committing.
 - **Pull request title and body** — drafted from the diff when you open a PR.
 
-A workspace title and its branch name are produced together from the same prompt, but you configure their wording independently (see below).
+A workspace title and its branch name are produced together from the same prompt, but you configure their wording independently (see below). A plugin can hold both until a candidate passes its judge, and later candidates also draw on the agent's reply: see [`workspace.title.before`](/docs/plugins/hooks#workspacetitlebefore).
 
 ## How a model is chosen
 

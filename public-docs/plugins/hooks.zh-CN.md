@@ -136,7 +136,7 @@ server.addHook("workspace.create.after", async ({ workspace }) => {
 
 ## workspace.title.before {#workspacetitlebefore}
 
-在任何人看到之前评审生成的工作区标题。注册此钩子会改变新工作区的命名方式：Paseo 暂不显示标题，显示 `正在命名…`，并把每个候选标题交给这里。没有处理函数时，标题照常生效。没有提示词创建的工作区，以及检出不受信任的变更请求的工作区，Paseo 不会暂缓其标题。
+在任何人看到之前评审生成的工作区标题。注册此钩子会改变新工作区的命名方式：Paseo 暂不显示标题，显示 `正在命名…`，并把每个候选标题交给这里。没有处理函数时，标题照常生效。没有 Agent 或没有提示词创建的工作区，以及检出不受信任的变更请求的工作区，Paseo 不会暂缓其标题。
 
 填写 `verdict`；这是唯一可以修改的字段。
 
@@ -156,7 +156,7 @@ server.addHook("workspace.title.before", async ({ request }) => {
 });
 ```
 
-首次尝试时 `source` 为 `prompt`，候选标题能够参考 Agent 的回复后为 `reply`。`sourceText` 是提示词，或回复加提示词，截断为 2,000 个字符。手动重命名始终优先并结束暂缓。处理函数抛出错误或让 `verdict` 保持为 null 时，标题以 `unchecked` 状态应用，命名不会停止。
+首次尝试时 `source` 为 `prompt`，候选标题能够参考 Agent 的回复后为 `reply`。`sourceText` 是提示词，或回复加提示词，截断为 2,000 个字符。手动重命名始终优先并结束暂缓。三次尝试都被拒绝，或某一轮结束时没有回复，工作区会保持未命名，标题栏提供 `重命名`。处理函数抛出错误或让 `verdict` 保持为 null 时，标题以 `unchecked` 状态应用，命名不会停止。
 
 ## workspace.archive.after {#workspacearchiveafter}
 
