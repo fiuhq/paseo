@@ -4,6 +4,7 @@ import {
   expectChatHistoryAttachment,
   expectInFlightForkAvailable,
   expectLiveAssistantText,
+  expectOpenWorkspaceHasOneAgent,
   forkInFlightTurnToNewTab,
   forkMostRecentAssistantTurnToNewTab,
   forkMostRecentAssistantTurnToNewWorkspace,
@@ -223,6 +224,7 @@ test.describe("Assistant fork menu", () => {
     const userMessage = page.getByTestId("user-message").filter({ hasText: "Chat history" }).last();
     await expect(userMessage).toBeVisible({ timeout: 30_000 });
     await expect(userMessage).not.toContainText("Source agent:");
+    await expectOpenWorkspaceHasOneAgent(page, session.client);
   });
 
   test("leaves the fork attachment out of a message queued while the new workspace starts", async ({
@@ -314,5 +316,6 @@ test.describe("Assistant fork menu", () => {
       .filter({ hasText: "Forked prompt" })
       .filter({ visible: true });
     await expect(retried).toContainText("Chat history", { timeout: 30_000 });
+    await expectOpenWorkspaceHasOneAgent(page, session.client);
   });
 });

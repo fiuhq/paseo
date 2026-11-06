@@ -101,7 +101,7 @@ async function waitForWorkspaceDescriptor(
   throw new Error(`Workspace descriptor not found: ${workspaceId}`);
 }
 
-function parseWorkspaceIdFromPageUrl(page: Page, serverId: string): string | null {
+export function parseWorkspaceIdFromPageUrl(page: Page, serverId: string): string | null {
   const pathname = new URL(page.url()).pathname;
   const match = pathname.match(
     new RegExp(`^/h/${serverId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/workspace/([^/?#]+)`),
