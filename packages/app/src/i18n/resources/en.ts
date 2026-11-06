@@ -439,6 +439,15 @@ export const en = {
     },
   },
   workspace: {
+    titleState: {
+      naming: "Naming…",
+      refused: 'Refused "{{title}}" ({{score}}): waiting for the agent',
+      noReply: "No title yet: the agent never replied",
+      exhausted: "No title yet: {{tries}} tries refused",
+      unchecked: "Not checked: {{judge}} unreachable",
+      judgeFallback: "the judge",
+      rename: "Rename",
+    },
     route: {
       loading: "Loading workspace",
       connecting: "Connecting",

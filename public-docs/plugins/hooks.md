@@ -53,6 +53,7 @@ Paseo only sees the returned promise, so detached work gets no error reporting a
 | ------------------------- | ----- | -------------------------------------- | ---------------------------------------------- |
 | `workspace.create.before` | yes   | `{ request }`                          | Entire create request                          |
 | `workspace.create.after`  | no    | `{ workspace }`                        |                                                |
+| `workspace.title.before`  | yes   | `{ request }`                          | `verdict`                                      |
 | `workspace.archive.after` | no    | `{ workspace }`                        |                                                |
 | `worktree.create.before`  | yes   | `{ request }`                          | Creation options and destination               |
 | `worktree.create.after`   | yes   | `{ worktree }`                         | Files in the worktree; throw to abort creation |
@@ -135,6 +136,30 @@ server.addHook("workspace.create.after", async ({ workspace }) => {
   console.log(workspace);
 });
 ```
+
+## workspace.title.before
+
+Judges a generated workspace title before anyone sees it. Registering this hook changes how new workspaces are named: Paseo holds the title back, shows `Naming…`, and offers each candidate here. With no handler, titles go on as they always did.
+
+Fill in `verdict`; it is the only field you may change.
+
+| `decision`  | What Paseo does                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| `accept`    | Applies the title and renames the placeholder branch.                                          |
+| `refuse`    | Drops the candidate and writes the next one from the agent's reply. Three tries at most.       |
+| `unchecked` | Applies the title and marks it as not checked. Use this when your judge cannot give a verdict. |
+
+```ts
+server.addHook("workspace.title.before", async ({ request }) => {
+  const score = await scoreTitle(request.candidate.title, request.sourceText);
+  return {
+    ...request,
+    verdict: { decision: score >= 0.7 ? "accept" : "refuse", score, judge: "My judge" },
+  };
+});
+```
+
+`source` is `prompt` for the first try and `reply` once the candidate could draw on the agent's reply. A manual rename always wins and ends the hold. A handler that throws, or leaves `verdict` null, applies the title as `unchecked` instead of stopping naming.
 
 ## workspace.archive.after
 

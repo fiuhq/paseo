@@ -447,6 +447,15 @@ export const fr: TranslationResources = {
     },
   },
   workspace: {
+    titleState: {
+      naming: "Nommage…",
+      refused: "Refusé « {{title}} » ({{score}}) : en attente de l’agent",
+      noReply: "Pas encore de titre : l’agent n’a pas répondu",
+      exhausted: "Pas encore de titre : {{tries}} essais refusés",
+      unchecked: "Non vérifié : {{judge}} injoignable",
+      judgeFallback: "l’évaluateur",
+      rename: "Renommer",
+    },
     route: {
       loading: "Chargement de l’espace de travail…",
       connecting: "Connexion…",

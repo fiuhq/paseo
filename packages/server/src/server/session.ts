@@ -507,6 +507,7 @@ export interface SessionOptions {
   pluginRuntime?: {
     wait: import("./plugins/lifecycle/index.js").PluginLifecycle["wait"];
     before: import("./plugins/lifecycle/index.js").PluginLifecycle["before"];
+    handles: import("./plugins/lifecycle/index.js").PluginLifecycle["handles"];
     emit: import("./plugins/lifecycle/index.js").PluginLifecycle["emit"];
     listPlugins(): Promise<import("@getpaseo/protocol/messages").PluginListItem[]>;
     getLogs(pluginId: string): import("@getpaseo/protocol/messages").PluginLogEntry[];
@@ -4041,6 +4042,7 @@ export class Session {
       const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
         ...existing,
         title: nextTitle,
+        titleState: null,
         updatedAt,
       }));
       if (!updated) {
@@ -5897,6 +5899,7 @@ export class Session {
       workspaceKind: workspace.kind,
       name: resolveWorkspaceDisplayName(workspace),
       title: workspace.title,
+      titleState: workspace.titleState,
       pinnedAt: workspace.pinnedAt,
       ...(workspace.labels && workspace.labels.length > 0 ? { labels: workspace.labels } : {}),
       background: workspace.background,
@@ -7119,6 +7122,7 @@ export class Session {
       explicitTitle ?? promptTitle,
       request.source.projectId,
       {
+        titleFromPrompt: !explicitTitle && Boolean(request.firstAgentContext),
         expectsInitialAgent: Boolean(request.firstAgentContext),
         workspaceId,
         ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),

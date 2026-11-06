@@ -113,6 +113,7 @@ async function createPaseoWorktreeWithPriority(
       branch: createdWorktree.worktree.branchName || null,
       baseBranch: createdWorktree.worktree.comparisonBaseRef,
       title: input.title?.trim() || resolveFirstAgentPromptTitle(input.firstAgentContext),
+      titleFromPrompt: !input.title?.trim() && Boolean(input.firstAgentContext),
       expectsInitialAgent: Boolean(input.firstAgentContext),
       background: input.background,
       callerWorkspaceId: input.callerWorkspaceId,

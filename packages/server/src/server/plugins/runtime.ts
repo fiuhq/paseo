@@ -601,6 +601,10 @@ export class PluginRuntime {
     }
   }
 
+  handles(name: keyof PluginWireBeforeRequests): boolean {
+    return [...this.plugins.values()].some((loaded) => loaded.hooks.includes(name));
+  }
+
   async before<Name extends keyof PluginWireBeforeRequests>(
     name: Name,
     input: PluginWireBeforeRequests[Name],

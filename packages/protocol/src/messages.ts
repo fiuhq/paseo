@@ -4187,6 +4187,20 @@ export const WorkspaceGitHubRuntimePayloadSchema = z
   .optional()
   .nullable();
 
+/**
+ * Why a workspace has no title yet. Absent unless a plugin judges titles. `naming`,
+ * `refused`, `no-reply` and `exhausted` hold the title back; `unchecked` means it went on
+ * without a verdict.
+ */
+export const WorkspaceTitleStateSchema = z.object({
+  status: z.enum(["naming", "refused", "no-reply", "exhausted", "unchecked"]),
+  attempts: z.number().int(),
+  refusedTitle: z.string().nullable(),
+  score: z.number().nullable(),
+  judge: z.string().nullable(),
+});
+export type WorkspaceTitleState = z.infer<typeof WorkspaceTitleStateSchema>;
+
 export const WorkspaceDescriptorPayloadSchema = z
   .object({
     // Informational creation ancestry; independent of placement and lifecycle.
@@ -4219,6 +4233,8 @@ export const WorkspaceDescriptorPayloadSchema = z
     // its input and offer a "reset to branch name" action. Null means the name
     // is derived from the branch/directory.
     title: z.string().nullable().optional(),
+    // COMPAT(workspaceTitleState): added in v0.15.0, remove optional after 2027-05-06.
+    titleState: WorkspaceTitleStateSchema.nullable().optional(),
     // COMPAT(workspacePinning): added in v0.1.107, remove optional after 2027-01-12.
     pinnedAt: z.string().nullable().optional(),
     // COMPAT(workspaceLabels): added in v0.5.0, remove optional after 2027-08-14.

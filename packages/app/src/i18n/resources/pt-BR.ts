@@ -446,6 +446,15 @@ export const ptBR: TranslationResources = {
     },
   },
   workspace: {
+    titleState: {
+      naming: "Nomeando…",
+      refused: 'Recusado "{{title}}" ({{score}}): aguardando o agente',
+      noReply: "Ainda sem título: o agente não respondeu",
+      exhausted: "Ainda sem título: {{tries}} tentativas recusadas",
+      unchecked: "Não verificado: {{judge}} indisponível",
+      judgeFallback: "o avaliador",
+      rename: "Renomear",
+    },
     route: {
       loading: "Carregando workspace",
       connecting: "Conectando",

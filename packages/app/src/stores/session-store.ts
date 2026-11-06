@@ -122,6 +122,7 @@ export interface WorkspaceDescriptor {
   background?: boolean;
   name: string;
   title?: string | null;
+  titleState?: WorkspaceDescriptorPayload["titleState"];
   pinnedAt?: string | null;
   labels?: string[];
   status: WorkspaceDescriptorPayload["status"];
@@ -171,6 +172,8 @@ export function normalizeWorkspaceDescriptor(
     parentWorkspaceId: payload.parentWorkspaceId,
     name: payload.name,
     title: payload.title ?? null,
+    // COMPAT(workspaceTitleState): old daemons omit it.
+    titleState: payload.titleState ?? null,
     pinnedAt: payload.pinnedAt ?? null,
     // COMPAT(workspaceLabels): old daemons omit assignments.
     labels: payload.labels ?? [],

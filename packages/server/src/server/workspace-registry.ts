@@ -3,6 +3,8 @@ import { promises as fs } from "node:fs";
 import type { Logger } from "pino";
 import { z } from "zod";
 
+import { WorkspaceTitleStateSchema, type WorkspaceTitleState } from "@getpaseo/protocol/messages";
+
 import { writeJsonFileAtomic } from "./atomic-file.js";
 import { areEquivalentPaths } from "../utils/path.js";
 import {
@@ -61,6 +63,10 @@ const PersistedWorkspaceRecordSchema = z.object({
   title: z
     .string()
     .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  // Non-null while a plugin's judge has not passed a title (see workspace-title-gate.ts).
+  titleState: WorkspaceTitleStateSchema.nullable()
     .optional()
     .transform((value) => value ?? null),
   // The worktree's git branch. Decoupled from displayName/title by construction:
@@ -687,6 +693,7 @@ export function createPersistedWorkspaceRecord(input: {
   kind: PersistedWorkspaceKind;
   displayName: string;
   title?: string | null;
+  titleState?: WorkspaceTitleState | null;
   branch?: string | null;
   worktreeRoot?: string | null;
   baseBranch?: string | null;
@@ -706,6 +713,7 @@ export function createPersistedWorkspaceRecord(input: {
     ...rest,
     background: background ?? false,
     title: input.title ?? null,
+    titleState: input.titleState ?? null,
     branch: input.branch ?? null,
     worktreeRoot: input.worktreeRoot ?? null,
     baseBranch: input.baseBranch ?? null,

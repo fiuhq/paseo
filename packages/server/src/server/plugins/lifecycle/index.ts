@@ -111,6 +111,23 @@ const beforeSchemas = {
     type: true,
     requestId: true,
   }).strict(),
+  "workspace.title.before": z
+    .object({
+      workspaceId: z.string(),
+      candidate: z.object({ title: z.string(), branch: z.string().nullable() }).strict(),
+      source: z.enum(["prompt", "reply"]),
+      sourceText: z.string(),
+      attempt: z.number().int().positive(),
+      verdict: z
+        .object({
+          decision: z.enum(["accept", "refuse", "unchecked"]),
+          score: z.number().nullable(),
+          judge: z.string().nullable(),
+        })
+        .strict()
+        .nullable(),
+    })
+    .strict(),
 };
 
 const sessionOpenLocalResultSchema = beforeSchemas["agent.open.before"].extend({
@@ -136,6 +153,8 @@ export interface PluginLifecycle {
     name: Name,
     request: PluginWireBeforeRequests[Name],
   ): Promise<PluginBeforeResults[Name]>;
+  /** Whether any loaded plugin registered this hook. */
+  handles(name: keyof PluginWireBeforeRequests): boolean;
 }
 
 export function validateBeforeRequest<Name extends keyof PluginWireBeforeRequests>(
@@ -239,6 +258,13 @@ export async function validateBeforeResult<Name extends keyof PluginWireBeforeRe
     const next = beforeSchemas["agent.create.before"].parse(result);
     if (previous.config.cwd !== next.config.cwd) {
       throw new Error("agent.create.before hooks cannot change the workspace directory");
+    }
+  }
+  if (name === "workspace.title.before") {
+    const previous = beforeSchemas["workspace.title.before"].parse(input);
+    const next = beforeSchemas["workspace.title.before"].parse(result);
+    if (!isDeepStrictEqual({ ...previous, verdict: null }, { ...next, verdict: null })) {
+      throw new Error("workspace.title.before hooks can only change verdict");
     }
   }
   if (name === "worktree.create.before") {

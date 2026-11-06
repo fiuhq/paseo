@@ -2,19 +2,21 @@ import type { TFunction } from "i18next";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import type { WorkspaceTitleSource } from "@/hooks/use-settings";
 import { getStatusBucketLabel } from "@/hooks/sidebar-status-view-model";
+import { isWorkspaceTitleHeld, workspaceHeldTitleLabel } from "@/utils/workspace-title-state";
 
 export function resolveSidebarWorkspacePrimaryLabel(input: {
-  workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch">;
+  workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch" | "titleState">;
   workspaceTitleSource: WorkspaceTitleSource;
 }): string {
   if (input.workspaceTitleSource === "branch") {
     return input.workspace.currentBranch ?? input.workspace.name;
   }
+  if (isWorkspaceTitleHeld(input.workspace.titleState)) return workspaceHeldTitleLabel();
   return input.workspace.name;
 }
 
 export function resolveSidebarWorkspaceAccessibilityLabel(input: {
-  workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch" | "statusBucket">;
+  workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch" | "titleState" | "statusBucket">;
   workspaceTitleSource: WorkspaceTitleSource;
   leadingProjectName?: string | null;
   hostBadgeLabel?: string | null;

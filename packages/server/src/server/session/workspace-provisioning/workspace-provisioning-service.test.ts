@@ -1117,3 +1117,53 @@ test("a directory that goes away while the git read is in flight keeps its place
     branch: "feature/vanishing",
   });
 });
+
+function provisioningWithJudge(handles: boolean) {
+  return createWorkspaceProvisioningService({
+    workspaceRegistry,
+    projectRegistry,
+    workspaceGitService: gitService(),
+    isDirectory,
+    logger,
+    lifecycle: {
+      emit: () => {},
+      before: async (_name, request) => request,
+      handles: () => handles,
+      wait: async () => {},
+    },
+  });
+}
+
+test("a judge holds a title that is only the prompt's first line", async () => {
+  const workspace = await provisioningWithJudge(true).createWorkspaceForDirectory(
+    path.join(tmpDir, "plain"),
+    "https://chat.example.com/archives/C0AB/p1793",
+    undefined,
+    { titleFromPrompt: true },
+  );
+
+  expect(workspace.title).toBeNull();
+  expect(workspace.titleState).toMatchObject({ status: "naming", attempts: 0 });
+});
+
+test("with no judge registered the prompt's first line is the title, as it always was", async () => {
+  const workspace = await provisioningWithJudge(false).createWorkspaceForDirectory(
+    path.join(tmpDir, "plain"),
+    "Fix the sidebar",
+    undefined,
+    { titleFromPrompt: true },
+  );
+
+  expect(workspace.title).toBe("Fix the sidebar");
+  expect(workspace.titleState).toBeNull();
+});
+
+test("a judge never holds a title someone chose", async () => {
+  const workspace = await provisioningWithJudge(true).createWorkspaceForDirectory(
+    path.join(tmpDir, "plain"),
+    "My chosen name",
+  );
+
+  expect(workspace.title).toBe("My chosen name");
+  expect(workspace.titleState).toBeNull();
+});

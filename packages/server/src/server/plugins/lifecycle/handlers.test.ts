@@ -253,3 +253,26 @@ test("checkout-branch hooks reject a branch-off baseRef", async () => {
     validateBeforeResult("worktree.create.before", request, { ...request, baseRef: "main" }),
   ).rejects.toThrow(/baseRef/);
 });
+
+test("a title judge can only fill in the verdict", async () => {
+  const request = {
+    workspaceId: "workspace",
+    candidate: { title: "Guess", branch: "guess" },
+    source: "prompt" as const,
+    sourceText: "https://chat.example.com/archives/C0AB/p1793",
+    attempt: 1,
+    verdict: null,
+  };
+  const verdict = { decision: "refuse" as const, score: 0.42, judge: "Jev" };
+
+  await expect(
+    validateBeforeResult("workspace.title.before", request, { ...request, verdict }),
+  ).resolves.toEqual({ ...request, verdict });
+  await expect(
+    validateBeforeResult("workspace.title.before", request, {
+      ...request,
+      candidate: { title: "Swapped by the plugin", branch: "guess" },
+      verdict,
+    }),
+  ).rejects.toThrow("workspace.title.before hooks can only change verdict");
+});

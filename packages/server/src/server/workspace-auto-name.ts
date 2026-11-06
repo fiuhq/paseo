@@ -1,9 +1,10 @@
 import type pino from "pino";
-import type { FirstAgentContext } from "@getpaseo/protocol/messages";
+import type { FirstAgentContext, WorkspaceTitleState } from "@getpaseo/protocol/messages";
 
 import { resolveFirstAgentPromptTitle } from "./agent/create-agent-title.js";
 import type { AgentManager } from "./agent/agent-manager.js";
 import type { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
+import type { PluginLifecycle } from "./plugins/lifecycle/index.js";
 import type { StructuredGenerationDaemonConfig } from "./agent/structured-generation-providers.js";
 import {
   attemptFirstAgentBranchAutoName,
@@ -17,6 +18,7 @@ import {
   type GeneratedWorkspaceName,
   type GenerateBranchNameFromFirstAgentContextOptions,
 } from "./worktree-branch-name-generator.js";
+import { WorkspaceTitleGate, type ApplyJudgedTitleInput } from "./workspace-title-gate.js";
 
 type WorkspaceNameGenerator = typeof generateBranchNameFromFirstAgentContext;
 
@@ -33,10 +35,21 @@ interface WorkspaceAutoNameOptions {
   emitWorkspaceUpdateForWorkspaceId: (workspaceId: string) => Promise<void>;
   logger: pino.Logger;
   generateWorkspaceName?: WorkspaceNameGenerator;
+  /** Lets a plugin hold titles until it passes one. Omitted, naming works as it always did. */
+  titleGate?: {
+    lifecycle: Pick<PluginLifecycle, "before" | "handles">;
+    workspaceRegistry: Pick<WorkspaceRegistry, "get">;
+  };
 }
 
 interface ScheduleContext {
   currentSelection?: CurrentSelection;
+}
+
+/** A title the gate already judged, so these paths must not generate another. */
+interface JudgedTitle {
+  generated: GeneratedWorkspaceName;
+  titleState: WorkspaceTitleState | null;
 }
 
 export class WorkspaceAutoName {
@@ -50,6 +63,7 @@ export class WorkspaceAutoName {
   private readonly emitWorkspaceUpdateForWorkspaceId: (workspaceId: string) => Promise<void>;
   private readonly logger: pino.Logger;
   private readonly generateWorkspaceName: WorkspaceNameGenerator;
+  private readonly titleGate: WorkspaceTitleGate | null;
 
   constructor(options: WorkspaceAutoNameOptions) {
     this.agentManager = options.agentManager;
@@ -63,6 +77,51 @@ export class WorkspaceAutoName {
     this.logger = options.logger;
     this.generateWorkspaceName =
       options.generateWorkspaceName ?? generateBranchNameFromFirstAgentContext;
+    this.titleGate = options.titleGate
+      ? new WorkspaceTitleGate({
+          lifecycle: options.titleGate.lifecycle,
+          agentManager: options.agentManager,
+          workspaceRegistry: {
+            get: (workspaceId) => options.titleGate!.workspaceRegistry.get(workspaceId),
+            update: (workspaceId, updater) =>
+              options.workspaceRegistry.update(workspaceId, updater),
+          },
+          generate: ({ workspace, firstAgentContext, selection }) =>
+            this.generateFromContext({
+              cwd: workspace.cwd,
+              firstAgentContext,
+              currentSelection: (selection as CurrentSelection | undefined) ?? null,
+            }),
+          apply: (input) => this.applyJudgedTitle(input),
+          emit: (workspaceId) => options.emitWorkspaceUpdateForWorkspaceId(workspaceId),
+          logger: options.logger,
+        })
+      : null;
+  }
+
+  /** Whether a workspace created now should hold its title for a plugin's judge. */
+  holdsTitles(): boolean {
+    return this.titleGate?.holds() ?? false;
+  }
+
+  private applyJudgedTitle(input: ApplyJudgedTitleInput): Promise<void> {
+    const judged = { generated: input.generated, titleState: input.titleState };
+    const firstAgentContext = input.firstAgentContext;
+    if (input.workspace.kind === "worktree") {
+      return this.maybeAutoNameWorkspaceBranchForFirstAgent({
+        workspace: input.workspace,
+        firstAgentContext,
+        currentSelection: null,
+        judged,
+      });
+    }
+    return this.maybeAutoNameDirectoryWorkspaceTitle({
+      workspaceId: input.workspace.workspaceId,
+      cwd: input.workspace.cwd,
+      firstAgentContext,
+      currentSelection: null,
+      judged,
+    });
   }
 
   scheduleForWorktree(
@@ -107,13 +166,21 @@ export class WorkspaceAutoName {
     workspace: PersistedWorkspaceRecord;
     firstAgentContext: FirstAgentContext;
     currentSelection: CurrentSelection;
+    judged?: JudgedTitle;
   }): Promise<void> {
+    if (!input.judged && this.titleGate) {
+      const workspace = await this.titleGate.heldWorkspace(input.workspace.workspaceId);
+      if (workspace) {
+        return this.titleGate.start(workspace, input.firstAgentContext, input.currentSelection);
+      }
+    }
     const worktreeRoot = input.workspace.worktreeRoot ?? input.workspace.cwd;
-    let generated: GeneratedWorkspaceName | null = null;
+    let generated: GeneratedWorkspaceName | null = input.judged?.generated ?? null;
     const result: AttemptFirstAgentBranchAutoNameResult = await attemptFirstAgentBranchAutoName({
       cwd: worktreeRoot,
       firstAgentContext: input.firstAgentContext,
       generateBranchNameFromContext: ({ firstAgentContext }) => {
+        if (input.judged) return Promise.resolve(input.judged.generated.branch);
         return this.generateFromContext({
           cwd: input.workspace.cwd,
           firstAgentContext,
@@ -145,6 +212,7 @@ export class WorkspaceAutoName {
       title: generatedTitle,
       ...(result.renamed ? { branch: result.branchName } : {}),
       promptTitle: resolveFirstAgentPromptTitle(input.firstAgentContext),
+      ...(input.judged ? { titleState: input.judged.titleState } : {}),
     });
     if (result.renamed) {
       await this.gitMutation.notifyGitMutation(worktreeRoot, "rename-branch");
@@ -157,12 +225,21 @@ export class WorkspaceAutoName {
     cwd: string;
     firstAgentContext: FirstAgentContext;
     currentSelection: CurrentSelection;
+    judged?: JudgedTitle;
   }): Promise<void> {
-    const generated = await this.generateFromContext({
-      cwd: input.cwd,
-      firstAgentContext: input.firstAgentContext,
-      currentSelection: input.currentSelection,
-    });
+    if (!input.judged && this.titleGate) {
+      const workspace = await this.titleGate.heldWorkspace(input.workspaceId);
+      if (workspace) {
+        return this.titleGate.start(workspace, input.firstAgentContext, input.currentSelection);
+      }
+    }
+    const generated =
+      input.judged?.generated ??
+      (await this.generateFromContext({
+        cwd: input.cwd,
+        firstAgentContext: input.firstAgentContext,
+        currentSelection: input.currentSelection,
+      }));
     const title = generated?.title ?? null;
     if (!title) {
       return;
@@ -172,13 +249,19 @@ export class WorkspaceAutoName {
     await this.applyGeneratedWorkspaceTitle(input.workspaceId, {
       title,
       promptTitle: resolveFirstAgentPromptTitle(input.firstAgentContext),
+      ...(input.judged ? { titleState: input.judged.titleState } : {}),
     });
     await this.emitWorkspaceUpdateForWorkspaceId(input.workspaceId);
   }
 
   private async applyGeneratedWorkspaceTitle(
     workspaceId: string,
-    input: { title: string; branch?: string | null; promptTitle?: string | null },
+    input: {
+      title: string;
+      branch?: string | null;
+      promptTitle?: string | null;
+      titleState?: WorkspaceTitleState | null;
+    },
   ): Promise<void> {
     await this.workspaceRegistry.update(workspaceId, (current) => {
       let title = current.title;
@@ -189,6 +272,7 @@ export class WorkspaceAutoName {
         ...current,
         title,
         ...(input.branch ? { branch: input.branch } : {}),
+        ...(input.titleState !== undefined ? { titleState: input.titleState } : {}),
         updatedAt: new Date().toISOString(),
       };
     });
