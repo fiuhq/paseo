@@ -1252,6 +1252,16 @@ export async function localBranchExists(cwd: string, branchName: string): Promis
   return doesGitRefExist(cwd, `refs/heads/${branchName}`);
 }
 
+/** True once the branch has an upstream or a remote copy, which a local rename would orphan. */
+export async function isBranchPublished(cwd: string, branchName: string): Promise<boolean> {
+  const localRef = `refs/heads/${branchName}`;
+  const { stdout } = await runGitCommand(
+    ["for-each-ref", "--format=%(refname)%(upstream)", localRef, `refs/remotes/*/${branchName}`],
+    { cwd, envOverlay: READ_ONLY_GIT_ENV },
+  );
+  return stdout.split("\n").some((line) => line.trim() && line.trim() !== localRef);
+}
+
 export async function renameCurrentBranch(
   cwd: string,
   newName: string,

@@ -99,7 +99,7 @@ export interface PluginWorkspaceTitleRequest {
   candidate: { title: string; branch: string | null };
   /** `prompt`: written from the first prompt alone. `reply`: also from the agent's reply. */
   source: "prompt" | "reply";
-  /** The text the candidate was written from, clipped. */
+  /** The prompt, or the reply followed by the prompt, clipped. */
   sourceText: string;
   attempt: number;
   verdict: {

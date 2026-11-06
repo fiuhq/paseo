@@ -19,6 +19,9 @@ import {
   createPaseoWorktree,
   type CreatePaseoWorktreeDeps,
 } from "./paseo-worktree-service.js";
+import { WorkspaceAutoName } from "./workspace-auto-name.js";
+import type { AgentManager } from "./agent/agent-manager.js";
+import type { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import { readPaseoWorktreeMetadata } from "../utils/worktree-metadata.js";
 import { createWorktree, getPaseoWorktreesRoot } from "../utils/worktree.js";
 import { isPlatform } from "../test-utils/platform.js";
@@ -597,6 +600,60 @@ test("renames an eligible unnamed branch-off worktree once on first agent contex
 
   expect(second).toEqual({ attempted: false, renamed: false, branchName: null });
   expect(branchAfterSecond).toBe("renamed-from-agent-context");
+});
+
+test.each([
+  ["has a remote copy", [["update-ref", "refs/remotes/origin/dazzling-yak", "HEAD"]]],
+  [
+    "has an upstream",
+    [
+      ["config", "branch.dazzling-yak.remote", "origin"],
+      ["config", "branch.dazzling-yak.merge", "refs/heads/dazzling-yak"],
+    ],
+  ],
+])("a placeholder branch that %s keeps its name while the title goes on", async (_, publish) => {
+  const { repoDir, tempDir } = createGitRepo();
+  cleanupPaths.push(tempDir);
+  const remoteDir = path.join(tempDir, "remote.git");
+  execFileSync("git", ["remote", "add", "origin", remoteDir], { cwd: repoDir, stdio: "pipe" });
+  const created = await createPaseoWorktree(
+    { cwd: repoDir, worktreeSlug: "dazzling-yak", paseoHome: path.join(tempDir, ".paseo") },
+    createDeps(),
+  );
+  const worktreePath = created.worktree.worktreePath;
+  for (const command of publish) {
+    execFileSync("git", command, { cwd: worktreePath, stdio: "pipe" });
+  }
+
+  let workspace = created.workspace;
+  await new Promise<void>((settled) => {
+    new WorkspaceAutoName({
+      agentManager: {} as AgentManager,
+      workspaceRegistry: {
+        update: async (_workspaceId, updater) => {
+          workspace = updater(workspace);
+          return workspace;
+        },
+      },
+      workspaceGitService: {} as WorkspaceGitService,
+      providerSnapshotManager: {} as ProviderSnapshotManager,
+      readDaemonConfig: () => ({}),
+      gitMutation: { notifyGitMutation: async () => {} },
+      emitWorkspaceUpdateForCwd: async () => settled(),
+      emitWorkspaceUpdateForWorkspaceId: async () => {},
+      logger: createTestLogger(),
+      generateWorkspaceName: async () => ({ title: "Fix the login flow", branch: "fix-login" }),
+    }).scheduleForWorktree({
+      workspace: created.workspace,
+      firstAgentContext: { prompt: "Fix the login flow" },
+    });
+  });
+
+  const branch = execFileSync("git", ["branch", "--show-current"], { cwd: worktreePath })
+    .toString()
+    .trim();
+  expect(branch).toBe("dazzling-yak");
+  expect(workspace.title).toBe("Fix the login flow");
 });
 
 test("falls back to a numeric suffix when the desired branch name already exists", async () => {

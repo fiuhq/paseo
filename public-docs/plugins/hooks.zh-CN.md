@@ -51,6 +51,7 @@ Paseo 只观察返回的 Promise，因此独立任务没有错误报告，也没
 | ------------------------- | ---- | -------------------------------------- | ----------------------------------------- |
 | `workspace.create.before` | 是   | `{ request }`                          | 整个创建请求                              |
 | `workspace.create.after`  | 否   | `{ workspace }`                        |                                           |
+| `workspace.title.before`  | 是   | `{ request }`                          | `verdict`                                 |
 | `workspace.archive.after` | 否   | `{ workspace }`                        |                                           |
 | `worktree.create.before`  | 是   | `{ request }`                          | 创建选项和目标路径                        |
 | `worktree.create.after`   | 是   | `{ worktree }`                         | worktree 中的文件；抛出错误中止创建       |
@@ -132,6 +133,30 @@ server.addHook("workspace.create.after", async ({ workspace }) => {
   console.log(workspace);
 });
 ```
+
+## workspace.title.before {#workspacetitlebefore}
+
+在任何人看到之前评审生成的工作区标题。注册此钩子会改变新工作区的命名方式：Paseo 暂不显示标题，显示 `正在命名…`，并把每个候选标题交给这里。没有处理函数时，标题照常生效。没有提示词创建的工作区，以及检出不受信任的变更请求的工作区，Paseo 不会暂缓其标题。
+
+填写 `verdict`；这是唯一可以修改的字段。
+
+| `decision`  | Paseo 的行为                                              |
+| ----------- | --------------------------------------------------------- |
+| `accept`    | 应用标题并重命名占位分支，分支已推送时不重命名。          |
+| `refuse`    | 丢弃候选标题，根据 Agent 的回复生成下一个。最多尝试三次。 |
+| `unchecked` | 应用标题并标记为未检查。评审器无法给出结论时使用。        |
+
+```ts
+server.addHook("workspace.title.before", async ({ request }) => {
+  const score = await scoreTitle(request.candidate.title, request.sourceText);
+  return {
+    ...request,
+    verdict: { decision: score >= 0.7 ? "accept" : "refuse", score, judge: "My judge" },
+  };
+});
+```
+
+首次尝试时 `source` 为 `prompt`，候选标题能够参考 Agent 的回复后为 `reply`。`sourceText` 是提示词，或回复加提示词，截断为 2,000 个字符。手动重命名始终优先并结束暂缓。处理函数抛出错误或让 `verdict` 保持为 null 时，标题以 `unchecked` 状态应用，命名不会停止。
 
 ## workspace.archive.after {#workspacearchiveafter}
 

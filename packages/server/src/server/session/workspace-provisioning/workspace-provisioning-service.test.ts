@@ -1139,7 +1139,7 @@ test("a judge holds a title that is only the prompt's first line", async () => {
     path.join(tmpDir, "plain"),
     "https://chat.example.com/archives/C0AB/p1793",
     undefined,
-    { titleFromPrompt: true },
+    { promptTitleContext: { prompt: "https://chat.example.com/archives/C0AB/p1793" } },
   );
 
   expect(workspace.title).toBeNull();
@@ -1151,11 +1151,56 @@ test("with no judge registered the prompt's first line is the title, as it alway
     path.join(tmpDir, "plain"),
     "Fix the sidebar",
     undefined,
-    { titleFromPrompt: true },
+    { promptTitleContext: { prompt: "Fix the sidebar" } },
   );
 
   expect(workspace.title).toBe("Fix the sidebar");
   expect(workspace.titleState).toBeNull();
+});
+
+test("a judge holds nothing when there is no prompt to name the workspace from", async () => {
+  const workspace = await provisioningWithJudge(true).createWorkspaceForDirectory(
+    path.join(tmpDir, "plain"),
+    null,
+    undefined,
+    { promptTitleContext: { prompt: "   ", attachments: [] } },
+  );
+
+  expect(workspace.title).toBeNull();
+  expect(workspace.titleState).toBeNull();
+});
+
+test("a judge holds a worktree's title, unless its checkout is untrusted", async () => {
+  const sourceCwd = path.join(tmpDir, "repo");
+  gitRoots.add(sourceCwd);
+  const input = {
+    sourceCwd,
+    repoRoot: sourceCwd,
+    cwd: path.join(tmpDir, "worktree"),
+    worktreeRoot: path.join(tmpDir, "worktree"),
+    branch: "child",
+    baseBranch: "main",
+    title: "Review this change",
+    promptTitleContext: { prompt: "Review this change" },
+  };
+  const judged = provisioningWithJudge(true);
+
+  const trusted = await judged.createWorkspaceForWorktree(input);
+  const untrusted = await judged.createWorkspaceForWorktree({
+    ...input,
+    cwd: path.join(tmpDir, "fork"),
+    worktreeRoot: path.join(tmpDir, "fork"),
+    untrustedSource: {
+      kind: "change_request",
+      forge: "github",
+      number: 42,
+      headRepository: "contributor/paseo",
+    },
+  });
+
+  expect(trusted.titleState).toMatchObject({ status: "naming" });
+  expect(untrusted.title).toBe("Review this change");
+  expect(untrusted.titleState).toBeNull();
 });
 
 test("a judge never holds a title someone chose", async () => {

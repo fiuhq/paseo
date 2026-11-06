@@ -90,7 +90,7 @@ import {
 import { openWorkspacePullRequest } from "@/workspace-tabs/open-supporting-view";
 import { traceInstant } from "@/performance/native-trace";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
-import { isWorkspaceTitleHeld } from "@/utils/workspace-title-state";
+import { isWorkspaceTitleHeld } from "@getpaseo/protocol/messages";
 import { WorkspaceTitleStateChip } from "@/screens/workspace/workspace-title-state-chip";
 import {
   canDismissPaneInLayout,

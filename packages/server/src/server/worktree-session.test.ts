@@ -1384,6 +1384,39 @@ describe("handleCreatePaseoWorktreeRequest", () => {
     }
   });
 
+  test("a bare worktree request promises no agent, so a title judge has no reply to wait for", async () => {
+    const workflowInputs: unknown[] = [];
+
+    await handleCreatePaseoWorktreeRequest(
+      {
+        paseoHome: "/tmp/paseo-home",
+        describeWorkspaceRecord: async () => {
+          throw new Error("not reached");
+        },
+        emit: () => {},
+        sessionLogger: createLogger(),
+        createPaseoWorktreeWorkflow: async (input) => {
+          workflowInputs.push(input);
+          throw new Error("stop after the input is known");
+        },
+      },
+      {
+        type: "create_paseo_worktree_request",
+        requestId: "req-no-agent",
+        cwd: "/repo",
+        worktreeSlug: "no-agent",
+        firstAgentContext: { prompt: "Fix the login flow" },
+      },
+    );
+
+    expect(workflowInputs).toEqual([
+      expect.objectContaining({
+        firstAgentContext: { prompt: "Fix the login flow" },
+        noInitialAgent: true,
+      }),
+    ]);
+  });
+
   test("checks out the GitHub PR branch when githubPrNumber is supplied", async () => {
     const { tempDir, repoDir } = createGitHubPrRemoteRepo();
     cleanupPaths.push(tempDir);

@@ -269,6 +269,7 @@ export async function handleCreatePaseoWorktreeRequest(
         projectId: request.projectId,
         worktreeSlug: request.worktreeSlug,
         firstAgentContext: normalizeFirstAgentContext(request),
+        noInitialAgent: true,
         refName: request.refName,
         action: request.action,
         checkoutSource: request.checkoutSource,

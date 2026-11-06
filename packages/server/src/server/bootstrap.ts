@@ -1126,7 +1126,7 @@ export async function createPaseoDaemon(
       cwd,
       resolveFirstAgentPromptTitle(firstAgentContext),
       undefined,
-      { ...context, titleFromPrompt: Boolean(firstAgentContext) },
+      { ...context, promptTitleContext: firstAgentContext },
     );
     if (firstAgentContext) {
       workspaceAutoName.scheduleForDirectory({
@@ -1392,7 +1392,7 @@ export async function createPaseoDaemon(
       input.cwd,
       resolveFirstAgentPromptTitle(input.firstAgentContext),
       undefined,
-      { titleFromPrompt: true },
+      { promptTitleContext: input.firstAgentContext },
     );
     workspaceAutoName.scheduleForDirectory({
       workspaceId: workspace.workspaceId,

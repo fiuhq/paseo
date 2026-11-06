@@ -1,6 +1,10 @@
 import type pino from "pino";
 import type { PluginWorkspaceTitleRequest } from "@getpaseo/plugin/server";
-import type { FirstAgentContext, WorkspaceTitleState } from "@getpaseo/protocol/messages";
+import {
+  isWorkspaceTitleHeld,
+  type FirstAgentContext,
+  type WorkspaceTitleState,
+} from "@getpaseo/protocol/messages";
 
 import type { AgentManager, AgentManagerEvent } from "./agent/agent-manager.js";
 import type { PluginLifecycle } from "./plugins/lifecycle/index.js";
@@ -20,12 +24,8 @@ export const HELD_TITLE_STATE: WorkspaceTitleState = {
   judge: null,
 };
 
-/** True while a workspace has no title because a judge has not passed one yet. */
-export function isTitleHeld(state: WorkspaceTitleState | null | undefined): boolean {
-  return state != null && state.status !== "unchecked";
-}
-
 type Verdict = NonNullable<PluginWorkspaceTitleRequest["verdict"]>;
+type CandidateOrigin = Pick<PluginWorkspaceTitleRequest, "source" | "sourceText">;
 
 export interface ApplyJudgedTitleInput {
   workspace: PersistedWorkspaceRecord;
@@ -36,7 +36,7 @@ export interface ApplyJudgedTitleInput {
 }
 
 interface WorkspaceTitleGateDeps {
-  lifecycle: Pick<PluginLifecycle, "before" | "handles">;
+  lifecycle: Pick<PluginLifecycle, "before">;
   agentManager: Pick<AgentManager, "subscribe" | "getAgent" | "getLastAssistantMessage">;
   workspaceRegistry: Pick<WorkspaceRegistry, "get" | "update">;
   generate(input: {
@@ -66,14 +66,9 @@ export class WorkspaceTitleGate {
     deps.agentManager.subscribe((event) => this.onAgentEvent(event), { replayState: false });
   }
 
-  /** Whether a workspace being created now should hold its title. */
-  holds(): boolean {
-    return this.deps.lifecycle.handles(TITLE_HOOK);
-  }
-
   async heldWorkspace(workspaceId: string): Promise<PersistedWorkspaceRecord | null> {
     const workspace = await this.deps.workspaceRegistry.get(workspaceId);
-    return workspace && isTitleHeld(workspace.titleState) ? workspace : null;
+    return workspace && isWorkspaceTitleHeld(workspace.titleState) ? workspace : null;
   }
 
   start(
@@ -83,7 +78,10 @@ export class WorkspaceTitleGate {
   ): Promise<void> {
     this.starts.set(workspace.workspaceId, { context: firstAgentContext, selection });
     return this.enqueue(workspace.workspaceId, () =>
-      this.attempt(workspace.workspaceId, firstAgentContext, "prompt"),
+      this.attempt(workspace.workspaceId, firstAgentContext, {
+        source: "prompt",
+        sourceText: firstAgentContext.prompt ?? "",
+      }),
     );
   }
 
@@ -103,22 +101,21 @@ export class WorkspaceTitleGate {
 
   private async afterTurn(workspaceId: string, agentId: string): Promise<void> {
     const state = (await this.deps.workspaceRegistry.get(workspaceId))?.titleState;
-    if (!isTitleHeld(state) || !state || state.status === "exhausted") return;
+    if (!isWorkspaceTitleHeld(state) || !state || state.status === "exhausted") return;
     const reply = await this.deps.agentManager.getLastAssistantMessage(agentId);
     if (!reply?.trim()) {
       await this.setState(workspaceId, { ...state, status: "no-reply" });
       return;
     }
     const context = this.starts.get(workspaceId)?.context;
-    let prompt = [
-      context?.prompt,
-      `The agent has replied:\n${reply.trim().slice(0, REPLY_CONTEXT_CHARS)}`,
-    ]
+    const replyText = reply.trim().slice(0, REPLY_CONTEXT_CHARS);
+    const sourceText = [replyText, context?.prompt].filter(Boolean).join("\n\n");
+    let prompt = [context?.prompt, `The agent has replied:\n${replyText}`]
       .filter(Boolean)
       .join("\n\n");
     // The agent may never take another turn, so a refusal cannot wait for one.
     for (;;) {
-      await this.attempt(workspaceId, { ...context, prompt }, "reply");
+      await this.attempt(workspaceId, { ...context, prompt }, { source: "reply", sourceText });
       const next = (await this.deps.workspaceRegistry.get(workspaceId))?.titleState;
       if (next?.status !== "refused") return;
       prompt = `${prompt}\n\nA reviewer refused the title "${next.refusedTitle}" as not specific enough. Name the concrete thing being fixed, built or answered.`;
@@ -128,11 +125,11 @@ export class WorkspaceTitleGate {
   private async attempt(
     workspaceId: string,
     firstAgentContext: FirstAgentContext,
-    source: PluginWorkspaceTitleRequest["source"],
+    origin: CandidateOrigin,
   ): Promise<void> {
     const workspace = await this.deps.workspaceRegistry.get(workspaceId);
     const state = workspace?.titleState;
-    if (!workspace || !state || !isTitleHeld(state)) return;
+    if (!workspace || !state || !isWorkspaceTitleHeld(state)) return;
     const attempt = state.attempts + 1;
 
     const generated = await this.deps.generate({
@@ -148,8 +145,8 @@ export class WorkspaceTitleGate {
     const verdict = await this.judge({
       workspaceId,
       candidate: { title: generated.title, branch: generated.branch },
-      source,
-      sourceText: (firstAgentContext.prompt ?? "").slice(0, SOURCE_TEXT_CHARS),
+      source: origin.source,
+      sourceText: origin.sourceText.slice(0, SOURCE_TEXT_CHARS),
       attempt,
       verdict: null,
     });
@@ -167,7 +164,7 @@ export class WorkspaceTitleGate {
 
     // Re-read: a rename that landed while the judge scored must win.
     const current = await this.deps.workspaceRegistry.get(workspaceId);
-    if (!current || !isTitleHeld(current.titleState)) return;
+    if (!current || !isWorkspaceTitleHeld(current.titleState)) return;
     await this.deps.apply({
       workspace: current,
       firstAgentContext,
@@ -202,7 +199,7 @@ export class WorkspaceTitleGate {
 
   private async setState(workspaceId: string, titleState: WorkspaceTitleState): Promise<void> {
     await this.deps.workspaceRegistry.update(workspaceId, (current) =>
-      isTitleHeld(current.titleState)
+      isWorkspaceTitleHeld(current.titleState)
         ? { ...current, titleState, updatedAt: new Date().toISOString() }
         : current,
     );

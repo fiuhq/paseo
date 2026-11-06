@@ -1,13 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { WorkspaceTitleState } from "@getpaseo/protocol/messages";
+import { isWorkspaceTitleHeld, type WorkspaceTitleState } from "@getpaseo/protocol/messages";
 import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
 import { resolveWorkspaceHeader } from "@/screens/workspace/workspace-header-source";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
-import {
-  describeWorkspaceTitleState,
-  isWorkspaceTitleHeld,
-  workspaceHeldTitleLabel,
-} from "./workspace-title-state";
+import { describeWorkspaceTitleState, workspaceHeldTitleLabel } from "./workspace-title-state";
 
 const state = (overrides: Partial<WorkspaceTitleState>): WorkspaceTitleState => ({
   status: "naming",

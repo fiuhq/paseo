@@ -4201,6 +4201,11 @@ export const WorkspaceTitleStateSchema = z.object({
 });
 export type WorkspaceTitleState = z.infer<typeof WorkspaceTitleStateSchema>;
 
+/** True while a workspace has no title because a plugin's judge has not passed one yet. */
+export function isWorkspaceTitleHeld(state: WorkspaceTitleState | null | undefined): boolean {
+  return state != null && state.status !== "unchecked";
+}
+
 export const WorkspaceDescriptorPayloadSchema = z
   .object({
     // Informational creation ancestry; independent of placement and lifecycle.
@@ -4233,7 +4238,7 @@ export const WorkspaceDescriptorPayloadSchema = z
     // its input and offer a "reset to branch name" action. Null means the name
     // is derived from the branch/directory.
     title: z.string().nullable().optional(),
-    // COMPAT(workspaceTitleState): added in v0.15.0, remove optional after 2027-05-06.
+    // COMPAT(workspaceTitleState): added in v0.15.3, remove optional after 2027-05-06.
     titleState: WorkspaceTitleStateSchema.nullable().optional(),
     // COMPAT(workspacePinning): added in v0.1.107, remove optional after 2027-01-12.
     pinnedAt: z.string().nullable().optional(),

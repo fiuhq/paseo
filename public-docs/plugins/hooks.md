@@ -139,13 +139,13 @@ server.addHook("workspace.create.after", async ({ workspace }) => {
 
 ## workspace.title.before
 
-Judges a generated workspace title before anyone sees it. Registering this hook changes how new workspaces are named: Paseo holds the title back, shows `Naming…`, and offers each candidate here. With no handler, titles go on as they always did.
+Judges a generated workspace title before anyone sees it. Registering this hook changes how new workspaces are named: Paseo holds the title back, shows `Naming…`, and offers each candidate here. With no handler, titles go on as they always did. Paseo does not hold a workspace created without a prompt, or one that checks out an untrusted change request.
 
 Fill in `verdict`; it is the only field you may change.
 
 | `decision`  | What Paseo does                                                                                |
 | ----------- | ---------------------------------------------------------------------------------------------- |
-| `accept`    | Applies the title and renames the placeholder branch.                                          |
+| `accept`    | Applies the title and renames the placeholder branch, unless the branch was already pushed.    |
 | `refuse`    | Drops the candidate and writes the next one from the agent's reply. Three tries at most.       |
 | `unchecked` | Applies the title and marks it as not checked. Use this when your judge cannot give a verdict. |
 
@@ -159,7 +159,7 @@ server.addHook("workspace.title.before", async ({ request }) => {
 });
 ```
 
-`source` is `prompt` for the first try and `reply` once the candidate could draw on the agent's reply. A manual rename always wins and ends the hold. A handler that throws, or leaves `verdict` null, applies the title as `unchecked` instead of stopping naming.
+`source` is `prompt` for the first try and `reply` once the candidate could draw on the agent's reply. `sourceText` is the prompt, or the reply followed by the prompt, clipped to 2,000 characters. A manual rename always wins and ends the hold. A handler that throws, or leaves `verdict` null, applies the title as `unchecked` instead of stopping naming.
 
 ## workspace.archive.after
 

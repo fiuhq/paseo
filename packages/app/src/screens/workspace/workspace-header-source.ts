@@ -1,5 +1,6 @@
 import type { WorkspaceDescriptor } from "@/stores/session-store";
-import { isWorkspaceTitleHeld, workspaceHeldTitleLabel } from "@/utils/workspace-title-state";
+import { isWorkspaceTitleHeld } from "@getpaseo/protocol/messages";
+import { workspaceHeldTitleLabel } from "@/utils/workspace-title-state";
 
 export type WorkspaceHeaderCheckoutState =
   | { kind: "pending" }

@@ -1,13 +1,13 @@
 import pino from "pino";
 import { describe, expect, test } from "vitest";
 import type { PluginWorkspaceTitleRequest } from "@getpaseo/plugin/server";
-import type { FirstAgentContext } from "@getpaseo/protocol/messages";
+import { isWorkspaceTitleHeld, type FirstAgentContext } from "@getpaseo/protocol/messages";
 import type { AgentManager, AgentManagerEvent } from "./agent/agent-manager.js";
 import {
   createPersistedWorkspaceRecord,
   type PersistedWorkspaceRecord,
 } from "./workspace-registry.js";
-import { WorkspaceTitleGate, HELD_TITLE_STATE, isTitleHeld } from "./workspace-title-gate.js";
+import { WorkspaceTitleGate, HELD_TITLE_STATE } from "./workspace-title-gate.js";
 
 type Verdict = PluginWorkspaceTitleRequest["verdict"];
 
@@ -41,7 +41,6 @@ function harness(options: {
 
   const gate = new WorkspaceTitleGate({
     lifecycle: {
-      handles: () => true,
       before: async (_name, request) => {
         judged.push(request);
         const next = verdicts.shift();
@@ -161,6 +160,20 @@ describe("WorkspaceTitleGate", () => {
     ]);
   });
 
+  test("the judge reads the reply first, however long the prompt, and never the retry instruction", async () => {
+    const h = harness({ verdicts: [refuse(0.2), refuse(0.3), accept(0.9)] });
+
+    await h.gate.start(h.record(), { prompt: "x".repeat(3000) });
+    await h.endTurn("turn_completed");
+
+    expect(h.contexts[2]?.prompt).toContain("A reviewer refused");
+    for (const request of [h.judged[1], h.judged[2]]) {
+      expect(request?.sourceText).toMatch(/^Preset child lookup crashes on one type\./);
+      expect(request?.sourceText).toHaveLength(2000);
+      expect(request?.sourceText).not.toContain("A reviewer refused");
+    }
+  });
+
   test("a refused reply is retried at once, because the agent may never take another turn", async () => {
     const h = harness({
       verdicts: [refuse(0.24), refuse(0.55), accept(0.9)],
@@ -233,7 +246,7 @@ describe("WorkspaceTitleGate", () => {
 
     expect(h.applied).toEqual([{ title: "Guess", branch: "guess", unchecked: true }]);
     expect(h.record().titleState).toMatchObject({ status: "unchecked", judge: "Jev" });
-    expect(isTitleHeld(h.record().titleState)).toBe(false);
+    expect(isWorkspaceTitleHeld(h.record().titleState)).toBe(false);
   });
 
   test("a hook that throws cannot stop naming: the title goes on, marked", async () => {
@@ -262,7 +275,6 @@ describe("WorkspaceTitleGate", () => {
     let renamed = false;
     const late = new WorkspaceTitleGate({
       lifecycle: {
-        handles: () => true,
         before: async (_name, request) => {
           h.rename("My own name");
           renamed = true;

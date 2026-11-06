@@ -37,7 +37,7 @@ interface WorkspaceAutoNameOptions {
   generateWorkspaceName?: WorkspaceNameGenerator;
   /** Lets a plugin hold titles until it passes one. Omitted, naming works as it always did. */
   titleGate?: {
-    lifecycle: Pick<PluginLifecycle, "before" | "handles">;
+    lifecycle: Pick<PluginLifecycle, "before">;
     workspaceRegistry: Pick<WorkspaceRegistry, "get">;
   };
 }
@@ -97,11 +97,6 @@ export class WorkspaceAutoName {
           logger: options.logger,
         })
       : null;
-  }
-
-  /** Whether a workspace created now should hold its title for a plugin's judge. */
-  holdsTitles(): boolean {
-    return this.titleGate?.holds() ?? false;
   }
 
   private applyJudgedTitle(input: ApplyJudgedTitleInput): Promise<void> {

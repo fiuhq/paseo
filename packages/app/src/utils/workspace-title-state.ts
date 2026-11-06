@@ -1,11 +1,6 @@
 import { i18n } from "@/i18n/i18next";
 import type { WorkspaceTitleState } from "@getpaseo/protocol/messages";
 
-/** True while a plugin's judge has not passed a title, so the workspace shows no name yet. */
-export function isWorkspaceTitleHeld(state: WorkspaceTitleState | null | undefined): boolean {
-  return state != null && state.status !== "unchecked";
-}
-
 export function workspaceHeldTitleLabel(): string {
   return i18n.t("workspace.titleState.naming");
 }

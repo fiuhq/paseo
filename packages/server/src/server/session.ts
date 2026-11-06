@@ -7123,8 +7123,7 @@ export class Session {
       explicitTitle ?? promptTitle,
       request.source.projectId,
       {
-        titleFromPrompt:
-          !explicitTitle && Boolean(request.firstAgentContext) && Boolean(request.agent),
+        promptTitleContext: explicitTitle || !request.agent ? undefined : request.firstAgentContext,
         expectsInitialAgent: Boolean(request.firstAgentContext),
         workspaceId,
         ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
