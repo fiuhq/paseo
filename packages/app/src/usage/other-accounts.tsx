@@ -101,7 +101,7 @@ export function OtherAccounts({
   const { t } = useTranslation();
   // Only beside an account of ZeroSub's: the daemon's reports have no other accounts to list.
   const fromZeroSub = agentReports.some((entry) => entry.presentation);
-  const reports = useUsageHostReports(fromZeroSub ? serverId : null);
+  const reports = useUsageHostReports({ serverId: fromZeroSub ? serverId : null });
   const { displayAs } = useUsageDisplay(reports).display;
   if (!fromZeroSub) return null;
   const others = otherAccounts(reports, agentReports);
