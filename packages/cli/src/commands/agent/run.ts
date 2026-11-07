@@ -538,7 +538,7 @@ export async function resolveExistingRunWorkspace(
 // Workspace policy for `paseo run`. Precedence:
 //   1. --workspace <id>            -> run in that existing workspace
 //   2. caller agent                -> daemon resolves the caller's workspace
-//   3. $PASEO_WORKSPACE_ID         -> exported by workspace terminals
+//   3. $PASEO_WORKSPACE_ID         -> exported by workspace terminals and agents
 //   4. --new-workspace <kind>      -> mint a new workspace explicitly
 //   5. bare run                    -> mint a new local-backed workspace for cwd
 async function resolveRunWorkspace(
