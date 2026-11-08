@@ -1,0 +1,11 @@
+{
+  "name": "@fiuhq/better-sidebar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paseo plugin: a sidebar view that nests each workspace's agents under it",
+  "scripts": {
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "verify": "tsgo -p tsconfig.json --noEmit && bun test"
+  }
+}
