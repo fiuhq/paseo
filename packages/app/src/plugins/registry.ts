@@ -128,6 +128,7 @@ export class PluginRegistry {
           cleanup: () => undefined,
           surfaces: [],
           settingsScreens: [],
+          sidebarViews: [],
           sidebarItems: { header: [], footer: [] },
           legacySidebarItems: [],
           filePanels: [],
