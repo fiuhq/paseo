@@ -12,8 +12,8 @@ one event, one judgment, one message.
 ## Install
 
 ```sh
-paseo plugin add fiuhq/paseo:fiu-plugins/jev-auto-compact            # tracks the default branch
-paseo plugin add fiuhq/paseo:fiu-plugins/jev-auto-compact --ref main
+paseo plugin add git:fiuhq/paseo:fiu-plugins/jev-auto-compact            # tracks the default branch
+paseo plugin add git:fiuhq/paseo:fiu-plugins/jev-auto-compact --ref main
 paseo plugin update jev-auto-compact                                           # pull a newer commit
 ```
 
