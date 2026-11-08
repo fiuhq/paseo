@@ -119,11 +119,13 @@ On wide layouts **Settings → General → Explorer → Explorer sidebar opens**
 platform. **Over the chat** (`flyout`, the default, `explorer-sidebar/flyout.tsx`) slides Explorer
 in from the right edge over the workspace without taking its width, the way Salesforce Inspector's
 panel opens over the page. Escape closes it through the overlay keyboard registry, so it takes the
-key before the agent-interrupt shortcut. It registers as non-blocking, so find (Cmd/Ctrl+F) still
-works while it is open. On web a click outside it closes it too (`explorer-sidebar/outside-click.ts`).
-Only a press and release in place counts: dnd-kit tab drags, the edge-tab and resize drags and text
-selections still end in a click on a common ancestor, and none of them closes it. Clicks on its edge tab and the header toggle, which toggle
-it themselves, and on its menus and dialogs, which render outside its node, do not close it. A
+key before the agent-interrupt shortcut, except when a field inside it has focus (a rename, a find
+bar, a review comment, a terminal), which keeps its own Escape. It registers as non-blocking, so find
+(Cmd/Ctrl+F) still works while it is open. On web a click outside it closes it too
+(`explorer-sidebar/outside-click.ts`). Only a press and release in place counts: dnd-kit tab drags,
+the edge-tab and resize drags and text selections still end in a click on a common ancestor, and
+none of them closes it. Clicks on its edge tab and the header toggle, which toggle it themselves, and
+on anything rendered in `#overlay-root` (its menus, popovers and dialogs) do not close it. A
 retained background workspace's flyout listens for neither. **Beside the chat** (`dock`) reserves
 width as below.
 

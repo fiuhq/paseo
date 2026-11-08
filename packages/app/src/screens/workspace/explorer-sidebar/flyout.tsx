@@ -5,7 +5,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { isWeb } from "@/constants/platform";
 import { useOverlayRegistration, type KeyboardInputEvent } from "@/keyboard";
 import { useOverlayLayer } from "@/lib/overlay-root";
-import { listenForOutsideClick } from "./outside-click";
+import { focusOwnsEscapeInside, listenForOutsideClick } from "./outside-click";
 
 /** How long the Explorer takes to slide in or out. */
 const SLIDE_MS = 180;
@@ -58,6 +58,8 @@ export function ExplorerFlyout({
     blocking: false,
     onKeyDown: (event: KeyboardInputEvent) => {
       if (event.key !== "Escape") return false;
+      const node: unknown = nodeRef.current;
+      if (isWeb && node instanceof HTMLElement && focusOwnsEscapeInside(node)) return false;
       event.preventDefault();
       onRequestClose();
       return true;

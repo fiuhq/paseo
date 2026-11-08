@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listenForOutsideClick } from "./outside-click";
+import { focusOwnsEscapeInside, listenForOutsideClick } from "./outside-click";
 
 function element(attributes: Record<string, string> = {}, parent: Element = document.body) {
   const node = document.createElement("div");
@@ -54,11 +54,12 @@ describe("listenForOutsideClick", () => {
 
   it("stays open for a click inside it, on its edge tab or header toggle, or in a menu it opened", () => {
     const { flyout, close } = setup();
+    const overlayRoot = element({ id: "overlay-root" });
     const targets = [
       element({}, flyout),
       element({ "data-testid": "workspace-explorer-edge-handle" }),
       element({ "data-testid": "workspace-explorer-toggle" }),
-      element({ role: "menu" }),
+      element({ role: "menuitem" }, overlayRoot),
     ];
     for (const target of targets) press(target, target, { x: 10, y: 10 });
     expect(close).not.toHaveBeenCalled();
@@ -84,5 +85,32 @@ describe("listenForOutsideClick", () => {
     const chat = element();
     press(chat, chat, { x: 10, y: 10 });
     expect(close).not.toHaveBeenCalled();
+  });
+});
+
+describe("focusOwnsEscapeInside", () => {
+  function focusable(tag: string, parent: Element, attributes: Record<string, string> = {}) {
+    const node = document.createElement(tag);
+    for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+    parent.appendChild(node);
+    return node as HTMLElement;
+  }
+
+  it("leaves Escape to a field focused inside the flyout and takes it everywhere else", () => {
+    const flyout = document.createElement("div");
+    const chat = document.createElement("div");
+    document.body.append(flyout, chat);
+    const cases: [HTMLElement, boolean][] = [
+      [focusable("input", flyout), true],
+      [focusable("textarea", focusable("div", flyout, { class: "xterm" })), true],
+      [focusable("div", flyout, { contenteditable: "true", tabindex: "0" }), true],
+      [focusable("button", flyout), false],
+      [focusable("textarea", chat, { "data-testid": "message-input" }), false],
+    ];
+    for (const [node, owns] of cases) {
+      node.focus();
+      expect(document.activeElement).toBe(node);
+      expect(focusOwnsEscapeInside(flyout)).toBe(owns);
+    }
   });
 });

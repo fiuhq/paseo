@@ -1,9 +1,18 @@
 /**
  * What a click may land on without closing the flyout: its edge tab and the header toggle, which toggle it themselves,
- * and the menus and dialogs it opens, which render outside its node.
+ * and the menus, popovers and dialogs it opens, which render outside its node (the app portals them into
+ * `#overlay-root`).
  */
 const KEEPS_OPEN =
-  '[data-testid="workspace-explorer-edge-handle"], [data-testid="workspace-explorer-toggle"], [role="menu"], [role="dialog"], [role="listbox"], [role="tooltip"]';
+  '#overlay-root, [data-testid="workspace-explorer-edge-handle"], [data-testid="workspace-explorer-toggle"], [role="menu"], [role="dialog"], [role="listbox"], [role="tooltip"]';
+
+const EDITABLE = 'input, textarea, select, [contenteditable=""], [contenteditable="true"], .xterm';
+
+/** Whether the focused element is a field inside the flyout (a rename, a find bar, a comment, a terminal) that owns Escape. */
+export function focusOwnsEscapeInside(flyout: Element): boolean {
+  const focused = document.activeElement;
+  return focused !== null && flyout.contains(focused) && focused.closest(EDITABLE) !== null;
+}
 
 /** How far the pointer may move between press and release and still count as a click rather than a drag. */
 const CLICK_SLOP_PX = 4;
