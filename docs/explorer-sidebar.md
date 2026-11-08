@@ -109,7 +109,12 @@ between compatible panes, but the dock cannot be split or maximized. Selecting a
 does not change workspace focus. Web dragging shares the workspace drag scope; compact layouts
 accept only reordering inside the source pane.
 
-Cmd+E shows or hides Explorer without changing its selected view. All layouts use the same
+Cmd+E shows or hides Explorer without changing its selected view. On wide layouts a small edge tab on
+the workspace column's right edge does the same (`explorer-sidebar/edge-handle.tsx`): it sits on the
+window edge while Explorer is hidden and on Explorer's border while it shows. Dragging it vertically
+moves it, and the position is stored per device as a share of the column height
+(`stores/explorer-edge-handle-store.ts`). It is not rendered in focus mode or on compact layouts,
+which have the swipeable overlay. All layouts use the same
 workspace tabs, launcher, and panel host. Below the `md` breakpoint (600 points in a touch
 browser, 720 with a mouse or on native) the shell is the swipeable Explorer overlay; at `md`
 and above it reserves width beside the workspace. Native docking keeps its touch resize handle. Full workspace splits remain a separate web-only capability.
