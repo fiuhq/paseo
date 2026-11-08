@@ -278,7 +278,11 @@ async function openExplorerAgentDraft(page: Parameters<typeof ensureExplorerSide
 }
 
 async function revealPhoneExplorer(page: Parameters<typeof ensureExplorerSidebar>[0]) {
-  await page.getByRole("button", { name: "Open Explorer sidebar", exact: true }).click();
+  // The edge tab shares this label; the header toggle is the one under test.
+  await page
+    .getByTestId("workspace-explorer-toggle")
+    .and(page.getByRole("button", { name: "Open Explorer sidebar", exact: true }))
+    .click();
   await expect(explorerSidebar(page)).toBeVisible();
   await expect(
     explorerSidebar(page).getByRole("button", { name: "Close Explorer sidebar", exact: true }),
