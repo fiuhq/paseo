@@ -67,7 +67,10 @@ function AgentRow({ reference, depth, view }: { reference: AgentRef; depth: numb
     () => ({
       ...rowStyle,
       paddingLeft: 12 + INDENT * depth,
-      backgroundColor: active ? view.theme.colors.surface2 : undefined,
+      // The plugin theme has no selected-row colour that differs from the sidebar in every theme,
+      // so the open row is marked by an accent bar on its leading edge.
+      borderLeftWidth: 2,
+      borderLeftColor: active ? view.theme.colors.accent : "transparent",
     }),
     [active, depth, view.theme],
   );
@@ -177,15 +180,18 @@ function WorkspaceNode({
     () => ({
       ...rowStyle,
       paddingLeft: 4,
-      backgroundColor: active ? view.theme.colors.surface2 : undefined,
+      // The plugin theme has no selected-row colour that differs from the sidebar in every theme,
+      // so the open row is marked by an accent bar on its leading edge.
+      borderLeftWidth: 2,
+      borderLeftColor: active ? view.theme.colors.accent : "transparent",
     }),
     [active, view.theme],
   );
   const chevron = useMemo(
     () => ({
-      color: view.theme.colors.foregroundMuted,
-      fontSize: 10,
-      width: 14,
+      color: view.theme.colors.foreground,
+      fontSize: 14,
+      width: 16,
       textAlign: "center" as const,
     }),
     [view.theme],
