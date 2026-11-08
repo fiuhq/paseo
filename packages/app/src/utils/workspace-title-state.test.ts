@@ -61,6 +61,28 @@ describe("workspace title state", () => {
     expect(workspaceHeldTitleLabel()).toBe("Naming…");
   });
 
+  test("a workspace the gate is still naming reads Naming, one it gave up on reads its own name", () => {
+    // A prompt with no task ("ayo") had all three candidates refused: the gate stopped, so "Naming…"
+    // promised a title that never comes.
+    const label = (titleState: WorkspaceTitleState) => {
+      const workspace = { name: "gifted-pug", currentBranch: null, titleState };
+      return {
+        sidebar: resolveSidebarWorkspacePrimaryLabel({ workspace, workspaceTitleSource: "title" }),
+        header: resolveWorkspaceHeader({ workspace: workspace as unknown as WorkspaceDescriptor })
+          .title,
+      };
+    };
+    const naming = { sidebar: "Naming…", header: "Naming…" };
+    const ownName = { sidebar: "gifted-pug", header: "gifted-pug" };
+
+    expect(label(state({ status: "naming" }))).toEqual(naming);
+    expect(label(state({ status: "refused", attempts: 1, refusedTitle: "Say hi" }))).toEqual(
+      naming,
+    );
+    expect(label(state({ status: "exhausted", attempts: 3 }))).toEqual(ownName);
+    expect(label(state({ status: "no-reply" }))).toEqual(ownName);
+  });
+
   test("someone who titles rows by branch still sees the branch", () => {
     expect(
       resolveSidebarWorkspacePrimaryLabel({
