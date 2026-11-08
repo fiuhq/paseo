@@ -108,12 +108,30 @@ export interface PluginSidebarViewProps extends Pick<PluginHostProps, "theme" | 
   dismiss(): void;
 }
 
-export interface PluginSidebarViewContribution<Text extends PluginText = string> {
+/** Drawn beneath a workspace row of Paseo's own sidebar while the user has that row expanded. */
+export interface PluginSidebarWorkspaceChildrenProps extends PluginSidebarViewProps {
+  workspace: WorkspaceRef;
+}
+
+interface PluginSidebarViewBase<Text extends PluginText = string> {
   id: string;
   title: Text;
   description?: Text;
-  Component: ComponentType<PluginSidebarViewProps>;
 }
+
+/**
+ * A view either replaces the sidebar's content (`Component`) or keeps Paseo's own sidebar and adds
+ * an expandable section under each workspace row (`WorkspaceChildren`); the app draws the chevron.
+ */
+export type PluginSidebarViewContribution<Text extends PluginText = string> =
+  PluginSidebarViewBase<Text> &
+    (
+      | { Component: ComponentType<PluginSidebarViewProps>; WorkspaceChildren?: never }
+      | {
+          WorkspaceChildren: ComponentType<PluginSidebarWorkspaceChildrenProps>;
+          Component?: never;
+        }
+    );
 
 /**
  * A Lucide icon name, inline SVG markup, or a component. Components receive the surface's size

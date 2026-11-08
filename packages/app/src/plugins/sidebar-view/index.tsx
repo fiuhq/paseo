@@ -25,6 +25,7 @@ import { SurfaceErrorBoundary } from "../surface-error-boundary";
 import { toPluginTheme } from "../theme";
 import { sidebarViews, type SidebarViewEntry } from "./catalog";
 import { useSidebarViewSelection } from "./selection";
+import { SidebarWorkspaceChildrenProvider } from "./workspace-children";
 
 const source = createPluginClientStateSource();
 const themeMapping = (theme: Theme) => ({ theme: toPluginTheme(theme) });
@@ -50,17 +51,27 @@ export function SidebarViewSlot({ children, dismiss }: { children: ReactNode; di
     state.status === "ready"
       ? sidebarViews(installed).find((view) => view.id === state.selection)
       : undefined;
-  const view = entry ? (
-    <View style={styles.content} testID="plugin-sidebar-view">
-      <SurfaceErrorBoundary
-        installation={entry.plugin}
-        Surface={entry.view.Component}
-        renderError={renderError}
-      >
-        <ThemedSidebarView entry={entry} dismiss={dismiss} uniProps={themeMapping} />
-      </SurfaceErrorBoundary>
-    </View>
-  ) : null;
+  let view: ReactNode = null;
+  if (entry?.view.WorkspaceChildren) {
+    // A view with WorkspaceChildren keeps Paseo's own sidebar and only adds under its rows.
+    view = (
+      <ThemedWorkspaceChildrenHost entry={entry} dismiss={dismiss} uniProps={themeMapping}>
+        {children}
+      </ThemedWorkspaceChildrenHost>
+    );
+  } else if (entry) {
+    view = (
+      <View style={styles.content} testID="plugin-sidebar-view">
+        <SurfaceErrorBoundary
+          installation={entry.plugin}
+          Surface={entry.view.Component}
+          renderError={renderError}
+        >
+          <ThemedSidebarView entry={entry} dismiss={dismiss} uniProps={themeMapping} />
+        </SurfaceErrorBoundary>
+      </View>
+    );
+  }
   return (
     <SidebarViewFrame state={state} fallback={children} reload={reload}>
       {view}
@@ -68,15 +79,8 @@ export function SidebarViewSlot({ children, dismiss }: { children: ReactNode; di
   );
 }
 
-function SidebarView({
-  entry,
-  dismiss,
-  theme,
-}: {
-  entry: SidebarViewEntry;
-  dismiss(): void;
-  theme: PluginTheme;
-}) {
+/** The props every sidebar view receives, and the environment its plugin hooks read. */
+function useSidebarViewProps(entry: SidebarViewEntry, dismiss: () => void, theme: PluginTheme) {
   const { t } = useTranslation();
   const toast = useToast();
   const compact = useIsCompactFormFactor();
@@ -149,20 +153,55 @@ function SidebarView({
     () => ({ workspace: activeWorkspace, agent: activeAgent }),
     [activeWorkspace, activeAgent],
   );
+  const props = useMemo<PluginSidebarViewProps>(
+    () => ({ theme, layout, active, navigation, dismiss }),
+    [theme, layout, active, navigation, dismiss],
+  );
+  return { props, environment };
+}
+
+function SidebarView({
+  entry,
+  dismiss,
+  theme,
+}: {
+  entry: SidebarViewEntry;
+  dismiss(): void;
+  theme: PluginTheme;
+}) {
+  const { props, environment } = useSidebarViewProps(entry, dismiss, theme);
   const Component = entry.view.Component;
+  if (!Component) return null;
   return (
     <PluginEnvironmentProvider environment={environment}>
-      <Component
-        theme={theme}
-        layout={layout}
-        active={active}
-        navigation={navigation}
-        dismiss={dismiss}
-      />
+      <Component {...props} />
     </PluginEnvironmentProvider>
   );
 }
 const ThemedSidebarView = withUnistyles(SidebarView);
+
+function WorkspaceChildrenHost({
+  entry,
+  dismiss,
+  theme,
+  children,
+}: {
+  entry: SidebarViewEntry;
+  dismiss(): void;
+  theme: PluginTheme;
+  children: ReactNode;
+}) {
+  const { props, environment } = useSidebarViewProps(entry, dismiss, theme);
+  const Component = entry.view.WorkspaceChildren;
+  const value = useMemo(
+    () => (Component ? { installation: entry.plugin, Component, props, environment } : null),
+    [Component, entry.plugin, props, environment],
+  );
+  return (
+    <SidebarWorkspaceChildrenProvider value={value}>{children}</SidebarWorkspaceChildrenProvider>
+  );
+}
+const ThemedWorkspaceChildrenHost = withUnistyles(WorkspaceChildrenHost);
 
 const styles = StyleSheet.create((theme) => ({
   content: { flex: 1 },

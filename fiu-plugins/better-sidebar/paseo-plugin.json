@@ -1,7 +1,9 @@
 {
   "id": "better-sidebar",
-  "name": "Better sidebar",
-  "description": "A sidebar view that nests each workspace's agents under it: projects, then workspaces you can expand to see every agent and sub-agent inside, each with its status",
-  "requirements": { "paseo": ">=0.15.3" },
+  "name": "fiu.Better Sidebar",
+  "description": "Paseo's own sidebar, with each workspace expandable to list the agents and sub-agents inside it and their status",
+  "requirements": {
+    "paseo": ">=0.15.3"
+  },
   "checkout": "directory"
 }

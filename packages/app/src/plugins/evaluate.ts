@@ -276,7 +276,13 @@ export function runPluginClientBundle(
       const normalizedId = requireId(contribution.id, "sidebar view id");
       if (sidebarViewIds.has(normalizedId))
         throw new Error(`Duplicate sidebar view: ${normalizedId}`);
-      if (!isComponentType(contribution.Component))
+      const replaces = contribution.Component !== undefined;
+      const extendsDefault = contribution.WorkspaceChildren !== undefined;
+      if (replaces === extendsDefault)
+        throw new Error(
+          `Sidebar view ${normalizedId} needs exactly one of Component or WorkspaceChildren`,
+        );
+      if (!isComponentType(replaces ? contribution.Component : contribution.WorkspaceChildren))
         throw new Error(`Sidebar view ${normalizedId} is not a component`);
       const title = requirePluginText(contribution.title);
       sidebarViewIds.add(normalizedId);

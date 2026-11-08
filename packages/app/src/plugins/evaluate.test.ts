@@ -77,6 +77,31 @@ describe("evaluatePluginClientBundle", () => {
       ),
     ).toThrow("Duplicate sidebar view");
   });
+  it("registers a view that keeps the default sidebar and adds under its workspace rows", () => {
+    const plugin = evaluatePluginClientBundle(
+      "sidebar",
+      bundle(`
+      plugin.addSidebarView({ id: "agents", title: "Agents", WorkspaceChildren() { return null; } });
+    `),
+    );
+    const [view] = plugin.sidebarViews;
+    expect(view?.id).toBe("agents");
+    expect(typeof view?.WorkspaceChildren).toBe("function");
+    expect(view?.Component).toBeUndefined();
+  });
+  it("rejects a sidebar view with both or neither of Component and WorkspaceChildren", () => {
+    for (const fields of [
+      "Component() { return null; }, WorkspaceChildren() { return null; }",
+      "description: 'nothing to draw'",
+    ]) {
+      expect(() =>
+        evaluatePluginClientBundle(
+          "sidebar",
+          bundle(`plugin.addSidebarView({ id: "v", title: "V", ${fields} });`),
+        ),
+      ).toThrow("needs exactly one of Component or WorkspaceChildren");
+    }
+  });
 
   it("accepts memoized settings screens", () => {
     const plugin = evaluatePluginClientBundle(
