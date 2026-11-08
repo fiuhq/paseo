@@ -3055,6 +3055,63 @@ test("a dead socket after a second suspension mid-cycle still gets two fresh win
   expect(attempts()).toBe(2);
 });
 
+test("foreground reconnects at once when the daemon has already closed a socket the app stopped feeding", async () => {
+  useHeartbeatClock();
+  const first = new FakeDaemon();
+  const second = new FakeDaemon();
+  const { client, attempts } = connectThroughReplacements("resume-after-daemon-lease", [
+    first,
+    second,
+  ]);
+  const connection = client.connect();
+  first.openConnection();
+  await connection;
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(first.pingTimestamps()).toEqual(["10s"]);
+  // The OS suspends the page right after that pong: nothing reaches the daemon for 70 s, so the
+  // daemon's 45 s application-socket lease has closed its end without a close frame reaching us.
+  first.daemonGoesSilent();
+  await suspendFor(70_000);
+  client.ensureConnected({ verify: true });
+  expect(first.closesFromClient()).toEqual([
+    { code: 1001, reason: "Daemon closed the idle socket while the app was suspended" },
+  ]);
+  expect(attempts()).toBe(2);
+  second.openConnection();
+  expect(client.getConnectionState()).toEqual({ status: "connected" });
+});
+
+test("foreground keeps the fresh-window check when the app stopped feeding the socket for less than the daemon lease", async () => {
+  useHeartbeatClock();
+  const daemon = new FakeDaemon();
+  const { client, attempts } = connectThroughReplacements("resume-inside-daemon-lease", [daemon]);
+  const connection = client.connect();
+  daemon.openConnection();
+  await connection;
+  await vi.advanceTimersByTimeAsync(10_000);
+  await suspendFor(30_000);
+  client.ensureConnected({ verify: true });
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(daemon.closesFromClient()).toEqual([]);
+  expect(client.getConnectionState()).toEqual({ status: "connected" });
+  expect(attempts()).toBe(1);
+});
+
+test("foreground keeps the fresh-window check on a socket that never sent a ping, which the daemon never leased", async () => {
+  useHeartbeatClock();
+  const daemon = new FakeDaemon();
+  const { client, attempts } = connectThroughReplacements("resume-before-first-ping", [daemon]);
+  const connection = client.connect();
+  daemon.openConnection();
+  await connection;
+  await suspendFor(120_000);
+  client.ensureConnected({ verify: true });
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(daemon.closesFromClient()).toEqual([]);
+  expect(daemon.pingTimestamps()).toEqual(["0s"]);
+  expect(attempts()).toBe(1);
+});
+
 test("repeated foreground events share one cycle and do not restart its windows", async () => {
   useHeartbeatClock();
   const first = new FakeDaemon();

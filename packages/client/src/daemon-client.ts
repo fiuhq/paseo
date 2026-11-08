@@ -1143,6 +1143,12 @@ const FOREGROUND_LIVENESS_TIMEOUT_MS = 5_000;
 // A foreground window whose timer fires this much later than scheduled (wall clock) spanned
 // another suspension or a blocked JS thread, so its silence is no evidence either way.
 const SUSPENDED_WINDOW_SLACK_MS = 2_000;
+// The daemon closes an application socket that has received nothing from the client for 45 s,
+// checking every 10 s (APPLICATION_SOCKET_LEASE_MS in packages/server). Once a ping has claimed
+// that lease, a socket the client has not written to for longer than this is closed on the
+// daemon's side even when no close frame reached a suspended client. The last 10 s are slack
+// for a frame that sat in the send buffer or on the network.
+const DAEMON_CLOSED_IDLE_SOCKET_AFTER_MS = 45_000 + 10_000 + 10_000;
 const LIVENESS_FAILURE_RECONNECT_THRESHOLD = 2;
 
 /** Default timeout for waiting for connection before sending queued messages */
@@ -1464,6 +1470,10 @@ export class DaemonClient {
   private runtimeMetrics: DaemonClientRuntimeMetrics | null = null;
   private pingProbe: PingProbe | null = null;
   private readonly pongWaiters = new Set<PongWaiter>();
+  // Wall clock of the last frame handed to the current transport, and whether a ping has claimed
+  // the daemon's lease on it. Wall clock keeps running while the OS has JS suspended.
+  private lastFrameSentAtWallMs: number | null = null;
+  private pingSentOnTransport = false;
   private livenessHeartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   private lastLivenessRttMs: number | null = null;
   private consecutiveLivenessFailures = 0;
@@ -1603,6 +1613,8 @@ export class DaemonClient {
       });
       this.traceConnectionAttempt += 1;
       this.transport = transport;
+      this.lastFrameSentAtWallMs = null;
+      this.pingSentOnTransport = false;
       this.chunkedTransport = new ChunkedTransport({
         get supportsDrain() {
           return transport.supportsDrain;
@@ -1610,7 +1622,10 @@ export class DaemonClient {
         get frameBytes() {
           return transport.maxFrameBytes ?? 32 * 1024 * 1024;
         },
-        send: (frame) => transport.send(frame),
+        send: (frame) => {
+          this.lastFrameSentAtWallMs = Date.now();
+          return transport.send(frame);
+        },
         onFailure: () => transport.close(4003, "Transport send failed"),
         deliver: (frame) => this.handleTransportMessage(frame),
         onActivity: () => this.recordTransportActivity(),
@@ -2647,6 +2662,7 @@ export class DaemonClient {
       this.rejectPongWaiters(sendError);
       if (probe.role !== "latency") this.recordLivenessFailure(sendError, probe.role);
     };
+    this.pingSentOnTransport = true;
     try {
       void this.sendJsonMessage("ping", "ping", { type: "ping" }).catch(rejectSend);
     } catch (error) {
@@ -2689,6 +2705,19 @@ export class DaemonClient {
    * probe they joined does not fail them.
    */
   private verifyConnectionOnForeground(): void {
+    if (this.daemonClosedIdleSocket()) {
+      // No window can prove this socket alive: the daemon has already closed its end.
+      const reason = "Daemon closed the idle socket while the app was suspended";
+      this.lastErrorValue = reason;
+      this.disposeTransport(1001, reason);
+      this.scheduleReconnect({
+        reason,
+        event: "LIVENESS_TIMEOUT",
+        reasonCode: "liveness_timeout",
+        immediate: true,
+      });
+      return;
+    }
     // A cycle already running keeps its deadline and its window count.
     if (this.pingProbe?.role === "foreground") return;
     if (this.pingProbe?.role === "heartbeat") {
@@ -2699,6 +2728,14 @@ export class DaemonClient {
     if (this.pingProbe) this.pingProbe.receivedActivity = false;
     this.consecutiveLivenessFailures = 0;
     this.tickLivenessHeartbeat("foreground");
+  }
+
+  private daemonClosedIdleSocket(): boolean {
+    return (
+      this.pingSentOnTransport &&
+      this.lastFrameSentAtWallMs !== null &&
+      Date.now() - this.lastFrameSentAtWallMs > DAEMON_CLOSED_IDLE_SOCKET_AFTER_MS
+    );
   }
 
   private tickLivenessHeartbeat(check: "heartbeat" | "foreground" = "heartbeat"): void {
