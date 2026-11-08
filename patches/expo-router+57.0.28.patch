@@ -1,0 +1,25 @@
+diff --git a/node_modules/expo-router/build/fork/createMemoryHistory.js b/node_modules/expo-router/build/fork/createMemoryHistory.js
+index c26fcb9..0ede713 100644
+--- a/node_modules/expo-router/build/fork/createMemoryHistory.js
++++ b/node_modules/expo-router/build/fork/createMemoryHistory.js
+@@ -138,7 +138,10 @@ function createMemoryHistory() {
+                     resolve();
+                 };
+                 pending.push({ ref: done, cb: done });
+-                // If navigation didn't happen within 100ms, assume that it won't happen
++                // If navigation didn't happen within 1000ms, assume that it won't happen
++                // PASEO PATCH: was 100ms. A popstate that lands after the timeout reaches `listen` as a
++                // user Back press and resets the app to the previous route; a busy tab easily takes
++                // >100ms. Upstream expo main uses 1000ms in its browser history adapter.
+                 // This may not be accurate, but hopefully it won't take so much time
+                 // In Chrome, navigation seems to happen instantly in next microtask
+                 // But on Firefox, it seems to take much longer, around 50ms from our testing
+@@ -149,7 +152,7 @@ function createMemoryHistory() {
+                         pending[index].cb();
+                         pending.splice(index, 1);
+                     }
+-                }, 100);
++                }, 1000);
+                 const onPopState = () => {
+                     const id = window.history.state?.id;
+                     const currentIndex = items.findIndex((item) => item.id === id);

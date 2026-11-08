@@ -86,6 +86,14 @@ const patchedPackages = [
     patchPrefix: "@opencode-ai+sdk+",
     cwd: "packages/server",
   },
+  // Web history: wait 1000ms, not 100ms, for the popstate of history.go(n). A later popstate is
+  // taken for a Back press and resets the app to the previous route (leaving New workspace for
+  // the new workspace bounced back to the old one). Remove when the installed expo-router derives
+  // browser history from the navigation reducer: https://github.com/expo/expo/pull/50105.
+  {
+    nodeModulesPath: "node_modules/expo-router",
+    patchPrefix: "expo-router+",
+  },
 ];
 
 const installedPackages = patchedPackages.filter(({ nodeModulesPath }) =>
