@@ -9,6 +9,7 @@ import {
   dragEdgeHandleOffset,
   EDGE_HANDLE_DRAG_SLOP,
   EDGE_HANDLE_HEIGHT,
+  EDGE_HANDLE_WIDTH,
   edgeHandleTop,
   isClickAfterDrag,
 } from "./edge-handle-geometry";
@@ -31,7 +32,8 @@ interface ExplorerEdgeHandleProps {
 
 /**
  * A tab that slides the Explorer sidebar open (‹) and closed (›), in the shape of Salesforce
- * Inspector's arrow. On wide layouts it sits on the workspace column's right edge: the window edge
+ * Inspector's arrow. It is drawn solid (raised surface, accent border, full-strength chevron) so it reads at a glance
+ * on a wide screen, where a faint 16-point sliver went unseen. On wide layouts it sits on the workspace column's right edge: the window edge
  * while the Explorer is hidden, the Explorer's border while it shows. On compact layouts, where the
  * Explorer covers the screen, the workspace column carries it on its right edge and the open
  * Explorer on its left. Drag it up or down to move it; the place is kept on this device and shared
@@ -131,7 +133,7 @@ function ExplorerEdgeHandleBase({
             style={tabStyle}
             highlightStyle={styles.tabActive}
           >
-            <Chevron size={14} color={iconColor} />
+            <Chevron size={16} strokeWidth={2.5} color={iconColor} />
           </PressHighlight>
         </View>
       ) : null}
@@ -140,7 +142,7 @@ function ExplorerEdgeHandleBase({
 }
 
 const ExplorerEdgeHandleTab = withUnistyles(ExplorerEdgeHandleBase, (theme) => ({
-  iconColor: theme.colors.foregroundMuted,
+  iconColor: theme.colors.foreground,
 }));
 
 /**
@@ -156,9 +158,9 @@ export function ExplorerEdgeHandle({
 }
 
 /**
- * A finger needs more than the 16×48-point tab, so the press area reaches 12 points out on each
- * side and 8 above and below (40×64). Toward the edge the extra reach falls off the screen, or onto
- * the docked Explorer on wide layouts. Inward it covers a 12×64-point band of the content beside
+ * A finger needs more than the 20×56-point tab, so the press area reaches 12 points out on each
+ * side and 8 above and below (44×72). Toward the edge the extra reach falls off the screen, or onto
+ * the docked Explorer on wide layouts. Inward it covers a 12×72-point band of the content beside
  * the tab, and above and below it takes touches from the content there.
  */
 const HIT_SLOP = { top: 8, bottom: 8, left: 12, right: 12 } as const;
@@ -168,7 +170,7 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     top: 0,
     bottom: 0,
-    width: 16,
+    width: EDGE_HANDLE_WIDTH,
     zIndex: 3,
   },
   hoverTarget: {
@@ -177,14 +179,13 @@ const styles = StyleSheet.create((theme) => ({
   pinRight: { right: 0 },
   pinLeft: { left: 0 },
   tab: {
-    width: 16,
+    width: EDGE_HANDLE_WIDTH,
     height: EDGE_HANDLE_HEIGHT,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceSidebar,
-    opacity: 0.6,
+    borderColor: theme.colors.borderAccent,
+    backgroundColor: theme.colors.surface2,
   },
   tabOnRight: {
     borderTopLeftRadius: 8,
@@ -197,7 +198,6 @@ const styles = StyleSheet.create((theme) => ({
     borderLeftWidth: 0,
   },
   tabActive: {
-    opacity: 1,
-    backgroundColor: theme.colors.surfaceSidebarHover,
+    backgroundColor: theme.colors.surface3,
   },
 }));
