@@ -14,7 +14,7 @@ import {
 } from "./edge-handle-geometry";
 
 /** The side of its parent the tab is pinned to. */
-export type ExplorerEdgeHandleEdge = "left" | "right";
+type ExplorerEdgeHandleEdge = "left" | "right";
 
 interface ExplorerEdgeHandleProps {
   isOpen: boolean;
@@ -43,7 +43,6 @@ interface ExplorerEdgeHandleProps {
 function ExplorerEdgeHandleBase({
   isOpen,
   edge = "right",
-  shownWhen,
   onToggle,
   iconColor,
 }: ExplorerEdgeHandleProps) {
@@ -98,6 +97,7 @@ function ExplorerEdgeHandleBase({
     : t("workspace.tabs.explorerSidebar.open");
   const Chevron = isOpen ? ChevronRight : ChevronLeft;
   const top = edgeHandleTop(dragOffset ?? offset, height);
+  const rail = useMemo(() => [styles.rail, left ? styles.pinLeft : styles.pinRight], [left]);
   const placement = useMemo(
     () => [styles.hoverTarget, left ? styles.pinLeft : styles.pinRight, { top }],
     [left, top],
@@ -112,13 +112,8 @@ function ExplorerEdgeHandleBase({
     [left, active],
   );
 
-  if (shownWhen && (shownWhen === "open") !== isOpen) return null;
   return (
-    <View
-      pointerEvents="box-none"
-      style={left ? styles.railLeft : styles.railRight}
-      onLayout={handleLayout}
-    >
+    <View pointerEvents="box-none" style={rail} onLayout={handleLayout}>
       {height > 0 ? (
         <View
           style={placement}
@@ -144,27 +139,30 @@ function ExplorerEdgeHandleBase({
   );
 }
 
-export const ExplorerEdgeHandle = withUnistyles(ExplorerEdgeHandleBase, (theme) => ({
+const ExplorerEdgeHandleTab = withUnistyles(ExplorerEdgeHandleBase, (theme) => ({
   iconColor: theme.colors.foregroundMuted,
 }));
+
+/**
+ * The tab, or nothing while the Explorer is not in `shownWhen`. Hiding unmounts the tab, so a hover
+ * that began before a click (the pointer never leaves a tab that disappears) does not come back with it.
+ */
+export function ExplorerEdgeHandle({
+  shownWhen,
+  ...props
+}: Omit<ExplorerEdgeHandleProps, "iconColor">) {
+  if (shownWhen && (shownWhen === "open") !== props.isOpen) return null;
+  return <ExplorerEdgeHandleTab {...props} />;
+}
 
 /** A finger needs more than the 16-point tab; the extra reach stays off the content beside it. */
 const HIT_SLOP = { top: 8, bottom: 8, left: 12, right: 12 } as const;
 
 const styles = StyleSheet.create((theme) => ({
-  railRight: {
+  rail: {
     position: "absolute",
     top: 0,
     bottom: 0,
-    right: 0,
-    width: 16,
-    zIndex: 3,
-  },
-  railLeft: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
     width: 16,
     zIndex: 3,
   },
