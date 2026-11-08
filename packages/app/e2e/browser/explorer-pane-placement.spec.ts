@@ -291,7 +291,11 @@ test("visible Explorer does not replace the last ordinary workspace pane", async
 }) => {
   const workspace = await withWorkspace({ prefix: "last-pane-visible-explorer-" });
   await gotoWorkspace(page, workspace.workspaceId);
-  await page.getByRole("button", { name: "Open Explorer sidebar", exact: true }).click();
+  // The edge tab shares this label; the header toggle is the one under test.
+  await page
+    .getByTestId("workspace-explorer-toggle")
+    .and(page.getByRole("button", { name: "Open Explorer sidebar", exact: true }))
+    .click();
   await openAgentDraftFromLauncher(page);
   await moveOnlyDraftIntoRightSplit(page);
   await closeOnlyDraft(page);

@@ -13,22 +13,40 @@ import {
   isClickAfterDrag,
 } from "./edge-handle-geometry";
 
+/** The side of its parent the tab is pinned to. */
+type ExplorerEdgeHandleEdge = "left" | "right";
+
 interface ExplorerEdgeHandleProps {
   isOpen: boolean;
+  /** Right: the workspace column's edge. Left: the open compact Explorer's edge. Defaults to right. */
+  edge?: ExplorerEdgeHandleEdge;
+  /**
+   * Render only while the Explorer is in this state. A compact layout carries one tab per state,
+   * each on the surface that is on screen then; a wide layout's one tab serves both.
+   */
+  shownWhen?: "open" | "closed";
   onToggle(): void;
   iconColor: string;
 }
 
 /**
- * A tab on the workspace column's right edge that slides the Explorer sidebar open (‹) and closed (›),
- * in the shape of Salesforce Inspector's arrow. It sits on the window edge while the Explorer is
- * hidden and on the Explorer's border while it shows. Drag it up or down to move it; the place is
- * kept on this device. Pressing it is the same toggle as Cmd+E and the header button.
+ * A tab that slides the Explorer sidebar open (‹) and closed (›), in the shape of Salesforce
+ * Inspector's arrow. On wide layouts it sits on the workspace column's right edge: the window edge
+ * while the Explorer is hidden, the Explorer's border while it shows. On compact layouts, where the
+ * Explorer covers the screen, the workspace column carries it on its right edge and the open
+ * Explorer on its left. Drag it up or down to move it; the place is kept on this device and shared
+ * by every edge. Pressing it is the same toggle as Cmd+E and the header button.
  *
  * Hover follows docs/hover.md: a plain View tracks the pointer, an inner PressHighlight takes the press,
  * and the parent claims the gesture only once a press moves vertically, so a tap still toggles.
  */
-function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHandleProps) {
+function ExplorerEdgeHandleBase({
+  isOpen,
+  edge = "right",
+  onToggle,
+  iconColor,
+}: ExplorerEdgeHandleProps) {
+  const left = edge === "left";
   const { t } = useTranslation();
   const offset = useExplorerEdgeHandleStore((state) => state.offset);
   const setOffset = useExplorerEdgeHandleStore((state) => state.setOffset);
@@ -79,12 +97,23 @@ function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHan
     : t("workspace.tabs.explorerSidebar.open");
   const Chevron = isOpen ? ChevronRight : ChevronLeft;
   const top = edgeHandleTop(dragOffset ?? offset, height);
-  const placement = useMemo(() => [styles.hoverTarget, { top }], [top]);
+  const rail = useMemo(() => [styles.rail, left ? styles.pinLeft : styles.pinRight], [left]);
+  const placement = useMemo(
+    () => [styles.hoverTarget, left ? styles.pinLeft : styles.pinRight, { top }],
+    [left, top],
+  );
   const active = hovered || dragOffset !== null;
-  const tabStyle = useMemo(() => [styles.tab, active ? styles.tabActive : null], [active]);
+  const tabStyle = useMemo(
+    () => [
+      styles.tab,
+      left ? styles.tabOnLeft : styles.tabOnRight,
+      active ? styles.tabActive : null,
+    ],
+    [left, active],
+  );
 
   return (
-    <View pointerEvents="box-none" style={styles.rail} onLayout={handleLayout}>
+    <View pointerEvents="box-none" style={rail} onLayout={handleLayout}>
       {height > 0 ? (
         <View
           style={placement}
@@ -98,6 +127,7 @@ function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHan
             accessibilityLabel={label}
             aria-expanded={isOpen}
             onPress={handlePress}
+            hitSlop={HIT_SLOP}
             style={tabStyle}
             highlightStyle={styles.tabActive}
           >
@@ -109,35 +139,57 @@ function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHan
   );
 }
 
-export const ExplorerEdgeHandle = withUnistyles(ExplorerEdgeHandleBase, (theme) => ({
+const ExplorerEdgeHandleTab = withUnistyles(ExplorerEdgeHandleBase, (theme) => ({
   iconColor: theme.colors.foregroundMuted,
 }));
+
+/**
+ * The tab, or nothing while the Explorer is not in `shownWhen`. Hiding unmounts the tab, so a hover
+ * that began before a click (the pointer never leaves a tab that disappears) does not come back with it.
+ */
+export function ExplorerEdgeHandle({
+  shownWhen,
+  ...props
+}: Omit<ExplorerEdgeHandleProps, "iconColor">) {
+  if (shownWhen && (shownWhen === "open") !== props.isOpen) return null;
+  return <ExplorerEdgeHandleTab {...props} />;
+}
+
+/** A finger needs more than the 16-point tab; the extra reach stays off the content beside it. */
+const HIT_SLOP = { top: 8, bottom: 8, left: 12, right: 12 } as const;
 
 const styles = StyleSheet.create((theme) => ({
   rail: {
     position: "absolute",
     top: 0,
     bottom: 0,
-    right: 0,
     width: 16,
     zIndex: 3,
   },
   hoverTarget: {
     position: "absolute",
-    right: 0,
   },
+  pinRight: { right: 0 },
+  pinLeft: { left: 0 },
   tab: {
     width: 16,
     height: EDGE_HANDLE_HEIGHT,
     alignItems: "center",
     justifyContent: "center",
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
     borderWidth: 1,
-    borderRightWidth: 0,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSidebar,
     opacity: 0.6,
+  },
+  tabOnRight: {
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    borderRightWidth: 0,
+  },
+  tabOnLeft: {
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    borderLeftWidth: 0,
   },
   tabActive: {
     opacity: 1,
