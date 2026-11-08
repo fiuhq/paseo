@@ -52,14 +52,7 @@ export function SidebarViewSlot({ children, dismiss }: { children: ReactNode; di
       ? sidebarViews(installed).find((view) => view.id === state.selection)
       : undefined;
   let view: ReactNode = null;
-  if (entry?.view.WorkspaceChildren) {
-    // A view with WorkspaceChildren keeps Paseo's own sidebar and only adds under its rows.
-    view = (
-      <ThemedWorkspaceChildrenHost entry={entry} dismiss={dismiss} uniProps={themeMapping}>
-        {children}
-      </ThemedWorkspaceChildrenHost>
-    );
-  } else if (entry) {
+  if (entry?.view.Component) {
     view = (
       <View style={styles.content} testID="plugin-sidebar-view">
         <SurfaceErrorBoundary
@@ -73,14 +66,26 @@ export function SidebarViewSlot({ children, dismiss }: { children: ReactNode; di
     );
   }
   return (
-    <SidebarViewFrame state={state} fallback={children} reload={reload}>
-      {view}
-    </SidebarViewFrame>
+    // The host wraps everything, so Paseo's own sidebar keeps its place in the tree when a view
+    // with WorkspaceChildren registers after the selection loads: only the host's context changes.
+    <ThemedWorkspaceChildrenHost
+      entry={entry?.view.WorkspaceChildren ? entry : null}
+      dismiss={dismiss}
+      uniProps={themeMapping}
+    >
+      <SidebarViewFrame state={state} fallback={children} reload={reload}>
+        {view}
+      </SidebarViewFrame>
+    </ThemedWorkspaceChildrenHost>
   );
 }
 
 /** The props every sidebar view receives, and the environment its plugin hooks read. */
-function useSidebarViewProps(entry: SidebarViewEntry, dismiss: () => void, theme: PluginTheme) {
+function useSidebarViewProps(
+  entry: SidebarViewEntry | null,
+  dismiss: () => void,
+  theme: PluginTheme,
+) {
   const { t } = useTranslation();
   const toast = useToast();
   const compact = useIsCompactFormFactor();
@@ -93,9 +98,10 @@ function useSidebarViewProps(entry: SidebarViewEntry, dismiss: () => void, theme
     : null;
   const activeAgent =
     selection && focusedAgentId ? entityRefs.agent(selection.serverId, focusedAgentId) : null;
+  const installation = entry?.plugin ?? null;
   const environment = useMemo(
-    () => ({ installation: entry.plugin, state: source, toast }),
-    [entry.plugin, toast],
+    () => (installation ? { installation, state: source, toast } : null),
+    [installation, toast],
   );
   const navigation = useMemo<PluginSidebarViewProps["navigation"]>(
     () => ({
@@ -171,7 +177,7 @@ function SidebarView({
 }) {
   const { props, environment } = useSidebarViewProps(entry, dismiss, theme);
   const Component = entry.view.Component;
-  if (!Component) return null;
+  if (!Component || !environment) return null;
   return (
     <PluginEnvironmentProvider environment={environment}>
       <Component {...props} />
@@ -186,16 +192,19 @@ function WorkspaceChildrenHost({
   theme,
   children,
 }: {
-  entry: SidebarViewEntry;
+  entry: SidebarViewEntry | null;
   dismiss(): void;
   theme: PluginTheme;
   children: ReactNode;
 }) {
   const { props, environment } = useSidebarViewProps(entry, dismiss, theme);
-  const Component = entry.view.WorkspaceChildren;
+  const Component = entry?.view.WorkspaceChildren;
   const value = useMemo(
-    () => (Component ? { installation: entry.plugin, Component, props, environment } : null),
-    [Component, entry.plugin, props, environment],
+    () =>
+      Component && environment
+        ? { installation: environment.installation, Component, props, environment }
+        : null,
+    [Component, props, environment],
   );
   return (
     <SidebarWorkspaceChildrenProvider value={value}>{children}</SidebarWorkspaceChildrenProvider>
