@@ -1,0 +1,19 @@
+{
+  "name": "@fiuhq/workspace-agent-scope",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paseo plugin: carry each beta's agent scope when a workspace is created or archived",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "verify": "tsc --noEmit && bun test"
+  },
+  "devDependencies": {
+    "@getpaseo/client": "0.10.2",
+    "@getpaseo/plugin": "0.10.2",
+    "@getpaseo/protocol": "0.10.2",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
+}
