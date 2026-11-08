@@ -33,10 +33,10 @@ still name a project or a customer, because that is what a good title does.
 ## Install
 
 ```sh
-paseo plugin add fiuhq/core:packages/paseo-plugins/jev-title-gate
+paseo plugin add fiuhq/paseo:fiu-plugins/jev-title-gate
 ```
 
-The fleet declares it in `packages/fiu-cli/sync/paseo-plugins.ts`. It needs a daemon that has
+The fleet declares it in fiu-cli's plugin list (`packages/fiu-cli/sync/paseo-plugins.ts` in fiuhq/core). It needs a daemon that has
 the `workspace.title.before` hook, and `fiu` at `~/.local/bin/fiu`.
 
 Logs: `paseo plugin logs jev-title-gate`.

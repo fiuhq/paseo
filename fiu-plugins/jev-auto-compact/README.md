@@ -12,8 +12,8 @@ one event, one judgment, one message.
 ## Install
 
 ```sh
-paseo plugin add fiuhq/core:packages/paseo-plugins/jev-auto-compact            # tracks the default branch
-paseo plugin add fiuhq/core:packages/paseo-plugins/jev-auto-compact --ref main
+paseo plugin add fiuhq/paseo:fiu-plugins/jev-auto-compact            # tracks the default branch
+paseo plugin add fiuhq/paseo:fiu-plugins/jev-auto-compact --ref main
 paseo plugin update jev-auto-compact                                           # pull a newer commit
 ```
 
@@ -24,7 +24,7 @@ daemon (`pluginsEnabled: true` in `~/.paseo/config.json`, or Settings → Plugin
 For a local edit loop, install the directory instead and reload after each change:
 
 ```sh
-paseo plugin install /absolute/path/to/packages/paseo-plugins/jev-auto-compact
+paseo plugin install /absolute/path/to/fiu-plugins/jev-auto-compact
 paseo plugin reload jev-auto-compact
 ```
 
@@ -131,8 +131,8 @@ bun install
 bun run verify          # tsc --noEmit && bun test
 ```
 
-This package is deliberately not a root workspace member — like `packages/fiu-cli`, it
-carries its own lockfile so the trading build never pays for its dependencies.
+This package is deliberately not a root workspace member: it carries its own lockfile, so the
+Paseo app's install and build never pay for its dependencies.
 
 The pure core (`shared/`) runs with no daemon, no judge and no agent; the adapters
 (`server/`) are covered against recorded real output and a real temporary directory.
