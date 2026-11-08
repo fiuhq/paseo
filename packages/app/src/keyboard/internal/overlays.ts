@@ -9,6 +9,8 @@ export interface OverlayEntry {
   getLayer(): number;
   getKeys(): readonly string[];
   onKeyDown(event: KeyboardInputEvent): boolean;
+  /** False for an entry that only claims its keys: it does not count as an open overlay for `hasBlocking`. */
+  blocking?: boolean;
 }
 export function createOverlayRegistry() {
   const entries: OverlayEntry[] = [];
@@ -26,6 +28,7 @@ export function createOverlayRegistry() {
     getTop,
     getKeys: () => getTop()?.getKeys() ?? [],
     hasActive: () => entries.length > 0,
+    hasBlocking: () => entries.some((entry) => entry.blocking !== false),
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {

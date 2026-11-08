@@ -79,9 +79,7 @@ export function showExplorerSidebar(input: ExplorerSidebarQuery): string | null 
  * A panel the user already opened in another pane stays there.
  */
 function revealExplorerDefaultTab(workspaceKey: string, paneId: string): void {
-  const serverId = workspaceKey.slice(0, workspaceKey.indexOf(":"));
-  if (!serverId) return;
-  const target = findExplorerDefaultPanel(pluginRegistry.getSnapshot(), serverId);
+  const target = findExplorerDefaultPanel(pluginRegistry.getSnapshot(), workspaceKey);
   if (!target) return;
   const store = useWorkspaceLayoutStore.getState();
   const current = store.layoutByWorkspace[workspaceKey];

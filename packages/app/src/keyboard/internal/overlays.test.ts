@@ -77,6 +77,33 @@ describe("overlay registration lifecycle", () => {
     first();
   });
 
+  it("offers keys to a non-blocking entry without counting it as an open overlay", () => {
+    const registry = createOverlayRegistry();
+    const calls: string[] = [];
+    const release = registry.register({
+      getLayer: () => 10,
+      getKeys: () => ["Escape"],
+      onKeyDown: (event) => {
+        calls.push(event.key);
+        return event.key === "Escape";
+      },
+      blocking: false,
+    });
+    expect(registry.hasActive()).toBe(true);
+    expect(registry.hasBlocking()).toBe(false);
+    expect(registry.dispatch(keyEvent("Escape"))).toBe(true);
+    expect(calls).toEqual(["Escape"]);
+    const releaseModal = registry.register({
+      getLayer: () => 20,
+      getKeys: () => ["Escape"],
+      onKeyDown: () => false,
+    });
+    expect(registry.hasBlocking()).toBe(true);
+    releaseModal();
+    release();
+    expect(registry.hasActive()).toBe(false);
+  });
+
   it("notifies subscribers when top key ownership changes", () => {
     const registry = createOverlayRegistry();
     const observed: string[][] = [];

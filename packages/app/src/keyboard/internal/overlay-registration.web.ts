@@ -10,6 +10,7 @@ interface WebOverlayEntry {
   getKeyHandler: () => WebOverlayKeyHandler;
   restoreFocus: HTMLElement | null;
   manageFocus: boolean;
+  blocking: boolean;
 }
 
 const focusEntries = new WeakMap<OverlayEntry, WebOverlayEntry>();
@@ -129,6 +130,7 @@ function addWebOverlay(entry: WebOverlayEntry): (options?: RemoveWebOverlayOptio
     getLayer: entry.getLayer,
     getKeys: entry.getKeys,
     onKeyDown: (event) => dispatchOverlayEntry(entry, event),
+    blocking: entry.blocking,
   };
   focusEntries.set(registration, entry);
   const remove = overlays.register(registration);
@@ -172,6 +174,7 @@ export function useOverlayRegistration({
   keys,
   onKeyDown,
   manageFocus = true,
+  blocking = true,
   restoreFocusRef: preferredRestoreFocusRef,
 }: OverlayRegistration) {
   const scopeRef = useRef<HTMLElement | null>(null);
@@ -225,10 +228,11 @@ export function useOverlayRegistration({
       getKeyHandler: () => keyHandlerRef.current,
       restoreFocus: capturedRestoreFocusRef.current,
       manageFocus,
+      blocking,
     };
     removeEntryRef.current = addWebOverlay(entry);
     registeredRef.current = true;
-  }, [manageFocus]);
+  }, [manageFocus, blocking]);
 
   const setScope = useCallback(
     (node: unknown) => {

@@ -5,7 +5,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { isWeb } from "@/constants/platform";
 import { useOverlayRegistration, type KeyboardInputEvent } from "@/keyboard";
 import { useOverlayLayer } from "@/lib/overlay-root";
-import { clickClosesFlyout } from "./outside-click";
+import { listenForOutsideClick } from "./outside-click";
 
 /** How long the Explorer takes to slide in or out. */
 const SLIDE_MS = 180;
@@ -55,6 +55,7 @@ export function ExplorerFlyout({
     active: listening,
     layer,
     manageFocus: false,
+    blocking: false,
     onKeyDown: (event: KeyboardInputEvent) => {
       if (event.key !== "Escape") return false;
       event.preventDefault();
@@ -67,16 +68,7 @@ export function ExplorerFlyout({
     if (!isWeb || !listening) return;
     const node: unknown = nodeRef.current;
     if (!(node instanceof HTMLElement)) return;
-    const flyout = node;
-    function onClick(event: MouseEvent) {
-      const target = event.target;
-      if (target instanceof Element && clickClosesFlyout(target, flyout)) onRequestClose();
-    }
-    // A click, as Salesforce Inspector's outsidePopupClick: a drag ends without one, so a tab dragged from the main
-    // strip into the open flyout keeps it open. Capture, so a click a pane handles and stops still closes it; the
-    // click itself goes through.
-    document.addEventListener("click", onClick, true);
-    return () => document.removeEventListener("click", onClick, true);
+    return listenForOutsideClick(node, onRequestClose);
   }, [listening, onRequestClose]);
 
   const slide = useAnimatedStyle(() => ({

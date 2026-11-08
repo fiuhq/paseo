@@ -12,6 +12,7 @@ export function useOverlayRegistration(input: OverlayRegistration) {
       getLayer: () => current.current.layer,
       getKeys: () => current.current.keys,
       onKeyDown: (event) => current.current.onKeyDown(event),
+      blocking: current.current.blocking,
     });
   }, [input.active]);
   return setScope;

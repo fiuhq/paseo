@@ -64,7 +64,7 @@ describe("findExplorerDefaultPanel", () => {
       ]),
       plugin("later", "srv-1", [{ id: "late", explorerDefault: true, locations: ["explorer"] }]),
     ];
-    expect(findExplorerDefaultPanel(plugins, "srv-1")).toEqual({
+    expect(findExplorerDefaultPanel(plugins, "srv-1:ws-main")).toEqual({
       kind: "plugin",
       pluginId: "fiu-cli",
       panelId: "mockups",
@@ -74,9 +74,27 @@ describe("findExplorerDefaultPanel", () => {
 
   it("finds none when no panel on the host asks", () => {
     expect(
-      findExplorerDefaultPanel([plugin("plain", "srv-1", [{ locations: ["explorer"] }])], "srv-1"),
+      findExplorerDefaultPanel(
+        [plugin("plain", "srv-1", [{ locations: ["explorer"] }])],
+        "srv-1:ws-main",
+      ),
     ).toBeNull();
-    expect(findExplorerDefaultPanel([], "srv-1")).toBeNull();
+    expect(findExplorerDefaultPanel([], "srv-1:ws-main")).toBeNull();
+  });
+
+  it("finds the workspace's host when a server id holds ':'", () => {
+    const plugins = [
+      plugin("short", "host", [{ id: "wrong", explorerDefault: true, locations: ["explorer"] }]),
+      plugin("fiu-cli", "host:6767", [
+        { id: "storyboard", explorerDefault: true, locations: ["explorer"] },
+      ]),
+    ];
+    expect(findExplorerDefaultPanel(plugins, "host:6767:ws-main")).toEqual({
+      kind: "plugin",
+      pluginId: "fiu-cli",
+      panelId: "storyboard",
+      context: "workspace",
+    });
   });
 });
 

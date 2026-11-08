@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { clickClosesFlyout } from "./outside-click";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { listenForOutsideClick } from "./outside-click";
 
 function element(attributes: Record<string, string> = {}, parent: Element = document.body) {
   const node = document.createElement("div");
@@ -10,24 +10,79 @@ function element(attributes: Record<string, string> = {}, parent: Element = docu
   return child;
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
+/** What the browser sends for a press at `down` released at `up`: the click lands on `clickTarget`. */
+function press(downTarget: Element, clickTarget: Element, down: Point, up: Point = down) {
+  downTarget.dispatchEvent(
+    new PointerEvent("pointerdown", { bubbles: true, clientX: down.x, clientY: down.y }),
+  );
+  downTarget.dispatchEvent(
+    new PointerEvent("pointerup", { bubbles: true, clientX: up.x, clientY: up.y }),
+  );
+  clickTarget.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, clientX: up.x, clientY: up.y }),
+  );
+}
+
+let detach: (() => void) | null = null;
+
 afterEach(() => {
+  detach?.();
+  detach = null;
   document.body.replaceChildren();
 });
 
-describe("clickClosesFlyout", () => {
-  it("closes only for a click on the page outside the flyout and what it owns", () => {
-    const flyout = document.createElement("div");
-    document.body.appendChild(flyout);
-    const insideFlyout = element({}, flyout);
-    const edgeTab = element({ "data-testid": "workspace-explorer-edge-handle" });
-    const headerToggle = element({ "data-testid": "workspace-explorer-toggle" });
-    const menu = element({ role: "menu" });
-    const chat = element({ "data-testid": "agent-chat" });
+function setup() {
+  const flyout = document.createElement("div");
+  document.body.appendChild(flyout);
+  const close = vi.fn();
+  detach = listenForOutsideClick(flyout, close);
+  return { flyout, close };
+}
 
-    expect(clickClosesFlyout(insideFlyout, flyout)).toBe(false);
-    expect(clickClosesFlyout(edgeTab, flyout)).toBe(false);
-    expect(clickClosesFlyout(headerToggle, flyout)).toBe(false);
-    expect(clickClosesFlyout(menu, flyout)).toBe(false);
-    expect(clickClosesFlyout(chat, flyout)).toBe(true);
+describe("listenForOutsideClick", () => {
+  it("closes on a click in place on the page outside the flyout", () => {
+    const { close } = setup();
+    const chat = element({ "data-testid": "agent-chat" });
+    press(chat, chat, { x: 10, y: 10 });
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays open for a click inside it, on its edge tab or header toggle, or in a menu it opened", () => {
+    const { flyout, close } = setup();
+    const targets = [
+      element({}, flyout),
+      element({ "data-testid": "workspace-explorer-edge-handle" }),
+      element({ "data-testid": "workspace-explorer-toggle" }),
+      element({ role: "menu" }),
+    ];
+    for (const target of targets) press(target, target, { x: 10, y: 10 });
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("stays open when a press inside it ends in a click on a common ancestor outside it", () => {
+    const { flyout, close } = setup();
+    press(element({}, flyout), document.body, { x: 10, y: 10 });
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("stays open when a press outside it is dragged past the click slop, as a tab dragged into it is", () => {
+    const { close } = setup();
+    const tab = element({ "data-testid": "workspace-tab" });
+    press(tab, document.body, { x: 10, y: 10 }, { x: 30, y: 10 });
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("listens for nothing once detached", () => {
+    const { close } = setup();
+    detach?.();
+    detach = null;
+    const chat = element();
+    press(chat, chat, { x: 10, y: 10 });
+    expect(close).not.toHaveBeenCalled();
   });
 });

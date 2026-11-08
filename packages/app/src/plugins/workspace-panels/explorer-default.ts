@@ -1,14 +1,16 @@
 import type { PluginWorkspaceTabTarget } from "@/workspace-tabs/model";
 import type { InstalledPlugin } from "../types";
+import { pluginServerIdForWorkspaceKey } from "./locations";
 
 /**
- * The Explorer's default tab on a host: the first installed workspace panel that declares `explorerDefault`, as the tab
+ * The Explorer's default tab on the workspace's host: the first installed workspace panel that declares `explorerDefault`, as the tab
  * target the Explorer opens. Null when no panel asks, so the Explorer keeps whatever tab it last showed.
  */
 export function findExplorerDefaultPanel(
   plugins: readonly InstalledPlugin[],
-  serverId: string,
+  workspaceKey: string,
 ): PluginWorkspaceTabTarget | null {
+  const serverId = pluginServerIdForWorkspaceKey(plugins, workspaceKey);
   for (const plugin of plugins) {
     if (plugin.serverId !== serverId) continue;
     const panel = plugin.workspacePanels.find((candidate) => candidate.explorerDefault === true);

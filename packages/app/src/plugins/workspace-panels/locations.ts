@@ -1,4 +1,4 @@
-import type { PluginWorkspacePanelContribution } from "../types";
+import type { InstalledPlugin, PluginWorkspacePanelContribution } from "../types";
 import type { PluginPanelLocation } from "@getpaseo/plugin/client";
 import type { PaneHost } from "@/panels/panel-manifest";
 import { panelSupportsHost } from "@/panels/panel-manifest";
@@ -56,18 +56,28 @@ export function panelTargetSupportsHost(
   return pluginPanelSupportsLocation(panel, location);
 }
 
+/** The host a workspace key belongs to, among these plugins' hosts: the longest `${serverId}:` prefix, since ids may hold ':'. */
+export function pluginServerIdForWorkspaceKey(
+  plugins: readonly InstalledPlugin[],
+  workspaceKey: string,
+): string {
+  return (
+    plugins
+      .map((plugin) => plugin.serverId)
+      .sort((left, right) => right.length - left.length)
+      .find((candidate) => workspaceKey.startsWith(`${candidate}:`)) ?? ""
+  );
+}
+
 export function panelTargetSupportsHostForWorkspaceKey(
   workspaceKey: string,
   target: WorkspaceTabTarget,
   host: PaneHost,
 ): boolean {
   if (target.kind !== "plugin") return panelSupportsHost(target.kind, host);
-  const serverId =
-    pluginRegistry
-      .getSnapshot()
-      .filter((plugin) => plugin.id === target.pluginId)
-      .map((plugin) => plugin.serverId)
-      .sort((left, right) => right.length - left.length)
-      .find((candidate) => workspaceKey.startsWith(`${candidate}:`)) ?? "";
+  const serverId = pluginServerIdForWorkspaceKey(
+    pluginRegistry.getSnapshot().filter((plugin) => plugin.id === target.pluginId),
+    workspaceKey,
+  );
   return panelTargetSupportsHost(serverId, target, host);
 }
