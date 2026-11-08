@@ -189,7 +189,7 @@ export class ManagedPluginSources {
         const commit = await resolveRequestedRef(sourceRoot, input.ref);
         if (target?.kind === "git" && commit !== target.commit)
           throw new Error("Git target changed since review");
-        await checkout(sourceRoot, commit);
+        await checkout(sourceRoot, commit, pluginPath);
         record = { kind: "git", remote };
       }
       const directory = path.resolve(sourceRoot, pluginPath);
@@ -502,11 +502,16 @@ async function clone(remote: string, checkoutRoot: string): Promise<void> {
           GIT_CONFIG_VALUE_0: cloneRemote,
         };
   try {
-    await runGitCommand(["clone", "--no-checkout", "--", cloneRemote, checkoutRoot], {
-      cwd: path.dirname(checkoutRoot),
-      envOverlay,
-      timeout: GIT_TIMEOUT_MS,
-    });
+    // Blobs arrive on checkout, so a plugin in a subdirectory of a large repository downloads only
+    // its own files. A server without filter support ignores the flag and sends the full pack.
+    await runGitCommand(
+      ["clone", "--no-checkout", "--filter=blob:none", "--", cloneRemote, checkoutRoot],
+      {
+        cwd: path.dirname(checkoutRoot),
+        envOverlay,
+        timeout: GIT_TIMEOUT_MS,
+      },
+    );
   } catch (error) {
     throw redactRemoteError(error, remote);
   }
@@ -532,7 +537,14 @@ function redactRemoteError(error: unknown, remote: string): Error {
   return new Error(message);
 }
 
-async function checkout(checkoutRoot: string, commit: string): Promise<void> {
+async function checkout(checkoutRoot: string, commit: string, pluginPath: string): Promise<void> {
+  if (pluginPath !== ".") {
+    await runGitCommand(["sparse-checkout", "set", "--cone", "--", pluginPath], {
+      cwd: checkoutRoot,
+      envOverlay: GIT_ENV,
+      timeout: GIT_TIMEOUT_MS,
+    });
+  }
   await runGitCommand(["checkout", "--detach", commit], {
     cwd: checkoutRoot,
     envOverlay: GIT_ENV,

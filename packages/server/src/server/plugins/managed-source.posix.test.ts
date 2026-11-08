@@ -56,6 +56,37 @@ async function withGitHubFixture(repository: string, run: () => Promise<void>): 
 }
 
 describe("managed Git plugin sources", () => {
+  it("downloads and checks out only the plugin directory of a larger repository", async () => {
+    const repository = await createRepository();
+    const nested = path.join(repository, "plugins", "review");
+    await mkdir(nested, { recursive: true });
+    for (const name of ["paseo-plugin.json", "index.server.ts"])
+      await rename(path.join(repository, name), path.join(nested, name));
+    await mkdir(path.join(repository, "app"));
+    await writeFile(path.join(repository, "app", "bundle.js"), "unrelated application code\n");
+    await commitAll(repository, "plugin beside an application");
+    await runGitCommand(["config", "uploadpack.allowFilter", "true"], { cwd: repository });
+    const unrelated = (
+      await runGitCommand(["rev-parse", "HEAD:app/bundle.js"], { cwd: repository })
+    ).stdout.trim();
+    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-sparse-"));
+    roots.push(home);
+    const sources = new ManagedPluginSources(home);
+    const candidate = await sources.prepareInstall({
+      source: pathToFileURL(repository).href,
+      pluginPath: "plugins/review",
+    });
+    const checkoutRoot = path.resolve(candidate.directory, "..", "..");
+    expect(
+      JSON.parse(await readFile(path.join(candidate.directory, "paseo-plugin.json"), "utf8")),
+    ).toEqual({ id: "managed-example" });
+    await expect(readFile(path.join(checkoutRoot, "app", "bundle.js"))).rejects.toThrow();
+    const { stdout } = await runGitCommand(["rev-list", "--objects", "--missing=print", "HEAD"], {
+      cwd: checkoutRoot,
+    });
+    expect(stdout.split("\n")).toContain(`?${unrelated}`);
+  });
+
   it("does not expose Git URL credentials when cloning fails", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-git-home-"));
     roots.push(home);
