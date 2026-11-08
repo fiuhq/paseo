@@ -3665,6 +3665,11 @@ function WorkspaceScreenContent({
           </StreamTopOverlayProvider>
         )}
       </FloatingHeaderLayout>
+      <ExplorerEdgeHandle
+        shownWhen="closed"
+        isOpen={isExplorerSidebarShowing}
+        onToggle={handleToggleExplorerSidebar}
+      />
       <SheetTabs onCloseTab={handleCloseTabById} />
     </View>
   ) : (
@@ -3762,6 +3767,14 @@ function WorkspaceScreenContent({
         isOpen={isExplorerSidebarShowing && !desktopFocusModeEnabled}
       >
         {dock}
+        {isMobile ? (
+          <ExplorerEdgeHandle
+            edge="left"
+            shownWhen="open"
+            isOpen={isExplorerSidebarShowing}
+            onToggle={handleToggleExplorerSidebar}
+          />
+        ) : null}
       </ExplorerFrame>
     );
   }, [
@@ -3794,6 +3807,7 @@ function WorkspaceScreenContent({
     renderExplorerSidebarHeaderAction,
     workspaceViewportWidth,
     desktopFocusModeEnabled,
+    handleToggleExplorerSidebar,
   ]);
 
   const { revealDirectory } = useFileExplorerActions({
