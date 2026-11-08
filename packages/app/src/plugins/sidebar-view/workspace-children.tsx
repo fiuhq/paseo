@@ -16,6 +16,7 @@ import { createValidatedPersistStorage } from "@/storage/validated-persist-stora
 import { isNative, isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { densityIconBox } from "@/styles/density";
+import { iconSizeFor } from "@/components/ui/control-geometry";
 import { entityRefs } from "../client-state/refs";
 import { PluginEnvironmentProvider } from "../popover";
 import { SurfaceErrorBoundary } from "../surface-error-boundary";
@@ -142,8 +143,9 @@ export function SidebarWorkspaceChildren({
   if (!view || !expanded) return null;
   const { Component } = view;
   return (
-    // On touch the row gives the chevron a column of its own, so the section moves right by that
-    // column; a plugin indents from the same place in either layout.
+    // On touch the row gives the chevron a column of its own and its leading slot grows to the
+    // touch icon size, so the section moves right by both; a plugin indents from the pointer
+    // layout's title offset in either layout.
     <View
       testID={`sidebar-workspace-children-${workspaceKey}`}
       style={isNative || compact ? styles.touchIndent : undefined}
@@ -157,12 +159,14 @@ export function SidebarWorkspaceChildren({
   );
 }
 
-const chevronColumn = densityIconBox("md");
+const leadingSlot = densityIconBox("md");
+const pointerLeadingSlot = iconSizeFor("md").pointer;
 const styles = StyleSheet.create((theme) => ({
   touchIndent: {
+    // The chevron column and its gap, plus how much wider the leading slot is than on pointer.
     paddingLeft: {
-      xs: chevronColumn.xs + theme.spacing[2],
-      md: chevronColumn.md + theme.spacing[2],
+      xs: 2 * leadingSlot.xs + theme.spacing[2] - pointerLeadingSlot,
+      md: 2 * leadingSlot.md + theme.spacing[2] - pointerLeadingSlot,
     },
   },
   chevron: { width: 20, height: 20, padding: 0 },
