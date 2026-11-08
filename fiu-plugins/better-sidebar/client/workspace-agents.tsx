@@ -11,8 +11,8 @@ import { agentTone, type Tone } from "../shared/tree";
 
 type Props = PluginSidebarWorkspaceChildrenProps;
 
-/** Lines an agent up under its workspace's title: chevron, status slot and their gaps. */
-const INDENT = 46;
+/** Lines an agent up under its workspace's title: the leading slot and its gap. */
+const INDENT = 18;
 const STEP = 14;
 
 function toneColor(tone: Tone, view: Props): string {

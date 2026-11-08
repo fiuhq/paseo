@@ -39,7 +39,10 @@ import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
 import {
   SidebarWorkspaceChevron,
   SidebarWorkspaceChildren,
+  useWorkspaceRowsExpandable,
 } from "@/plugins/sidebar-view/workspace-children";
+import { isNative } from "@/constants/platform";
+import { useIsCompactFormFactor } from "@/constants/layout";
 
 const needsInputColorMapping = (theme: Theme) => ({
   color: theme.colors.surface0,
@@ -141,6 +144,9 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   // The workspace carries label names; their colors live in its host's catalog, so the row is
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
+  const expandable = useWorkspaceRowsExpandable();
+  const compact = useIsCompactFormFactor();
+  const [chevronFocused, setChevronFocused] = useState(false);
   const workspaceBranchTextStyle = useMemo(
     () => [
       styles.workspaceBranchText,
@@ -151,28 +157,56 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     [isHovered, isCreating, titleHeld],
   );
 
+  const visual = leadingProjectName ? (
+    <ProjectStatusIndicator
+      iconDataUri={leadingProjectIconDataUri}
+      displayName={leadingProjectName}
+      projectViewKey={workspace.projectViewKey}
+      statusBucket={workspace.statusBucket}
+      backdrop={backdrop}
+      loading={isLoading}
+      testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
+    />
+  ) : (
+    <WorkspaceStatusIndicator
+      bucket={workspace.statusBucket}
+      workspaceKind={workspace.workspaceKind}
+      loading={isLoading}
+      reserveIdleSpace={reserveIdleStatusIndicatorSpace}
+    />
+  );
+  let leading: ReactNode = visual;
+  if (expandable && (isNative || compact)) {
+    // Touch has no hover, so the chevron keeps a column of its own and the status stays visible.
+    leading = (
+      <>
+        <View style={styles.workspaceStatusDot}>
+          <SidebarWorkspaceChevron workspaceKey={workspace.workspaceKey} />
+        </View>
+        {visual}
+      </>
+    );
+  } else if (expandable) {
+    // Like a project row, the chevron takes the leading visual's place while the row is hovered,
+    // so it needs no column. It stays mounted on top, only hidden, so keyboard focus reaches it.
+    const shown = isHovered || chevronFocused;
+    leading = (
+      <View style={styles.leadingSwap}>
+        <View style={shown ? styles.leadingHidden : undefined}>{visual}</View>
+        <View style={[styles.leadingOverlay, !shown && styles.leadingHidden]}>
+          <SidebarWorkspaceChevron
+            workspaceKey={workspace.workspaceKey}
+            onFocusChange={setChevronFocused}
+          />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.workspaceRowContent}>
       <View style={styles.workspaceRowMain}>
-        <SidebarWorkspaceChevron workspaceKey={workspace.workspaceKey} />
-        {leadingProjectName ? (
-          <ProjectStatusIndicator
-            iconDataUri={leadingProjectIconDataUri}
-            displayName={leadingProjectName}
-            projectViewKey={workspace.projectViewKey}
-            statusBucket={workspace.statusBucket}
-            backdrop={backdrop}
-            loading={isLoading}
-            testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
-          />
-        ) : (
-          <WorkspaceStatusIndicator
-            bucket={workspace.statusBucket}
-            workspaceKind={workspace.workspaceKind}
-            loading={isLoading}
-            reserveIdleSpace={reserveIdleStatusIndicatorSpace}
-          />
-        )}
+        {leading}
         <View style={styles.workspaceContentColumn}>
           <View style={styles.workspaceTitleRow}>
             <Text
@@ -533,6 +567,22 @@ const styles = StyleSheet.create((theme) => ({
     top: 1,
     right: 0,
   },
+  leadingSwap: {
+    position: "relative",
+    minWidth: densityIconBox("md"),
+    minHeight: TITLE_LINE_HEIGHT,
+  },
+  leadingHidden: { opacity: 0 },
+  leadingOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   workspaceStatusDot: {
     position: "relative",
     width: densityIconBox("md"),
