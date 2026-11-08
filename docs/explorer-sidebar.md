@@ -190,7 +190,7 @@ new target and never yanks an existing tab out of a user-selected pane.
 
 ## Routing preferences
 
-Desktop **Settings → Layout → Open location** has independent Main panel or On the side choices for
+Desktop **Settings → General → Open location** has independent Main panel or On the side choices for
 Explorer Files, diffs, chat files, files opened from diffs, and subagents. They default to Main
 panel. Mobile ignores them.
 
