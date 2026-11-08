@@ -152,6 +152,11 @@ interface PluginWorkspacePanelBase<Text extends PluginText = string> {
   title: Text;
   icon: PluginIcon;
   locations?: readonly PluginPanelLocation[];
+  /**
+   * The Explorer's default tab: whenever the Explorer opens, this panel is its first tab and the one shown. Needs the
+   * `explorer` location and a workspace context. When several installed panels ask, the first registered wins.
+   */
+  explorerDefault?: boolean;
 }
 
 export interface PluginTab {

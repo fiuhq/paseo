@@ -109,9 +109,30 @@ between compatible panes, but the dock cannot be split or maximized. Selecting a
 does not change workspace focus. Web dragging shares the workspace drag scope; compact layouts
 accept only reordering inside the source pane.
 
-Cmd+E shows or hides Explorer without changing its selected view. A small edge tab does the same
-(`explorer-sidebar/edge-handle.tsx`). On wide layouts it sits on the workspace column's right edge:
-the window edge while Explorer is hidden, Explorer's border while it shows. On compact layouts the
+Cmd+E shows or hides Explorer. A plugin panel that declares `explorerDefault` is the Explorer's
+default tab: every time Explorer opens it is moved first and shown, and a caller that opens a
+particular view (Changes, Files, a pull request) reveals that view afterwards, so it wins. If the
+user opened that panel in another pane, it stays there
+(`workspace-tabs/explorer-sidebar.ts`, `plugins/workspace-panels/explorer-default.ts`).
+
+On wide layouts **Settings → General → Explorer → Explorer sidebar opens** picks the shell, on every
+platform. **Over the chat** (`flyout`, the default, `explorer-sidebar/flyout.tsx`) slides Explorer
+in from the right edge over the workspace without taking its width, the way Salesforce Inspector's
+panel opens over the page. Escape closes it through the overlay keyboard registry, so it takes the
+key before the agent-interrupt shortcut, except when a field inside it has focus (a rename, a find
+bar, a review comment, a terminal), which keeps its own Escape. It registers as non-blocking, so find
+(Cmd/Ctrl+F) still works while it is open. On web a click outside it closes it too
+(`explorer-sidebar/outside-click.ts`). Only a press and release in place counts: dnd-kit tab drags,
+the edge-tab and resize drags and text selections still end in a click on a common ancestor, and
+none of them closes it. Clicks on its edge tab and the header toggle, which toggle it themselves, and
+on anything rendered in `#overlay-root` (its menus, popovers and dialogs) do not close it. A
+retained background workspace's flyout listens for neither. **Beside the chat** (`dock`) reserves
+width as below.
+
+A small edge tab toggles Explorer too (`explorer-sidebar/edge-handle.tsx`). Beside a dock it sits on
+the workspace column's right edge: the window edge while Explorer is hidden, Explorer's border while
+it shows. Beside a flyout the column carries it only while closed, and the open flyout carries it
+just outside its own left edge, riding it. On compact layouts the
 Explorer overlay covers the screen, so there are two tabs, each rendered only in its state: the
 workspace column's right edge while Explorer is hidden, and the overlay's left edge while it shows.
 Dragging a tab vertically moves it, and the position is stored per device as a share of the column
@@ -119,7 +140,7 @@ height, shared by every tab (`stores/explorer-edge-handle-store.ts`). It is not 
 mode. All layouts use the same
 workspace tabs, launcher, and panel host. Below the `md` breakpoint (600 points in a touch
 browser, 720 with a mouse or on native) the shell is the swipeable Explorer overlay; at `md`
-and above it reserves width beside the workspace. Native docking keeps its touch resize handle. Full workspace splits remain a separate web-only capability.
+and above it docks beside the workspace or flies out over it, as set. Native docking keeps its touch resize handle. Full workspace splits remain a separate web-only capability.
 
 The dock reserves at least 240 points and the workspace 360. App navigation yields when it cannot
 share the remaining width with both. This keeps a portrait tablet from rendering three unusably
@@ -169,7 +190,7 @@ new target and never yanks an existing tab out of a user-selected pane.
 
 ## Routing preferences
 
-Desktop **Settings → Layout → Open location** has independent Main panel or On the side choices for
+Desktop **Settings → General → Open location** has independent Main panel or On the side choices for
 Explorer Files, diffs, chat files, files opened from diffs, and subagents. They default to Main
 panel. Mobile ignores them.
 

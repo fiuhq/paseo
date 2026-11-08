@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { SettingsSection, SettingsCard, SettingsSelect } from "@/components/settings";
 import {
   useAppSettings,
+  type ExplorerPresentationPreference,
   type OpenInSidePanePreferences,
   type PullRequestOpenLocation,
   type ServiceUrlBehavior,
@@ -80,6 +81,47 @@ function ServiceUrlRow() {
       options={options}
       onValueChange={change}
     />
+  );
+}
+
+const EXPLORER_PRESENTATIONS: readonly ExplorerPresentationPreference[] = ["flyout", "dock"];
+
+/** Whether the Explorer slides over the chat, as a flyout, or docks beside it and takes its width. */
+function ExplorerPresentationRow() {
+  const { t } = useTranslation();
+  const { settings, updateSettings } = useAppSettings();
+  const options = useMemo(
+    () =>
+      EXPLORER_PRESENTATIONS.map((value) => ({
+        value,
+        label: t(`settings.layout.explorerPresentation.options.${value}`),
+      })),
+    [t],
+  );
+  const change = useCallback(
+    (explorerPresentation: ExplorerPresentationPreference) =>
+      void updateSettings({ explorerPresentation }),
+    [updateSettings],
+  );
+  return (
+    <SettingsSelect
+      label={t("settings.layout.explorerPresentation.label")}
+      value={settings.explorerPresentation}
+      options={options}
+      onValueChange={change}
+    />
+  );
+}
+
+/** Whether the Explorer opens over the chat or beside it, on every platform with a wide layout. */
+export function ExplorerSection() {
+  const { t } = useTranslation();
+  return (
+    <SettingsSection title={t("settings.layout.explorerPresentation.title")}>
+      <SettingsCard>
+        <ExplorerPresentationRow />
+      </SettingsCard>
+    </SettingsSection>
   );
 }
 

@@ -42,6 +42,8 @@ export type ReleaseChannel = "stable" | "beta";
 export type ServiceUrlBehavior = "ask" | "in-app" | "external";
 export type WorkspaceTitleSource = "title" | "branch";
 export type PullRequestOpenLocation = "main" | "side" | "explorer";
+/** How the Explorer opens on wide layouts: sliding over the chat, or docked beside it taking its width. */
+export type ExplorerPresentationPreference = "flyout" | "dock";
 /** What a sidebar workspace row shows in the space to the right of its title. */
 export type SidebarWorkspaceTrailing = "diff" | "timestamp" | "none";
 /** How much of an agent's work the chat shows between the user's message and the reply. */
@@ -117,6 +119,7 @@ export interface AppSettings {
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
   pullRequestOpenLocation: PullRequestOpenLocation;
+  explorerPresentation: ExplorerPresentationPreference;
 }
 
 export type AppSettingsUpdate =
@@ -175,6 +178,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   filePanelAssociations: {},
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
   pullRequestOpenLocation: "explorer",
+  explorerPresentation: "flyout",
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -303,6 +307,7 @@ const StoredAppSettingsSchema = z
         legacyPullRequestsInSidePane: undefined,
       }),
     pullRequestOpenLocation: z.enum(["main", "side", "explorer"]).optional(),
+    explorerPresentation: z.enum(["flyout", "dock"]).optional().catch(undefined),
     // COMPAT(explorerSidebarRouting): replaced by source-specific side-pane preferences in v0.6.
     openSupportingTabsInSidePanel: z.boolean().optional().catch(undefined),
     // COMPAT(rendererDesktopSettings): these fields used to share this renderer-owned key.
@@ -333,6 +338,7 @@ const StoredAppSettingsSchema = z
       openInSidePane,
       pullRequestOpenLocation:
         stored.pullRequestOpenLocation ?? (legacyPullRequestsInSidePane ? "side" : "explorer"),
+      explorerPresentation: stored.explorerPresentation ?? "flyout",
       uiBaseFontSize,
       contentFontSize: stored.contentFontSize ?? uiBaseFontSize,
       sidebarChecksDisplay,

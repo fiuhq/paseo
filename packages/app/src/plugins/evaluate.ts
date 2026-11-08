@@ -228,6 +228,20 @@ export function runPluginClientBundle(
       throw new Error(`Workspace panel ${normalizedId} is not a component`);
     }
     const locations = normalizePanelLocations(normalizedId, contribution.locations);
+    if (
+      contribution.explorerDefault !== undefined &&
+      typeof contribution.explorerDefault !== "boolean"
+    ) {
+      throw new Error(`Workspace panel ${normalizedId} has a non-boolean explorerDefault`);
+    }
+    if (
+      contribution.explorerDefault &&
+      (!locations.includes("explorer") || contribution.context !== "workspace")
+    ) {
+      throw new Error(
+        `Workspace panel ${normalizedId} asks to be the Explorer's default tab without the explorer location and a workspace context`,
+      );
+    }
     workspacePanelIds.add(normalizedId);
     return register(
       collector.workspacePanels,

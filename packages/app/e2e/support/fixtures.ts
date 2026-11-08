@@ -183,10 +183,14 @@ const test = daemonTest.extend<{
           localStorage.setItem("@paseo:daemon-registry", JSON.stringify([daemon, ...extraHosts]));
           localStorage.removeItem("@paseo:settings");
           localStorage.setItem("@paseo:create-agent-preferences", JSON.stringify(preferences));
-          // New installs collapse finished turns; specs assert on the rows inside them, so they
-          // start from the full chat unless they seed their own settings.
+          // New installs collapse finished turns and open the Explorer over the chat; specs assert on
+          // the rows inside turns and on the Explorer docked beside main, so they start from the full
+          // chat and the docked Explorer unless they seed their own settings.
           if (!localStorage.getItem("@paseo:app-settings")) {
-            localStorage.setItem("@paseo:app-settings", JSON.stringify({ chatDisplay: "full" }));
+            localStorage.setItem(
+              "@paseo:app-settings",
+              JSON.stringify({ chatDisplay: "full", explorerPresentation: "dock" }),
+            );
           }
           // The shared daemon often has no projects, which would open first-run setup over the app.
           if (onboardingCompleted && !localStorage.getItem("@paseo:onboarding")) {

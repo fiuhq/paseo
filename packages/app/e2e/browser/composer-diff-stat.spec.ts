@@ -75,7 +75,10 @@ test("composer diff stat reveals Changes, then opens the diff in the configured 
   page,
 }) => {
   await page.addInitScript((settingsKey) => {
-    localStorage.setItem(settingsKey, JSON.stringify({ openInSidePane: { diffs: true } }));
+    localStorage.setItem(
+      settingsKey,
+      JSON.stringify({ openInSidePane: { diffs: true }, explorerPresentation: "dock" }),
+    );
   }, APP_SETTINGS_KEY);
   const workspace = await seedChangedAgent("composer-diff-stat-side-");
 

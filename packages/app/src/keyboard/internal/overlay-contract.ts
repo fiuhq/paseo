@@ -7,4 +7,6 @@ export interface OverlayRegistration {
   onKeyDown(event: KeyboardInputEvent): boolean;
   restoreFocusRef?: RefObject<unknown>;
   manageFocus?: boolean;
+  /** False when it only claims its keys and leaves other shortcuts, such as find, running. Defaults to true. */
+  blocking?: boolean;
 }

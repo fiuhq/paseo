@@ -427,7 +427,7 @@ test.describe("CodeMirror workspace file editing", () => {
     await page.addInitScript((settingsKey) => {
       localStorage.setItem(
         settingsKey,
-        JSON.stringify({ openInSidePane: { explorerFiles: true } }),
+        JSON.stringify({ openInSidePane: { explorerFiles: true }, explorerPresentation: "dock" }),
       );
     }, APP_SETTINGS_KEY);
     const target = "target.ts:42";
@@ -554,7 +554,10 @@ test.describe("CodeMirror workspace file editing", () => {
 
   test("applies the interface font to portaled tooltips", async ({ page, withWorkspace }) => {
     await page.addInitScript(() => {
-      localStorage.setItem("@paseo:app-settings", JSON.stringify({ uiFontFamily: "monospace" }));
+      localStorage.setItem(
+        "@paseo:app-settings",
+        JSON.stringify({ uiFontFamily: "monospace", explorerPresentation: "dock" }),
+      );
     });
     const workspace = await withWorkspace({ prefix: "file-tooltip-font-" });
     const relativePath = "tooltip-font.txt";

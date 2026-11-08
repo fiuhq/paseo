@@ -16,7 +16,7 @@ import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
 import type { LayoutChangeEvent } from "react-native";
 import { ExplorerSidebarDock } from "@/screens/workspace/explorer-sidebar";
 import { ForgeShorthandProvider } from "@/git/forge-shorthand";
-import { ExplorerEdgeHandle } from "./explorer-sidebar/edge-handle";
+import { ExplorerEdgeHandle, workspaceEdgeHandleShownWhen } from "./explorer-sidebar/edge-handle";
 import { ExplorerFrame } from "./explorer-sidebar/frame";
 import { WorkspaceTabDragScope } from "@/components/workspace-tab-drag-scope";
 import {
@@ -78,8 +78,10 @@ import { getOrCreateClientId } from "@/utils/client-id";
 import { selectIsAgentListOpen, usePanelStore } from "@/stores/panel-store";
 import { toggleDesktopSidebarsWithCheckoutIntent } from "@/utils/desktop-sidebar-toggle";
 import {
+  hideExplorerSidebar,
   isExplorerSidebarOpen,
   openExplorerSidebarView,
+  resolveExplorerSidebarPresentation,
   toggleExplorerSidebar,
   useIsExplorerSidebarOpen,
 } from "@/workspace-tabs/explorer-sidebar";
@@ -1380,6 +1382,11 @@ function WorkspaceScreenContent({
   );
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
   const pullRequestOpenLocation = useSettings((settings) => settings.pullRequestOpenLocation);
+  const explorerPresentationPreference = useSettings((settings) => settings.explorerPresentation);
+  const explorerPresentation = resolveExplorerSidebarPresentation({
+    isCompact: isMobile,
+    preference: explorerPresentationPreference,
+  });
   const selectWorkspaceTabInPane = useWorkspaceLayoutStore((state) => state.selectTabInPane);
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const sheets = useWorkspaceLayoutStore((state) =>
@@ -1398,6 +1405,22 @@ function WorkspaceScreenContent({
       isCompact: isMobile,
       workspaceKey: persistenceKey,
     });
+  }, [isMobile, persistenceKey]);
+  // The flyout carries the edge tab on its left edge while it is open; a docked or compact Explorer carries none here.
+  const renderFlyoutEdgeHandle = useCallback(
+    () =>
+      explorerPresentation === "flyout" ? (
+        <ExplorerEdgeHandle
+          edge="flyout"
+          shownWhen="open"
+          isOpen={isExplorerSidebarShowing}
+          onToggle={handleToggleExplorerSidebar}
+        />
+      ) : null,
+    [explorerPresentation, isExplorerSidebarShowing, handleToggleExplorerSidebar],
+  );
+  const handleCloseExplorerSidebar = useCallback(() => {
+    hideExplorerSidebar({ isCompact: isMobile, workspaceKey: persistenceKey });
   }, [isMobile, persistenceKey]);
   const paneFocusSuppressedRef = useRef(false);
   const resizeWorkspaceSplit = useWorkspaceLayoutStore((state) => state.resizeSplit);
@@ -3714,6 +3737,7 @@ function WorkspaceScreenContent({
       </View>
       {desktopFocusModeEnabled ? null : (
         <ExplorerEdgeHandle
+          shownWhen={workspaceEdgeHandleShownWhen(explorerPresentation)}
           isOpen={isExplorerSidebarShowing}
           onToggle={handleToggleExplorerSidebar}
         />
@@ -3760,7 +3784,9 @@ function WorkspaceScreenContent({
     );
     return (
       <ExplorerFrame
-        presentation={isMobile ? "overlay" : "dock"}
+        presentation={explorerPresentation}
+        onRequestClose={handleCloseExplorerSidebar}
+        attachment={renderFlyoutEdgeHandle()}
         isWorkspaceActive={isRouteFocused}
         persistenceKey={persistenceKey}
         containerWidth={workspaceViewportWidth}
@@ -3808,6 +3834,9 @@ function WorkspaceScreenContent({
     workspaceViewportWidth,
     desktopFocusModeEnabled,
     handleToggleExplorerSidebar,
+    handleCloseExplorerSidebar,
+    explorerPresentation,
+    renderFlyoutEdgeHandle,
   ]);
 
   const { revealDirectory } = useFileExplorerActions({

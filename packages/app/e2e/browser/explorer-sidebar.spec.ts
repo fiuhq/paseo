@@ -372,7 +372,7 @@ test("updates populated code and diff appearance without losing the editor insta
     await page.addInitScript(() => {
       localStorage.setItem(
         "@paseo:app-settings",
-        JSON.stringify({ codeFontSize: 13, theme: "light" }),
+        JSON.stringify({ codeFontSize: 13, theme: "light", explorerPresentation: "dock" }),
       );
       localStorage.setItem(
         "@paseo:changes-preferences",
