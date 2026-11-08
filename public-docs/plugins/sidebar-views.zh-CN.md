@@ -54,6 +54,18 @@ export default function contribute(client: PluginClientContext) {
 
 视图同时展示所有已连接主机的数据。`active.workspace` 和 `active.agent` 是引用或 `null`。将引用传给 `navigation.openWorkspace`、`openAgent`、`openTerminal` 或 `openProject`；`openProject` 打开新建工作区流程。导航会关闭紧凑布局的侧边栏。如果插件自行执行导航，完成后调用 `dismiss()`。
 
+## 保留 Paseo 的侧边栏 {#keep-paseos-sidebar}
+
+传入 `WorkspaceChildren` 而非 `Component`，即可保留 Paseo 自身的侧边栏，并在每个工作区行下添加一个区域。两者只能传入其一。选中该视图后，Paseo 会在每种分组的每个工作区行上显示**展开工作区** / **折叠工作区**箭头。展开的行会渲染 `WorkspaceChildren`，传入侧边栏视图属性以及该行的 `workspace` 引用。Paseo 按设备记住哪些行已展开。某个区域抛出异常时，错误只显示在该行内，侧边栏其余部分照常工作。
+
+```tsx
+function WorkspaceAgents({ workspace }: PluginSidebarWorkspaceChildrenProps) {
+  const agents = useAgents({ where: (agent) => agent.workspace.key === workspace.key });
+  return agents.map((agent) => <AgentRow key={agent.key} reference={agent} />);
+}
+client.addSidebarView({ id: "agents", title: "Agents", WorkspaceChildren: WorkspaceAgents });
+```
+
 ## 查询引用，逐行读取 {#query-refs-read-each-row}
 
 `useWorkspaces`、`useAgents`、`useProjects` 和 `useTerminals` 返回不可变的引用数组。引用包含 `kind`、`hostId`、`id` 和跨主机唯一的 `key`。在一次应用会话中，同一实体使用同一个冻结引用。在行组件内将它传给 `useWorkspace`、`useAgent`、`useProject` 或 `useTerminal`。实体删除后返回 `null`。
