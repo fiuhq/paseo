@@ -160,7 +160,7 @@ export function ExplorerEdgeHandle({
 /**
  * A finger needs more than the 20×56-point tab, so the press area reaches 12 points out on each
  * side and 8 above and below (44×72). Toward the edge the extra reach falls off the screen, or onto
- * the docked Explorer on wide layouts. Inward it covers a 12×64-point band of the content beside
+ * the docked Explorer on wide layouts. Inward it covers a 12×72-point band of the content beside
  * the tab, and above and below it takes touches from the content there.
  */
 const HIT_SLOP = { top: 8, bottom: 8, left: 12, right: 12 } as const;
