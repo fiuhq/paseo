@@ -10,6 +10,7 @@ import { MobilePanelOverlay } from "@/mobile-panels/presentation";
 import { RetainedPanelActivity } from "@/components/retained-panel";
 import { resolveExplorerSidebarWidth } from "@/components/explorer-sidebar-layout";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { ExplorerFlyout } from "./flyout";
 import { useExplorerGeometry } from "./geometry";
 import type { ExplorerFrameProps } from "./frame-props";
 
@@ -21,8 +22,11 @@ function ExplorerFrameBase({
   isWorkspaceActive,
   persistenceKey,
   containerWidth,
+  onRequestClose,
+  attachment,
 }: ExplorerFrameProps) {
   const overlay = presentation === "overlay";
+  const flyout = presentation === "flyout";
   const settledOpen = useIsMobilePanelActive("file-explorer");
   const active = isWorkspaceActive && (overlay ? settledOpen : isOpen);
   const resizeEnabled = isWorkspaceActive && !overlay && isOpen;
@@ -35,21 +39,22 @@ function ExplorerFrameBase({
     (width: number) => resize(persistenceKey, width),
     [persistenceKey, resize],
   );
+  const width = resolveExplorerSidebarWidth({ requestedWidth: storedWidth, containerWidth });
   const geometry = useExplorerGeometry({
-    width: resolveExplorerSidebarWidth({ requestedWidth: storedWidth, containerWidth }),
+    width,
     containerWidth,
     overlay,
     resizeEnabled,
     onResize,
   });
-  return (
+  const body = (shown: boolean) => (
     <RetainedPanelActivity active={active}>
       <FileExplorerCloseGestureContext value={gestureRef}>
         <MobilePanelOverlay
           panel="file-explorer"
           closeGesture={gesture}
-          presentation={presentation}
-          dockVisible={isOpen}
+          presentation={overlay ? "overlay" : "dock"}
+          dockVisible={shown}
           frameStyle={geometry.frameStyle}
           panelStyle={[{ backgroundColor: surfaceColor }, geometry.panelStyle]}
         >
@@ -61,7 +66,20 @@ function ExplorerFrameBase({
       </FileExplorerCloseGestureContext>
     </RetainedPanelActivity>
   );
+  if (!flyout) return body(isOpen);
+  return (
+    <ExplorerFlyout
+      isOpen={isOpen}
+      width={width}
+      onRequestClose={onRequestClose ?? noop}
+      attachment={attachment}
+    >
+      {body}
+    </ExplorerFlyout>
+  );
 }
+
+function noop() {}
 export const ExplorerFrame = withUnistyles(ExplorerFrameBase, (theme) => ({
   surfaceColor: theme.colors.surfaceSidebar,
 }));

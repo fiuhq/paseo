@@ -2384,6 +2384,13 @@ export const en = {
       about: "About",
     },
     layout: {
+      explorerPresentation: {
+        label: "Explorer sidebar opens",
+        options: {
+          flyout: "Over the chat",
+          dock: "Beside the chat",
+        },
+      },
       openInSidePane: {
         title: "Open location",
         destinations: {

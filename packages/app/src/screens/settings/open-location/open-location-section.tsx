@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { SettingsSection, SettingsCard, SettingsSelect } from "@/components/settings";
 import {
   useAppSettings,
+  type ExplorerPresentationPreference,
   type OpenInSidePanePreferences,
   type PullRequestOpenLocation,
   type ServiceUrlBehavior,
@@ -83,6 +84,35 @@ function ServiceUrlRow() {
   );
 }
 
+const EXPLORER_PRESENTATIONS: readonly ExplorerPresentationPreference[] = ["flyout", "dock"];
+
+/** Whether the Explorer slides over the chat, as a flyout, or docks beside it and takes its width. */
+function ExplorerPresentationRow() {
+  const { t } = useTranslation();
+  const { settings, updateSettings } = useAppSettings();
+  const options = useMemo(
+    () =>
+      EXPLORER_PRESENTATIONS.map((value) => ({
+        value,
+        label: t(`settings.layout.explorerPresentation.options.${value}`),
+      })),
+    [t],
+  );
+  const change = useCallback(
+    (explorerPresentation: ExplorerPresentationPreference) =>
+      void updateSettings({ explorerPresentation }),
+    [updateSettings],
+  );
+  return (
+    <SettingsSelect
+      label={t("settings.layout.explorerPresentation.label")}
+      value={settings.explorerPresentation}
+      options={options}
+      onValueChange={change}
+    />
+  );
+}
+
 /** Where things open: files, diffs, subagents, pull requests, and script URLs. Desktop only. */
 export function OpenLocationSection() {
   const { t } = useTranslation();
@@ -102,6 +132,7 @@ export function OpenLocationSection() {
   return (
     <SettingsSection title={t("settings.layout.openInSidePane.title")}>
       <SettingsCard>
+        <ExplorerPresentationRow />
         {SOURCES.map((source) => (
           <OpenLocationRow
             key={source}

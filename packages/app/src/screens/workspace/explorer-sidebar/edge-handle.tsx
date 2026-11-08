@@ -15,11 +15,14 @@ import {
 } from "./edge-handle-geometry";
 
 /** The side of its parent the tab is pinned to. */
-type ExplorerEdgeHandleEdge = "left" | "right";
+type ExplorerEdgeHandleEdge = "left" | "right" | "flyout";
 
 interface ExplorerEdgeHandleProps {
   isOpen: boolean;
-  /** Right: the workspace column's edge. Left: the open compact Explorer's edge. Defaults to right. */
+  /**
+   * Right: the workspace column's edge. Left: the open compact Explorer's edge. Flyout: just outside the open flyout's
+   * left edge, riding it as Salesforce Inspector's arrow rides its panel. Defaults to right.
+   */
   edge?: ExplorerEdgeHandleEdge;
   /**
    * Render only while the Explorer is in this state. A compact layout carries one tab per state,
@@ -99,7 +102,7 @@ function ExplorerEdgeHandleBase({
     : t("workspace.tabs.explorerSidebar.open");
   const Chevron = isOpen ? ChevronRight : ChevronLeft;
   const top = edgeHandleTop(dragOffset ?? offset, height);
-  const rail = useMemo(() => [styles.rail, left ? styles.pinLeft : styles.pinRight], [left]);
+  const rail = useMemo(() => [styles.rail, RAIL_PIN[edge]], [edge]);
   const placement = useMemo(
     () => [styles.hoverTarget, left ? styles.pinLeft : styles.pinRight, { top }],
     [left, top],
@@ -165,6 +168,13 @@ export function ExplorerEdgeHandle({
  */
 const HIT_SLOP = { top: 8, bottom: 8, left: 12, right: 12 } as const;
 
+/** Where each edge pins the tab's rail on its parent. */
+const RAIL_PIN = {
+  right: { right: 0 },
+  left: { left: 0 },
+  flyout: { left: -EDGE_HANDLE_WIDTH },
+} as const satisfies Record<ExplorerEdgeHandleEdge, object>;
+
 const styles = StyleSheet.create((theme) => ({
   rail: {
     position: "absolute",
@@ -201,3 +211,13 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface3,
   },
 }));
+
+/**
+ * Which state the workspace column's tab shows in: both, beside a docked Explorer whose border it rides; only while
+ * closed, beside a flyout or compact overlay, which carry their own tab while open.
+ */
+export function workspaceEdgeHandleShownWhen(
+  presentation: "overlay" | "dock" | "flyout",
+): "closed" | undefined {
+  return presentation === "dock" ? undefined : "closed";
+}

@@ -40,6 +40,12 @@ describe("Explorer sidebar", () => {
   it("selects the Explorer shell from the form factor", () => {
     expect(resolveExplorerSidebarPresentation({ isCompact: true })).toBe("overlay");
     expect(resolveExplorerSidebarPresentation({ isCompact: false })).toBe("dock");
+    expect(resolveExplorerSidebarPresentation({ isCompact: false, preference: "flyout" })).toBe(
+      "flyout",
+    );
+    expect(resolveExplorerSidebarPresentation({ isCompact: true, preference: "flyout" })).toBe(
+      "overlay",
+    );
   });
 
   it("uses the same Explorer pane inside the compact overlay", () => {

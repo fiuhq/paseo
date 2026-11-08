@@ -1514,13 +1514,14 @@ export default function contribute(client: PluginClientContext) {
 
 `addWorkspacePanel` and `addAgentPanel` fields:
 
-| Field       | Required | Meaning                                                       |
-| ----------- | -------- | ------------------------------------------------------------- |
-| `id`        | Yes      | Plugin-local panel ID.                                        |
-| `title`     | Yes      | Workspace-tab title.                                          |
-| `icon`      | Yes      | Lucide name, `{ svg }`, or component. See [Icons](#icons).    |
-| `locations` | No       | `workspace` and/or `explorer`. Defaults to `workspace`.       |
-| `Component` | Yes      | React Native component matching the selected context's props. |
+| Field             | Required | Meaning                                                                                                                                                                  |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`              | Yes      | Plugin-local panel ID.                                                                                                                                                   |
+| `title`           | Yes      | Workspace-tab title.                                                                                                                                                     |
+| `icon`            | Yes      | Lucide name, `{ svg }`, or component. See [Icons](#icons).                                                                                                               |
+| `locations`       | No       | `workspace` and/or `explorer`. Defaults to `workspace`.                                                                                                                  |
+| `explorerDefault` | No       | Workspace panels with the `explorer` location: the Explorer's default tab, moved first and shown each time the Explorer opens. The first installed panel that asks wins. |
+| `Component`       | Yes      | React Native component matching the selected context's props.                                                                                                            |
 
 Every panel receives `PluginPanelProps<Params>` with `theme`, `host`, `layout`, `navigation`,
 `workspaceId`, read-only `params`, `revision`, and `tab`. Workspace panels have empty
