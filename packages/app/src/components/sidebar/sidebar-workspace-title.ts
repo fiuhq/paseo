@@ -2,8 +2,7 @@ import type { TFunction } from "i18next";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import type { WorkspaceTitleSource } from "@/hooks/use-settings";
 import { getStatusBucketLabel } from "@/hooks/sidebar-status-view-model";
-import { isWorkspaceTitleHeld } from "@getpaseo/protocol/messages";
-import { workspaceHeldTitleLabel } from "@/utils/workspace-title-state";
+import { workspaceTitleLabel } from "@/utils/workspace-title-state";
 
 export function resolveSidebarWorkspacePrimaryLabel(input: {
   workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch" | "titleState">;
@@ -12,8 +11,7 @@ export function resolveSidebarWorkspacePrimaryLabel(input: {
   if (input.workspaceTitleSource === "branch") {
     return input.workspace.currentBranch ?? input.workspace.name;
   }
-  if (isWorkspaceTitleHeld(input.workspace.titleState)) return workspaceHeldTitleLabel();
-  return input.workspace.name;
+  return workspaceTitleLabel(input.workspace);
 }
 
 export function resolveSidebarWorkspaceAccessibilityLabel(input: {

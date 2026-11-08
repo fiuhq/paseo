@@ -159,7 +159,7 @@ server.addHook("workspace.title.before", async ({ request }) => {
 });
 ```
 
-`source` is `prompt` for the first try and `reply` once the candidate could draw on the agent's reply. `sourceText` is the prompt, or the reply followed by the prompt, clipped to 2,000 characters. A manual rename always wins and ends the hold. If all three tries are refused, or a turn ends with no reply, the workspace stays unnamed and the header offers Rename. A handler that throws, or leaves `verdict` null, applies the title as `unchecked` instead of stopping naming.
+`source` is `prompt` for the first try and `reply` once the candidate could draw on the agent's reply. `sourceText` is the prompt, or the reply followed by the prompt, clipped to 2,000 characters. A manual rename always wins and ends the hold. If all three tries are refused, or a turn ends with no reply, the workspace stays unnamed: it shows its own name in place of `Naming…`, and the header offers Rename. A handler that throws, or leaves `verdict` null, applies the title as `unchecked` instead of stopping naming.
 
 ## workspace.archive.after
 

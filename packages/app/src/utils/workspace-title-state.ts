@@ -5,6 +5,19 @@ export function workspaceHeldTitleLabel(): string {
   return i18n.t("workspace.titleState.naming");
 }
 
+/**
+ * The label a workspace goes by: "Naming…" only while the title gate is still working on it. Once the
+ * gate has given up (`no-reply`, `exhausted`) nothing more will name it, so the workspace's own name shows
+ * and the header chip says why, with Rename.
+ */
+export function workspaceTitleLabel(workspace: {
+  name: string;
+  titleState?: WorkspaceTitleState | null;
+}): string {
+  const status = workspace.titleState?.status;
+  return status === "naming" || status === "refused" ? workspaceHeldTitleLabel() : workspace.name;
+}
+
 /** What the header says about the title, and whether the user has to step in. */
 export function describeWorkspaceTitleState(
   state: WorkspaceTitleState | null | undefined,
