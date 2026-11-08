@@ -1,0 +1,7 @@
+{
+  "id": "workspace-base-guard",
+  "requirements": {
+    "paseo": ">=0.8.0"
+  },
+  "checkout": "directory"
+}

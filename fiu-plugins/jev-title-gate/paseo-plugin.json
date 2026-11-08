@@ -1,0 +1,7 @@
+{
+  "id": "jev-title-gate",
+  "requirements": {
+    "paseo": ">=0.15.2"
+  },
+  "checkout": "directory"
+}

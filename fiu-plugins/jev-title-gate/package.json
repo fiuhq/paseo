@@ -1,0 +1,16 @@
+{
+  "name": "@fiuhq/jev-title-gate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paseo plugin: a new workspace gets its title only after Jev calls it meaningful",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "verify": "tsc --noEmit && bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
+}

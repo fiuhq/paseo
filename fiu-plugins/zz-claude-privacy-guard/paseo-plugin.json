@@ -1,0 +1,7 @@
+{
+  "id": "zz-claude-privacy-guard",
+  "requirements": {
+    "paseo": ">=0.8.0"
+  },
+  "checkout": "directory"
+}
