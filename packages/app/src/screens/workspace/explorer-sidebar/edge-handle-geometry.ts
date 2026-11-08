@@ -7,6 +7,9 @@ export const EDGE_HANDLE_DEFAULT_OFFSET = 0.5;
 /** How far a press must move before it is a drag rather than a tap. */
 export const EDGE_HANDLE_DRAG_SLOP = 4;
 
+/** How long after a drag ends a click is the drag's own release, not a tap. */
+export const EDGE_HANDLE_CLICK_AFTER_DRAG_MS = 300;
+
 const MIN_OFFSET = 0.05;
 const MAX_OFFSET = 0.95;
 
@@ -26,4 +29,16 @@ export function dragEdgeHandleOffset(start: number, dy: number, height: number):
 export function edgeHandleTop(offset: number, height: number): number {
   const top = clampEdgeHandleOffset(offset) * height - EDGE_HANDLE_HEIGHT / 2;
   return Math.max(0, Math.min(Math.max(0, height - EDGE_HANDLE_HEIGHT), top));
+}
+
+/**
+ * Whether a press is the click a drag ends with. On web the browser still clicks the tab when a
+ * drag lets go over it, so a press that soon after a drag is ignored; a real tap comes later.
+ */
+export function isClickAfterDrag(dragEndedAt: number | null, now: number): boolean {
+  return (
+    dragEndedAt !== null &&
+    now - dragEndedAt >= 0 &&
+    now - dragEndedAt < EDGE_HANDLE_CLICK_AFTER_DRAG_MS
+  );
 }

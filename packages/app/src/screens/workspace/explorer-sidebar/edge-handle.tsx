@@ -10,6 +10,7 @@ import {
   EDGE_HANDLE_DRAG_SLOP,
   EDGE_HANDLE_HEIGHT,
   edgeHandleTop,
+  isClickAfterDrag,
 } from "./edge-handle-geometry";
 
 interface ExplorerEdgeHandleProps {
@@ -39,6 +40,7 @@ function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHan
   heightRef.current = height;
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
+  const dragEndedAt = useRef<number | null>(null);
 
   const responder = useMemo(
     () =>
@@ -55,6 +57,7 @@ function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHan
         onPanResponderRelease: (_event, gesture) => {
           setOffset(dragEdgeHandleOffset(dragStart.current, gesture.dy, heightRef.current));
           setDragOffset(null);
+          dragEndedAt.current = Date.now();
         },
         onPanResponderTerminate: () => setDragOffset(null),
       }),
@@ -64,6 +67,10 @@ function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHan
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setHeight(event.nativeEvent.layout.height);
   }, []);
+  const handlePress = useCallback(() => {
+    if (isClickAfterDrag(dragEndedAt.current, Date.now())) return;
+    onToggle();
+  }, [onToggle]);
   const handlePointerEnter = useCallback(() => setHovered(true), []);
   const handlePointerLeave = useCallback(() => setHovered(false), []);
 
@@ -73,7 +80,6 @@ function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHan
   const Chevron = isOpen ? ChevronRight : ChevronLeft;
   const top = edgeHandleTop(dragOffset ?? offset, height);
   const placement = useMemo(() => [styles.hoverTarget, { top }], [top]);
-  const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
   const active = hovered || dragOffset !== null;
   const tabStyle = useMemo(() => [styles.tab, active ? styles.tabActive : null], [active]);
 
@@ -90,8 +96,8 @@ function ExplorerEdgeHandleBase({ isOpen, onToggle, iconColor }: ExplorerEdgeHan
             testID="workspace-explorer-edge-handle"
             accessibilityRole="button"
             accessibilityLabel={label}
-            accessibilityState={accessibilityState}
-            onPress={onToggle}
+            aria-expanded={isOpen}
+            onPress={handlePress}
             style={tabStyle}
             highlightStyle={styles.tabActive}
           >

@@ -5,6 +5,7 @@ import {
   EDGE_HANDLE_DEFAULT_OFFSET,
   EDGE_HANDLE_HEIGHT,
   edgeHandleTop,
+  isClickAfterDrag,
 } from "./edge-handle-geometry";
 
 describe("Explorer edge handle geometry", () => {
@@ -30,5 +31,11 @@ describe("Explorer edge handle geometry", () => {
     expect(edgeHandleTop(0.05, 300)).toBe(0);
     expect(edgeHandleTop(0.95, 300)).toBe(300 - EDGE_HANDLE_HEIGHT);
     expect(edgeHandleTop(0.5, 20)).toBe(0);
+  });
+
+  it("ignores the click a drag lets go with, and only that one", () => {
+    expect(isClickAfterDrag(null, 1_000)).toBe(false);
+    expect(isClickAfterDrag(1_000, 1_050)).toBe(true);
+    expect(isClickAfterDrag(1_000, 1_400)).toBe(false);
   });
 });
