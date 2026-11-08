@@ -70,16 +70,17 @@ my-plugin/
 }
 ```
 
-| 字段           | 是否必填 | 行为                                                                                                       |
-| -------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| `id`           | 是       | 默认的安装 ID。                                                                                            |
-| `name`         | 否       | 注册表、网站、**设置 → 插件** 中的插件行以及插件设置页标题使用的非空显示名称。没有 `name` 时显示插件 ID。  |
-| `icon`         | 否       | 插件包内 PNG 文件的相对路径。                                                                              |
-| `media`        | 否       | 包内图片或视频路径的数组，或 HTTPS URL。空数组是有效的。                                                   |
-| `description`  | 否       | 在 **设置 → 插件** 中显示在插件名称下方的非空摘要。                                                        |
-| `translations` | 否       | 其他语言的展示文本，由注册表读取，Paseo 会忽略它。见[其他语言](/docs/plugins/publishing#other-languages)。 |
-| `requirements` | 否       | 支持的 Paseo 版本，见下文。                                                                                |
-| `build`        | 否       | 准备命令，见 CLI 参考。                                                                                    |
+| 字段           | 是否必填 | 行为                                                                                                                        |
+| -------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | 是       | 默认的安装 ID。                                                                                                             |
+| `name`         | 否       | 注册表、网站、**设置 → 插件** 中的插件行以及插件设置页标题使用的非空显示名称。没有 `name` 时显示插件 ID。                   |
+| `icon`         | 否       | 插件包内 PNG 文件的相对路径。                                                                                               |
+| `media`        | 否       | 包内图片或视频路径的数组，或 HTTPS URL。空数组是有效的。                                                                    |
+| `description`  | 否       | 在 **设置 → 插件** 中显示在插件名称下方的非空摘要。                                                                         |
+| `translations` | 否       | 其他语言的展示文本，由注册表读取，Paseo 会忽略它。见[其他语言](/docs/plugins/publishing#other-languages)。                  |
+| `requirements` | 否       | 支持的 Paseo 版本，见下文。                                                                                                 |
+| `build`        | 否       | 准备命令，见 CLI 参考。                                                                                                     |
+| `checkout`     | 否       | 插件不需要其目录以外的任何文件时设为 `"directory"`。从子目录进行的 Git 安装随后只检出该目录及其各级父目录中直接包含的文件。 |
 
 路径相对于 `paseo-plugin.json`，使用正斜杠，并且不能包含 `..` 片段。即使 `media` 在运行时 manifest 中是可选的，可视化插件的注册表展示页仍然需要一张界面图片。接受的格式和展示页要求见[图标和截图](/docs/plugins/publishing#icons-and-screenshots)。Paseo 会校验这些引用，但不会打开本地资源或获取 URL。
 
@@ -2251,6 +2252,10 @@ paseo plugin install npm:@acme/paseo-review@next
 paseo plugin install 'npm:@acme/paseo-review@>=1.2.0 <2.0.0' --id review-staging
 paseo plugin install npm:@acme/plugins@^1.2.0:plugins/review
 ```
+
+Git 安装只在检出时下载文件内容。从子目录安装时会检出整个仓库，除非插件清单设置了
+`"checkout": "directory"`：此时只检出该目录，以及其各级父目录（包括仓库根目录）中直接包含的文件。
+只有当插件构建或导入的内容都不在其目录之外时才设置它。
 
 `--ref` 只适用于 Git，接受用于这次安装的分支、标签或提交。没有它时，Paseo 安装远程的默认 HEAD。安装时的
 选择器不会约束之后的更新。旧版的 `--path relative/plugin/path` 选项等同于子目录后缀，对 npm 也是如此。

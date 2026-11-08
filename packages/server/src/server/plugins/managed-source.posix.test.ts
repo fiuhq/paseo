@@ -1,5 +1,6 @@
 import { mkdir, rename, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -29,6 +30,9 @@ async function createRepository(): Promise<string> {
   return repository;
 }
 
+const SELF_CONTAINED = JSON.stringify({ id: "managed-example", checkout: "directory" });
+const SELF_CONTAINED_MANIFEST = (directory: string) => path.join(directory, "paseo-plugin.json");
+
 async function commitAll(repository: string, message: string): Promise<string> {
   await runGitCommand(["add", "-A"], { cwd: repository });
   await runGitCommand(["commit", "-m", message], { cwd: repository });
@@ -55,7 +59,153 @@ async function withGitHubFixture(repository: string, run: () => Promise<void>): 
   }
 }
 
+/** Serves a repository over Git's smart HTTP protocol, which, unlike a static file server, honours clone filters. */
+async function serveSmartHttp(
+  repository: string,
+): Promise<{ port: number; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    const url = new URL(request.url!, "http://localhost");
+    const backend = spawn("git", ["http-backend"], {
+      env: {
+        ...process.env,
+        GIT_PROJECT_ROOT: path.join(repository, ".git"),
+        GIT_HTTP_EXPORT_ALL: "1",
+        PATH_INFO: url.pathname,
+        QUERY_STRING: url.search.slice(1),
+        REQUEST_METHOD: request.method ?? "GET",
+        CONTENT_TYPE: request.headers["content-type"] ?? "",
+        HTTP_CONTENT_ENCODING: request.headers["content-encoding"] ?? "",
+        GIT_PROTOCOL: String(request.headers["git-protocol"] ?? ""),
+      },
+    });
+    request.pipe(backend.stdin);
+    let head = Buffer.alloc(0);
+    let headersSent = false;
+    backend.stdout.on("data", (chunk: Buffer) => {
+      if (headersSent) {
+        response.write(chunk);
+        return;
+      }
+      head = Buffer.concat([head, chunk]);
+      const end = head.indexOf("\r\n\r\n");
+      if (end < 0) return;
+      let status = 200;
+      for (const line of head.subarray(0, end).toString().split("\r\n")) {
+        const separator = line.indexOf(":");
+        const name = line.slice(0, separator);
+        const value = line.slice(separator + 1).trim();
+        if (name.toLowerCase() === "status") status = Number.parseInt(value, 10);
+        else response.setHeader(name, value);
+      }
+      response.writeHead(status);
+      headersSent = true;
+      response.write(head.subarray(end + 4));
+    });
+    backend.stdout.on("end", () => response.end());
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Expected HTTP port");
+  return {
+    port: address.port,
+    close: async () => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
 describe("managed Git plugin sources", () => {
+  it("checks out the whole repository unless the plugin declares its directory self-contained", async () => {
+    const repository = await createRepository();
+    const nested = path.join(repository, "plugins", "review");
+    await mkdir(nested, { recursive: true });
+    for (const name of ["paseo-plugin.json", "index.server.ts"])
+      await rename(path.join(repository, name), path.join(nested, name));
+    await mkdir(path.join(repository, "packages", "shared"), { recursive: true });
+    // No newline: Windows runners check out with core.autocrlf, which would turn it into CRLF.
+    await writeFile(path.join(repository, "packages", "shared", "index.ts"), "export {};");
+    await commitAll(repository, "workspace member plugin");
+    await runGitCommand(["config", "uploadpack.allowFilter", "true"], { cwd: repository });
+    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-full-"));
+    roots.push(home);
+    const candidate = await new ManagedPluginSources(home).prepareInstall({
+      source: pathToFileURL(repository).href,
+      pluginPath: "plugins/review",
+    });
+    const checkoutRoot = path.resolve(candidate.directory, "..", "..");
+    expect(await readFile(path.join(checkoutRoot, "packages", "shared", "index.ts"), "utf8")).toBe(
+      "export {};",
+    );
+  });
+
+  it("fetches a partial clone's plugin files through a remote that carries credentials", async () => {
+    const repository = await createRepository();
+    const nested = path.join(repository, "plugins", "review");
+    await mkdir(nested, { recursive: true });
+    for (const name of ["paseo-plugin.json", "index.server.ts"])
+      await rename(path.join(repository, name), path.join(nested, name));
+    await writeFile(SELF_CONTAINED_MANIFEST(nested), SELF_CONTAINED);
+    await mkdir(path.join(repository, "app"));
+    await writeFile(path.join(repository, "app", "bundle.js"), "unrelated application code\n");
+    await commitAll(repository, "plugin beside an application");
+    await runGitCommand(["config", "uploadpack.allowFilter", "true"], { cwd: repository });
+    const unrelated = (
+      await runGitCommand(["rev-parse", "HEAD:app/bundle.js"], { cwd: repository })
+    ).stdout.trim();
+    const served = await serveSmartHttp(repository);
+    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-credential-sparse-"));
+    roots.push(home);
+    try {
+      const candidate = await new ManagedPluginSources(home).prepareInstall({
+        source: `http://fixture:fake-secret@127.0.0.1:${served.port}/`,
+        pluginPath: "plugins/review",
+      });
+      const checkoutRoot = path.resolve(candidate.directory, "..", "..");
+      expect(
+        JSON.parse(await readFile(path.join(candidate.directory, "paseo-plugin.json"), "utf8")),
+      ).toEqual({ id: "managed-example", checkout: "directory" });
+      const { stdout } = await runGitCommand(["rev-list", "--objects", "--missing=print", "HEAD"], {
+        cwd: checkoutRoot,
+      });
+      expect(stdout.split("\n")).toContain(`?${unrelated}`);
+    } finally {
+      await served.close();
+    }
+  }, 30_000);
+
+  it("downloads and checks out only the plugin directory of a larger repository", async () => {
+    const repository = await createRepository();
+    const nested = path.join(repository, "plugins", "review");
+    await mkdir(nested, { recursive: true });
+    for (const name of ["paseo-plugin.json", "index.server.ts"])
+      await rename(path.join(repository, name), path.join(nested, name));
+    await writeFile(SELF_CONTAINED_MANIFEST(nested), SELF_CONTAINED);
+    await mkdir(path.join(repository, "app"));
+    await writeFile(path.join(repository, "app", "bundle.js"), "unrelated application code\n");
+    await commitAll(repository, "plugin beside an application");
+    await runGitCommand(["config", "uploadpack.allowFilter", "true"], { cwd: repository });
+    const unrelated = (
+      await runGitCommand(["rev-parse", "HEAD:app/bundle.js"], { cwd: repository })
+    ).stdout.trim();
+    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-sparse-"));
+    roots.push(home);
+    const sources = new ManagedPluginSources(home);
+    const candidate = await sources.prepareInstall({
+      source: pathToFileURL(repository).href,
+      pluginPath: "plugins/review",
+    });
+    const checkoutRoot = path.resolve(candidate.directory, "..", "..");
+    expect(
+      JSON.parse(await readFile(path.join(candidate.directory, "paseo-plugin.json"), "utf8")),
+    ).toEqual({ id: "managed-example", checkout: "directory" });
+    await expect(readFile(path.join(checkoutRoot, "app", "bundle.js"))).rejects.toThrow();
+    const { stdout } = await runGitCommand(["rev-list", "--objects", "--missing=print", "HEAD"], {
+      cwd: checkoutRoot,
+    });
+    expect(stdout.split("\n")).toContain(`?${unrelated}`);
+  });
+
   it("does not expose Git URL credentials when cloning fails", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-git-home-"));
     roots.push(home);

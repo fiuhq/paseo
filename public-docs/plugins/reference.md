@@ -73,16 +73,17 @@ The required root manifest is `paseo-plugin.json`:
 }
 ```
 
-| Field          | Required | Behavior                                                                                                                                            |
-| -------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | Yes      | Default installation ID.                                                                                                                            |
-| `name`         | No       | Non-empty display name for the registry, the website, your row in **Settings → Plugins**, and your settings header. Without it, Paseo shows the ID. |
-| `icon`         | No       | Relative path to a PNG inside the plugin package.                                                                                                   |
-| `media`        | No       | Array of image or video paths inside the package, or HTTPS URLs. An empty array is valid.                                                           |
-| `description`  | No       | Non-empty summary shown below the plugin name in **Settings → Plugins**.                                                                            |
-| `translations` | No       | Listing text in other languages, read by the registry and ignored by Paseo. See [other languages](/docs/plugins/publishing#other-languages).        |
-| `requirements` | No       | Supported Paseo versions, described below.                                                                                                          |
-| `build`        | No       | Preparation commands, described in the CLI reference.                                                                                               |
+| Field          | Required | Behavior                                                                                                                                                                 |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`           | Yes      | Default installation ID.                                                                                                                                                 |
+| `name`         | No       | Non-empty display name for the registry, the website, your row in **Settings → Plugins**, and your settings header. Without it, Paseo shows the ID.                      |
+| `icon`         | No       | Relative path to a PNG inside the plugin package.                                                                                                                        |
+| `media`        | No       | Array of image or video paths inside the package, or HTTPS URLs. An empty array is valid.                                                                                |
+| `description`  | No       | Non-empty summary shown below the plugin name in **Settings → Plugins**.                                                                                                 |
+| `translations` | No       | Listing text in other languages, read by the registry and ignored by Paseo. See [other languages](/docs/plugins/publishing#other-languages).                             |
+| `requirements` | No       | Supported Paseo versions, described below.                                                                                                                               |
+| `build`        | No       | Preparation commands, described in the CLI reference.                                                                                                                    |
+| `checkout`     | No       | `"directory"` when the plugin needs nothing outside its own directory. A Git install from a subdirectory then checks out only that directory and its parents' own files. |
 
 Paths are relative to `paseo-plugin.json`, use forward slashes, and cannot contain `..`
 segments. Registry listings for visual plugins require an interface image even though `media` is
@@ -2607,6 +2608,12 @@ paseo plugin install npm:@acme/paseo-review@next
 paseo plugin install 'npm:@acme/paseo-review@>=1.2.0 <2.0.0' --id review-staging
 paseo plugin install npm:@acme/plugins@^1.2.0:plugins/review
 ```
+
+A Git install downloads file contents only as they are checked out. From a subdirectory it checks
+out the whole repository, unless the plugin's manifest sets `"checkout": "directory"`: then only
+that directory is checked out, plus the files directly inside each of its parent directories,
+including the repository root. Set it only when nothing the
+plugin builds or imports lives outside its directory.
 
 `--ref` applies only to Git and accepts a branch, tag, or commit for this installation. Without it,
 Paseo installs the remote's default HEAD. Installation selectors do not constrain later updates. The legacy
