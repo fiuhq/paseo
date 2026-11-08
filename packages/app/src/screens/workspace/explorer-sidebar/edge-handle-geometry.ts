@@ -2,7 +2,8 @@
 // drag up and down, as Salesforce Inspector's arrow is; its place is a fraction of the column height,
 // so it stays put across window sizes.
 
-export const EDGE_HANDLE_HEIGHT = 48;
+export const EDGE_HANDLE_HEIGHT = 56;
+export const EDGE_HANDLE_WIDTH = 20;
 export const EDGE_HANDLE_DEFAULT_OFFSET = 0.5;
 /** How far a press must move before it is a drag rather than a tap. */
 export const EDGE_HANDLE_DRAG_SLOP = 4;
