@@ -9,7 +9,12 @@ import {
   findExplorerDefaultPanel,
   withTabFirst,
 } from "@/plugins/workspace-panels/explorer-default";
-import { findPaneById } from "@/stores/workspace-layout-actions";
+import {
+  collectAllTabs,
+  findPaneById,
+  findPaneContainingTab,
+} from "@/stores/workspace-layout-actions";
+import { panelResourceKey } from "@/panels/panel-manifest";
 
 export type ExplorerSidebarView = "changes" | "files" | "pr";
 export type ExplorerSidebarPresentation = "overlay" | "dock" | "flyout";
@@ -71,6 +76,7 @@ export function showExplorerSidebar(input: ExplorerSidebarQuery): string | null 
 /**
  * Every time the Explorer opens, the panel a plugin declared as its default (`explorerDefault`) is shown, as its first
  * tab. A caller that opens a particular view (Changes, Files, a pull request) reveals that view after this, so it wins.
+ * A panel the user already opened in another pane stays there.
  */
 function revealExplorerDefaultTab(workspaceKey: string, paneId: string): void {
   const serverId = workspaceKey.slice(0, workspaceKey.indexOf(":"));
@@ -78,6 +84,14 @@ function revealExplorerDefaultTab(workspaceKey: string, paneId: string): void {
   const target = findExplorerDefaultPanel(pluginRegistry.getSnapshot(), serverId);
   if (!target) return;
   const store = useWorkspaceLayoutStore.getState();
+  const current = store.layoutByWorkspace[workspaceKey];
+  const key = panelResourceKey(target);
+  const existing = current
+    ? collectAllTabs(current.root).find((tab) => panelResourceKey(tab.target) === key)
+    : undefined;
+  if (current && existing && findPaneContainingTab(current.root, existing.tabId)?.id !== paneId) {
+    return;
+  }
   const tabId = store.openTab({
     workspaceKey,
     target,

@@ -3,16 +3,20 @@ import { StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { isWeb } from "@/constants/platform";
-import { flyoutPressCloses } from "./flyout-press";
+import { useOverlayRegistration, type KeyboardInputEvent } from "@/keyboard";
+import { useOverlayLayer } from "@/lib/overlay-root";
+import { clickClosesFlyout } from "./outside-click";
 
 /** How long the Explorer takes to slide in or out. */
 const SLIDE_MS = 180;
 
 interface ExplorerFlyoutProps {
   isOpen: boolean;
+  /** Whether its workspace is the one on screen; a retained background workspace's flyout listens for nothing. */
+  isWorkspaceActive: boolean;
   /** The Explorer's width, how far it slides. */
   width: number;
-  /** Close it: Escape or a press outside it, on web. */
+  /** Close it: Escape, or a click outside it on web. */
   onRequestClose(): void;
   /** Drawn on the flyout but outside its clipped body: the edge tab on its left edge. */
   attachment?: ReactNode;
@@ -23,10 +27,11 @@ interface ExplorerFlyoutProps {
 /**
  * The Explorer as a flyout over the workspace on wide layouts, the way Salesforce Inspector's panel opens over the page:
  * it slides in from the right edge over the chat and takes no width from it, keeps its edge tab on its left edge, and
- * closes from that tab, Escape, or a press anywhere outside it (on web). It stays rendered until the slide out ends.
+ * closes from that tab, Escape, or a click anywhere outside it (on web). It stays rendered until the slide out ends.
  */
 export function ExplorerFlyout({
   isOpen,
+  isWorkspaceActive,
   width,
   onRequestClose,
   attachment,
@@ -43,34 +48,36 @@ export function ExplorerFlyout({
     });
   }, [isOpen, progress]);
 
+  const listening = isOpen && isWorkspaceActive;
+  const layer = useOverlayLayer("floating");
+  useOverlayRegistration({
+    keys: ["Escape"],
+    active: listening,
+    layer,
+    manageFocus: false,
+    onKeyDown: (event: KeyboardInputEvent) => {
+      if (event.key !== "Escape") return false;
+      event.preventDefault();
+      onRequestClose();
+      return true;
+    },
+  });
+
   useEffect(() => {
-    if (!isWeb || !isOpen) return;
+    if (!isWeb || !listening) return;
     const node: unknown = nodeRef.current;
     if (!(node instanceof HTMLElement)) return;
     const flyout = node;
-    function onPointerDown(event: PointerEvent) {
+    function onClick(event: MouseEvent) {
       const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        flyoutPressCloses({
-          insideFlyout: flyout.contains(target),
-          keepsOpen: target.closest(KEEPS_OPEN) !== null,
-        })
-      ) {
-        onRequestClose();
-      }
+      if (target instanceof Element && clickClosesFlyout(target, flyout)) onRequestClose();
     }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !event.defaultPrevented) onRequestClose();
-    }
-    // Capture, so a press that a pane handles and stops still closes the flyout; the press itself goes through.
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [isOpen, onRequestClose]);
+    // A click, as Salesforce Inspector's outsidePopupClick: a drag ends without one, so a tab dragged from the main
+    // strip into the open flyout keeps it open. Capture, so a click a pane handles and stops still closes it; the
+    // click itself goes through.
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [listening, onRequestClose]);
 
   const slide = useAnimatedStyle(() => ({
     transform: [{ translateX: (1 - progress.value) * (width + SHADOW_REACH) }],
@@ -89,10 +96,6 @@ export function ExplorerFlyout({
     </Animated.View>
   );
 }
-
-/** What a press may land on without closing the flyout: its own edge tab, and the menus and dialogs it opens. */
-const KEEPS_OPEN =
-  '[data-testid="workspace-explorer-edge-handle"], [role="menu"], [role="dialog"], [role="listbox"], [role="tooltip"]';
 
 /** How far the shadow reaches past the flyout's left edge, slid out with it. */
 const SHADOW_REACH = 24;

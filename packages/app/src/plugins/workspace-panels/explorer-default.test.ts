@@ -72,12 +72,9 @@ describe("findExplorerDefaultPanel", () => {
     });
   });
 
-  it("finds none when no panel on the host asks, or one asks without the explorer location", () => {
+  it("finds none when no panel on the host asks", () => {
     expect(
-      findExplorerDefaultPanel(
-        [plugin("a", "srv-1", [{ explorerDefault: true, locations: ["workspace"] }])],
-        "srv-1",
-      ),
+      findExplorerDefaultPanel([plugin("plain", "srv-1", [{ locations: ["explorer"] }])], "srv-1"),
     ).toBeNull();
     expect(findExplorerDefaultPanel([], "srv-1")).toBeNull();
   });

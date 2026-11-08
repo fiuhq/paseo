@@ -11,12 +11,7 @@ export function findExplorerDefaultPanel(
 ): PluginWorkspaceTabTarget | null {
   for (const plugin of plugins) {
     if (plugin.serverId !== serverId) continue;
-    const panel = plugin.workspacePanels.find(
-      (candidate) =>
-        candidate.explorerDefault === true &&
-        candidate.context === "workspace" &&
-        candidate.locations.includes("explorer"),
-    );
+    const panel = plugin.workspacePanels.find((candidate) => candidate.explorerDefault === true);
     if (panel)
       return { kind: "plugin", pluginId: plugin.id, panelId: panel.id, context: "workspace" };
   }

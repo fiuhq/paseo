@@ -111,14 +111,20 @@ accept only reordering inside the source pane.
 
 Cmd+E shows or hides Explorer. A plugin panel that declares `explorerDefault` is the Explorer's
 default tab: every time Explorer opens it is moved first and shown, and a caller that opens a
-particular view (Changes, Files, a pull request) reveals that view afterwards, so it wins
+particular view (Changes, Files, a pull request) reveals that view afterwards, so it wins. If the
+user opened that panel in another pane, it stays there
 (`workspace-tabs/explorer-sidebar.ts`, `plugins/workspace-panels/explorer-default.ts`).
 
-On wide layouts **Settings → Layout → Explorer sidebar opens** picks the shell. **Over the chat**
-(`flyout`, the default, `explorer-sidebar/flyout.tsx`) slides Explorer in from the right edge over
-the workspace without taking its width, the way Salesforce Inspector's panel opens over the page:
-a press outside it or Escape closes it on web (presses on its menus and dialogs, which render
-outside its node, do not). **Beside the chat** (`dock`) reserves width as below.
+On wide layouts **Settings → General → Explorer → Explorer sidebar opens** picks the shell, on every
+platform. **Over the chat** (`flyout`, the default, `explorer-sidebar/flyout.tsx`) slides Explorer
+in from the right edge over the workspace without taking its width, the way Salesforce Inspector's
+panel opens over the page. Escape closes it through the overlay keyboard registry, so it takes the
+key before the agent-interrupt shortcut. On web a click outside it closes it too
+(`explorer-sidebar/outside-click.ts`). It listens for a click, not a pointer press, so a tab dragged
+from the main strip into it keeps it open. Clicks on its edge tab and the header toggle, which toggle
+it themselves, and on its menus and dialogs, which render outside its node, do not close it. A
+retained background workspace's flyout listens for neither. **Beside the chat** (`dock`) reserves
+width as below.
 
 A small edge tab toggles Explorer too (`explorer-sidebar/edge-handle.tsx`). Beside a dock it sits on
 the workspace column's right edge: the window edge while Explorer is hidden, Explorer's border while

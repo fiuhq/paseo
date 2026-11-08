@@ -70,6 +70,7 @@ function ExplorerFrameBase({
   return (
     <ExplorerFlyout
       isOpen={isOpen}
+      isWorkspaceActive={isWorkspaceActive}
       width={width}
       onRequestClose={onRequestClose ?? noop}
       attachment={attachment}

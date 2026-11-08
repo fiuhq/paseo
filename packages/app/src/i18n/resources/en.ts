@@ -2385,6 +2385,7 @@ export const en = {
     },
     layout: {
       explorerPresentation: {
+        title: "Explorer",
         label: "Explorer sidebar opens",
         options: {
           flyout: "Over the chat",

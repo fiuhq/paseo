@@ -113,6 +113,18 @@ function ExplorerPresentationRow() {
   );
 }
 
+/** Whether the Explorer opens over the chat or beside it, on every platform with a wide layout. */
+export function ExplorerSection() {
+  const { t } = useTranslation();
+  return (
+    <SettingsSection title={t("settings.layout.explorerPresentation.title")}>
+      <SettingsCard>
+        <ExplorerPresentationRow />
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
 /** Where things open: files, diffs, subagents, pull requests, and script URLs. Desktop only. */
 export function OpenLocationSection() {
   const { t } = useTranslation();
@@ -132,7 +144,6 @@ export function OpenLocationSection() {
   return (
     <SettingsSection title={t("settings.layout.openInSidePane.title")}>
       <SettingsCard>
-        <ExplorerPresentationRow />
         {SOURCES.map((source) => (
           <OpenLocationRow
             key={source}
