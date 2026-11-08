@@ -155,7 +155,11 @@ export function ExplorerEdgeHandle({
   return <ExplorerEdgeHandleTab {...props} />;
 }
 
-/** A finger needs more than the 16-point tab; the extra reach stays off the content beside it. */
+/**
+ * A finger needs more than the 16-point tab. The reach is the same on both sides: outward it falls
+ * off the screen, inward it takes a 12-point band of the content beside the tab, beside 48 points of
+ * height only.
+ */
 const HIT_SLOP = { top: 8, bottom: 8, left: 12, right: 12 } as const;
 
 const styles = StyleSheet.create((theme) => ({
