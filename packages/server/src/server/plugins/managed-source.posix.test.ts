@@ -123,7 +123,8 @@ describe("managed Git plugin sources", () => {
     for (const name of ["paseo-plugin.json", "index.server.ts"])
       await rename(path.join(repository, name), path.join(nested, name));
     await mkdir(path.join(repository, "packages", "shared"), { recursive: true });
-    await writeFile(path.join(repository, "packages", "shared", "index.ts"), "export {};\n");
+    // No newline: Windows runners check out with core.autocrlf, which would turn it into CRLF.
+    await writeFile(path.join(repository, "packages", "shared", "index.ts"), "export {};");
     await commitAll(repository, "workspace member plugin");
     await runGitCommand(["config", "uploadpack.allowFilter", "true"], { cwd: repository });
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-full-"));
@@ -134,7 +135,7 @@ describe("managed Git plugin sources", () => {
     });
     const checkoutRoot = path.resolve(candidate.directory, "..", "..");
     expect(await readFile(path.join(checkoutRoot, "packages", "shared", "index.ts"), "utf8")).toBe(
-      "export {};\n",
+      "export {};",
     );
   });
 
