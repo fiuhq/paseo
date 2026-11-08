@@ -4,6 +4,7 @@ import type {
   PluginSidebarWorkspaceChildrenProps,
 } from "@getpaseo/plugin/client";
 import { createContext, useCallback, useContext, type ComponentType, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
@@ -79,6 +80,7 @@ const chevronColor = (theme: { colors: { foregroundMuted: string } }) => ({
 
 /** The row's expand control, drawn only while such a view is active. */
 export function SidebarWorkspaceChevron({ workspaceKey }: { workspaceKey: string }) {
+  const { t } = useTranslation();
   const view = useContext(WorkspaceChildrenContext);
   const expanded = useIsExpanded(workspaceKey);
   const toggle = useExpandedWorkspaces((state) => state.toggle);
@@ -87,7 +89,7 @@ export function SidebarWorkspaceChevron({ workspaceKey }: { workspaceKey: string
   const Chevron = expanded ? ThemedChevronDown : ThemedChevronRight;
   return (
     <ToolbarButton
-      label={expanded ? "Hide agents" : "Show agents"}
+      label={expanded ? t("sidebar.view.collapseWorkspace") : t("sidebar.view.expandWorkspace")}
       compact
       onPress={onPress}
       testID={`sidebar-workspace-expand-${workspaceKey}`}

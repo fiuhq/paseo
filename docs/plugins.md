@@ -576,7 +576,9 @@ When the host’s **Check usage** switch is off, the daemon rejects usage reques
 
 The sidebar view slot is global across hosts, while header and footer contributions retain their
 host selection. The slot owns selection loading, fallback and the error boundary; the plugin owns
-its layout. This keeps plugin failures from removing navigation or recovery controls. The
+its layout. This keeps plugin failures from removing navigation or recovery controls. A
+`WorkspaceChildren` view keeps Paseo's sidebar; the app owns the row chevron and per-device
+expansion state, and an error boundary per row contains the plugin's section. The
 [sidebar view guide](../public-docs/plugins/sidebar-views.md) owns the author API.
 
 ## Contribute sidebar items

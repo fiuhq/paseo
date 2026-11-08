@@ -1230,6 +1230,8 @@ export const es: TranslationResources = {
     view: {
       failed: "No se pudo cargar la vista de la barra lateral.",
       useDefault: "Usar vista predeterminada",
+      expandWorkspace: "Expandir espacio de trabajo",
+      collapseWorkspace: "Contraer espacio de trabajo",
       readFailed: "No se pudo cargar tu preferencia de vista de la barra lateral.",
       agentUnavailable: "El agente ya no está disponible",
       terminalUnavailable: "La terminal ya no está disponible",

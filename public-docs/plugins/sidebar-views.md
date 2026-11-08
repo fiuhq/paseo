@@ -58,6 +58,23 @@ installing the plugin leaves the current view selected. Header navigation, plugi
 the callout and footer stay visible. A missing or disabled view falls back to Default view.
 A view that throws shows a placeholder with **Use default view**.
 
+## Keep Paseo's sidebar
+
+Pass `WorkspaceChildren` instead of `Component` to keep Paseo's own sidebar and add a section
+under each workspace row. Pass exactly one of the two. While the view is selected, Paseo draws an
+**Expand workspace** / **Collapse workspace** chevron on every workspace row in every grouping.
+An expanded row renders `WorkspaceChildren` with the sidebar view props plus the row's
+`workspace` ref. Paseo keeps which rows are expanded per device. A section that throws shows its
+error inside that row; the rest of the sidebar keeps working.
+
+```tsx
+function WorkspaceAgents({ workspace }: PluginSidebarWorkspaceChildrenProps) {
+  const agents = useAgents({ where: (agent) => agent.workspace.key === workspace.key });
+  return agents.map((agent) => <AgentRow key={agent.key} reference={agent} />);
+}
+client.addSidebarView({ id: "agents", title: "Agents", WorkspaceChildren: WorkspaceAgents });
+```
+
 The view renders once across connected hosts. `active.workspace` and `active.agent` are refs or
 `null`. Use `navigation.openWorkspace`, `openAgent`, `openTerminal` or `openProject` with a ref;
 `openProject` starts the new workspace flow. Navigation closes the compact sidebar. Call

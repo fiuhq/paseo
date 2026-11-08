@@ -1220,6 +1220,8 @@ export const ptBR: TranslationResources = {
     view: {
       failed: "Não foi possível carregar a visualização da barra lateral.",
       useDefault: "Usar visualização padrão",
+      expandWorkspace: "Expandir workspace",
+      collapseWorkspace: "Recolher workspace",
       readFailed: "Não foi possível carregar sua preferência de visualização da barra lateral.",
       agentUnavailable: "O agente não está mais disponível",
       terminalUnavailable: "O terminal não está mais disponível",

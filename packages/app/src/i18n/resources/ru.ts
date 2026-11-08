@@ -1211,6 +1211,8 @@ export const ru: TranslationResources = {
     view: {
       failed: "Не удалось загрузить вид боковой панели.",
       useDefault: "Использовать стандартный вид",
+      expandWorkspace: "Развернуть рабочее пространство",
+      collapseWorkspace: "Свернуть рабочее пространство",
       readFailed: "Не удалось загрузить настройку вида боковой панели.",
       agentUnavailable: "Агент больше недоступен",
       terminalUnavailable: "Терминал больше недоступен",

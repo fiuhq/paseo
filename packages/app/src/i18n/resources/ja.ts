@@ -1207,6 +1207,8 @@ export const ja: TranslationResources = {
     view: {
       failed: "サイドバーのビューを読み込めませんでした。",
       useDefault: "デフォルトのビューを使用",
+      expandWorkspace: "ワークスペースを展開",
+      collapseWorkspace: "ワークスペースを折りたたむ",
       readFailed: "サイドバーのビュー設定を読み込めませんでした。",
       agentUnavailable: "このエージェントは利用できなくなりました",
       terminalUnavailable: "このターミナルは利用できなくなりました",

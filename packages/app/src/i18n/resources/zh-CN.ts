@@ -1186,6 +1186,8 @@ export const zhCN: TranslationResources = {
     view: {
       failed: "无法加载侧边栏视图。",
       useDefault: "使用默认视图",
+      expandWorkspace: "展开工作区",
+      collapseWorkspace: "折叠工作区",
       readFailed: "无法加载侧边栏视图偏好设置。",
       agentUnavailable: "此智能体已不可用",
       terminalUnavailable: "此终端已不可用",

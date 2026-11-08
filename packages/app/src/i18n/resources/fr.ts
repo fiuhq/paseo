@@ -1223,6 +1223,8 @@ export const fr: TranslationResources = {
     view: {
       failed: "Impossible de charger la vue de la barre latérale.",
       useDefault: "Utiliser la vue par défaut",
+      expandWorkspace: "Développer l'espace de travail",
+      collapseWorkspace: "Réduire l'espace de travail",
       readFailed: "Impossible de charger votre préférence de vue de la barre latérale.",
       agentUnavailable: "Cet agent n’est plus disponible",
       terminalUnavailable: "Ce terminal n’est plus disponible",
