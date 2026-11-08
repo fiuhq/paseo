@@ -84,12 +84,21 @@ export function useWorkspaceRowsExpandable(): boolean {
 }
 
 /** The row's expand control, drawn only while such a view is active. */
-export function SidebarWorkspaceChevron({ workspaceKey }: { workspaceKey: string }) {
+export function SidebarWorkspaceChevron({
+  workspaceKey,
+  onFocusChange,
+}: {
+  workspaceKey: string;
+  /** Lets a row that shows the chevron only on hover also show it while it has keyboard focus. */
+  onFocusChange?: (focused: boolean) => void;
+}) {
   const { t } = useTranslation();
   const view = useContext(WorkspaceChildrenContext);
   const expanded = useIsExpanded(workspaceKey);
   const toggle = useExpandedWorkspaces((state) => state.toggle);
   const onPress = useCallback(() => toggle(workspaceKey), [toggle, workspaceKey]);
+  const onFocus = useCallback(() => onFocusChange?.(true), [onFocusChange]);
+  const onBlur = useCallback(() => onFocusChange?.(false), [onFocusChange]);
   if (!view) return null;
   const Chevron = expanded ? ThemedChevronDown : ThemedChevronRight;
   return (
@@ -97,6 +106,8 @@ export function SidebarWorkspaceChevron({ workspaceKey }: { workspaceKey: string
       label={expanded ? t("sidebar.view.collapseWorkspace") : t("sidebar.view.expandWorkspace")}
       compact
       onPress={onPress}
+      onFocus={onFocus}
+      onBlur={onBlur}
       testID={`sidebar-workspace-expand-${workspaceKey}`}
       style={styles.chevron}
     >

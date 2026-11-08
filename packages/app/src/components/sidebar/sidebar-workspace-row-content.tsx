@@ -146,9 +146,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
   const expandable = useWorkspaceRowsExpandable();
   const compact = useIsCompactFormFactor();
-  // Like a project row, an expandable row swaps its leading visual for the chevron while hovered,
-  // so it takes no column of its own; touch has no hover, so there it stays.
-  const showChevron = expandable && (isHovered || isNative || compact);
+  const [chevronFocused, setChevronFocused] = useState(false);
   const workspaceBranchTextStyle = useMemo(
     () => [
       styles.workspaceBranchText,
@@ -159,33 +157,49 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     [isHovered, isCreating, titleHeld],
   );
 
-  let leading: ReactNode;
-  if (showChevron) {
+  const visual = leadingProjectName ? (
+    <ProjectStatusIndicator
+      iconDataUri={leadingProjectIconDataUri}
+      displayName={leadingProjectName}
+      projectViewKey={workspace.projectViewKey}
+      statusBucket={workspace.statusBucket}
+      backdrop={backdrop}
+      loading={isLoading}
+      testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
+    />
+  ) : (
+    <WorkspaceStatusIndicator
+      bucket={workspace.statusBucket}
+      workspaceKind={workspace.workspaceKind}
+      loading={isLoading}
+      reserveIdleSpace={reserveIdleStatusIndicatorSpace}
+    />
+  );
+  let leading: ReactNode = visual;
+  if (expandable && (isNative || compact)) {
+    // Touch has no hover, so the chevron keeps a column of its own and the status stays visible.
     leading = (
-      <View style={styles.workspaceStatusDot}>
-        <SidebarWorkspaceChevron workspaceKey={workspace.workspaceKey} />
+      <>
+        <View style={styles.workspaceStatusDot}>
+          <SidebarWorkspaceChevron workspaceKey={workspace.workspaceKey} />
+        </View>
+        {visual}
+      </>
+    );
+  } else if (expandable) {
+    // Like a project row, the chevron takes the leading visual's place while the row is hovered,
+    // so it needs no column. It stays mounted on top, only hidden, so keyboard focus reaches it.
+    const shown = isHovered || chevronFocused;
+    leading = (
+      <View style={styles.leadingSwap}>
+        <View style={shown ? styles.leadingHidden : undefined}>{visual}</View>
+        <View style={shown ? styles.leadingOverlay : styles.leadingOverlayHidden}>
+          <SidebarWorkspaceChevron
+            workspaceKey={workspace.workspaceKey}
+            onFocusChange={setChevronFocused}
+          />
+        </View>
       </View>
-    );
-  } else if (leadingProjectName) {
-    leading = (
-      <ProjectStatusIndicator
-        iconDataUri={leadingProjectIconDataUri}
-        displayName={leadingProjectName}
-        projectViewKey={workspace.projectViewKey}
-        statusBucket={workspace.statusBucket}
-        backdrop={backdrop}
-        loading={isLoading}
-        testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
-      />
-    );
-  } else {
-    leading = (
-      <WorkspaceStatusIndicator
-        bucket={workspace.statusBucket}
-        workspaceKind={workspace.workspaceKind}
-        loading={isLoading}
-        reserveIdleSpace={reserveIdleStatusIndicatorSpace}
-      />
     );
   }
 
@@ -552,6 +566,31 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     top: 1,
     right: 0,
+  },
+  leadingSwap: {
+    position: "relative",
+    minWidth: densityIconBox("md"),
+    minHeight: TITLE_LINE_HEIGHT,
+  },
+  leadingHidden: { opacity: 0 },
+  leadingOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leadingOverlayHidden: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0,
   },
   workspaceStatusDot: {
     position: "relative",
