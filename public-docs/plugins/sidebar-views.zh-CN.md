@@ -56,7 +56,7 @@ export default function contribute(client: PluginClientContext) {
 
 ## 保留 Paseo 的侧边栏 {#keep-paseos-sidebar}
 
-传入 `WorkspaceChildren` 而非 `Component`，即可保留 Paseo 自身的侧边栏，并在每个工作区行下添加一个区域。两者只能传入其一。选中该视图后，Paseo 会在每种分组的每个工作区行上显示**展开工作区** / **折叠工作区**箭头。展开的行会渲染 `WorkspaceChildren`，传入侧边栏视图属性以及该行的 `workspace` 引用。Paseo 按设备记住哪些行已展开。某个区域抛出异常时，错误只显示在该行内，侧边栏其余部分照常工作。
+传入 `WorkspaceChildren` 而非 `Component`，即可保留 Paseo 自身的侧边栏，并在每个工作区行下添加一个区域。两者只能传入其一。选中该视图后，每种分组的每个工作区行都会有**展开工作区** / **折叠工作区**箭头。使用指针时，悬停在该行上或用 Tab 键聚焦到箭头时，箭头会替换该行的状态图标。在触屏和紧凑布局中，箭头位于图标前的独立列中，Paseo 会按该列宽度缩进区域，因此同一个缩进值在两种布局中都能让区域与该行标题对齐。展开的行会渲染 `WorkspaceChildren`，传入侧边栏视图属性以及该行的 `workspace` 引用。Paseo 按设备记住哪些行已展开。某个区域抛出异常时，错误只显示在该行内，侧边栏其余部分照常工作。
 
 ```tsx
 function WorkspaceAgents({ workspace }: PluginSidebarWorkspaceChildrenProps) {

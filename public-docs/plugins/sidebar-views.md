@@ -66,8 +66,11 @@ The view renders once across connected hosts. `active.workspace` and `active.age
 ## Keep Paseo's sidebar
 
 Pass `WorkspaceChildren` instead of `Component` to keep Paseo's own sidebar and add a section
-under each workspace row. Pass exactly one of the two. While the view is selected, Paseo draws an
-**Expand workspace** / **Collapse workspace** chevron on every workspace row in every grouping.
+under each workspace row. Pass exactly one of the two. While the view is selected, every
+workspace row in every grouping gets an **Expand workspace** / **Collapse workspace** chevron. With
+a pointer, the chevron takes the place of the row's status icon while you hover the row or tab to
+it. On touch and compact layouts, it sits in its own column before the icon, and Paseo indents the
+section by that column, so one indent lines your section up under the row's title in both layouts.
 An expanded row renders `WorkspaceChildren` with the sidebar view props plus the row's
 `workspace` ref. Paseo keeps which rows are expanded per device. A section that throws shows its
 error inside that row; the rest of the sidebar keeps working.
