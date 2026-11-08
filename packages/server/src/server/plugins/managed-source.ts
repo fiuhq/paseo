@@ -564,11 +564,13 @@ async function checkout(
       sparsePath !== "." &&
       !(await mayReadOutsideDirectory(checkoutRoot, commit, sparsePath, envOverlay))
     ) {
-      await runGitCommand(["sparse-checkout", "set", "--cone", "--", sparsePath], {
-        cwd: checkoutRoot,
-        envOverlay,
-        timeout: GIT_TIMEOUT_MS,
-      });
+      // `init --cone` then `set` rather than `set --cone`, which needs Git 2.35.
+      for (const args of [
+        ["sparse-checkout", "init", "--cone"],
+        ["sparse-checkout", "set", "--", sparsePath],
+      ]) {
+        await runGitCommand(args, { cwd: checkoutRoot, envOverlay, timeout: GIT_TIMEOUT_MS });
+      }
     }
     await runGitCommand(["checkout", "--detach", commit], {
       cwd: checkoutRoot,
