@@ -168,7 +168,9 @@ paseo plugin install git:owner/monorepo:plugins/review
 paseo plugin install github:owner/repository --ref main
 ```
 
-Append `:relative/path` for a plugin below the repository root. `--ref` chooses the initial
+Append `:relative/path` for a plugin below the repository root. Git sources clone without file
+contents (`--filter=blob:none`); a plugin whose manifest sets `"checkout": "directory"` gets a
+sparse checkout of its own directory, every other plugin the whole tree. `--ref` chooses the initial
 branch, tag, or commit once. Updates of explicit Git sources resolve the remote's default HEAD
 and ask for approval. `ls` reports the installed commit without contacting the remote.
 

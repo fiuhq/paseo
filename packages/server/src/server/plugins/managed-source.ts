@@ -562,7 +562,7 @@ async function checkout(
     const sparsePath = pluginPath.split(path.sep).join("/");
     if (
       sparsePath !== "." &&
-      !(await mayReadOutsideDirectory(checkoutRoot, commit, sparsePath, envOverlay))
+      (await declaresSelfContained(checkoutRoot, commit, sparsePath, envOverlay))
     ) {
       // `init --cone` then `set` rather than `set --cone`, which needs Git 2.35.
       for (const args of [
@@ -588,12 +588,12 @@ async function checkout(
 }
 
 /**
- * Whether the plugin's preparation could read files beside its directory. Only a manifest `build`
- * runs anything in the checkout (an `npm ci` in a workspace member needs its siblings); without one
- * the compiler reads the plugin directory alone. An unreadable manifest gets the full checkout, and
- * manifest validation then reports it.
+ * Whether the plugin's manifest at `commit` declares `"checkout": "directory"`. Only the plugin knows
+ * whether it reaches outside its directory (a build step, tsconfig paths, a symlink, a workspace
+ * sibling), so the whole repository is checked out unless it says otherwise. An unreadable manifest
+ * gets the full checkout, and manifest validation then reports it.
  */
-async function mayReadOutsideDirectory(
+async function declaresSelfContained(
   checkoutRoot: string,
   commit: string,
   sparsePath: string,
@@ -606,9 +606,14 @@ async function mayReadOutsideDirectory(
       timeout: GIT_TIMEOUT_MS,
     });
     const manifest: unknown = JSON.parse(stdout);
-    return typeof manifest !== "object" || manifest === null || "build" in manifest;
+    return (
+      typeof manifest === "object" &&
+      manifest !== null &&
+      "checkout" in manifest &&
+      manifest.checkout === "directory"
+    );
   } catch {
-    return true;
+    return false;
   }
 }
 

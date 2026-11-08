@@ -30,6 +30,9 @@ async function createRepository(): Promise<string> {
   return repository;
 }
 
+const SELF_CONTAINED = JSON.stringify({ id: "managed-example", checkout: "directory" });
+const SELF_CONTAINED_MANIFEST = (directory: string) => path.join(directory, "paseo-plugin.json");
+
 async function commitAll(repository: string, message: string): Promise<string> {
   await runGitCommand(["add", "-A"], { cwd: repository });
   await runGitCommand(["commit", "-m", message], { cwd: repository });
@@ -113,21 +116,17 @@ async function serveSmartHttp(
 }
 
 describe("managed Git plugin sources", () => {
-  it("checks out the whole repository for a plugin whose build may read beside its directory", async () => {
+  it("checks out the whole repository unless the plugin declares its directory self-contained", async () => {
     const repository = await createRepository();
     const nested = path.join(repository, "plugins", "review");
     await mkdir(nested, { recursive: true });
-    await writeFile(
-      path.join(nested, "paseo-plugin.json"),
-      JSON.stringify({ id: "managed-example", build: [["npm", "ci"]] }),
-    );
-    await rename(path.join(repository, "index.server.ts"), path.join(nested, "index.server.ts"));
-    await rm(path.join(repository, "paseo-plugin.json"));
+    for (const name of ["paseo-plugin.json", "index.server.ts"])
+      await rename(path.join(repository, name), path.join(nested, name));
     await mkdir(path.join(repository, "packages", "shared"), { recursive: true });
     await writeFile(path.join(repository, "packages", "shared", "index.ts"), "export {};\n");
     await commitAll(repository, "workspace member plugin");
     await runGitCommand(["config", "uploadpack.allowFilter", "true"], { cwd: repository });
-    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-build-"));
+    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-full-"));
     roots.push(home);
     const candidate = await new ManagedPluginSources(home).prepareInstall({
       source: pathToFileURL(repository).href,
@@ -145,6 +144,7 @@ describe("managed Git plugin sources", () => {
     await mkdir(nested, { recursive: true });
     for (const name of ["paseo-plugin.json", "index.server.ts"])
       await rename(path.join(repository, name), path.join(nested, name));
+    await writeFile(SELF_CONTAINED_MANIFEST(nested), SELF_CONTAINED);
     await mkdir(path.join(repository, "app"));
     await writeFile(path.join(repository, "app", "bundle.js"), "unrelated application code\n");
     await commitAll(repository, "plugin beside an application");
@@ -163,7 +163,7 @@ describe("managed Git plugin sources", () => {
       const checkoutRoot = path.resolve(candidate.directory, "..", "..");
       expect(
         JSON.parse(await readFile(path.join(candidate.directory, "paseo-plugin.json"), "utf8")),
-      ).toEqual({ id: "managed-example" });
+      ).toEqual({ id: "managed-example", checkout: "directory" });
       const { stdout } = await runGitCommand(["rev-list", "--objects", "--missing=print", "HEAD"], {
         cwd: checkoutRoot,
       });
@@ -179,6 +179,7 @@ describe("managed Git plugin sources", () => {
     await mkdir(nested, { recursive: true });
     for (const name of ["paseo-plugin.json", "index.server.ts"])
       await rename(path.join(repository, name), path.join(nested, name));
+    await writeFile(SELF_CONTAINED_MANIFEST(nested), SELF_CONTAINED);
     await mkdir(path.join(repository, "app"));
     await writeFile(path.join(repository, "app", "bundle.js"), "unrelated application code\n");
     await commitAll(repository, "plugin beside an application");
@@ -196,7 +197,7 @@ describe("managed Git plugin sources", () => {
     const checkoutRoot = path.resolve(candidate.directory, "..", "..");
     expect(
       JSON.parse(await readFile(path.join(candidate.directory, "paseo-plugin.json"), "utf8")),
-    ).toEqual({ id: "managed-example" });
+    ).toEqual({ id: "managed-example", checkout: "directory" });
     await expect(readFile(path.join(checkoutRoot, "app", "bundle.js"))).rejects.toThrow();
     const { stdout } = await runGitCommand(["rev-list", "--objects", "--missing=print", "HEAD"], {
       cwd: checkoutRoot,

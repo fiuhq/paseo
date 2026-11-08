@@ -34,6 +34,9 @@ const PluginManifestSchema = z.object({
   // A misspelled requirement must not silently disable compatibility checks.
   requirements: PluginRequirementsSchema.strict().optional(),
   build: z.array(PluginBuildCommandSchema).min(1).optional(),
+  // "directory": the plugin needs nothing outside its own directory, so a Git install from a
+  // subdirectory checks out only that directory. Anything else checks out the whole repository.
+  checkout: z.enum(["repository", "directory"]).optional(),
 });
 
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;

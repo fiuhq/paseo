@@ -80,6 +80,7 @@ my-plugin/
 | `translations` | 否       | 其他语言的展示文本，由注册表读取，Paseo 会忽略它。见[其他语言](/docs/plugins/publishing#other-languages)。 |
 | `requirements` | 否       | 支持的 Paseo 版本，见下文。                                                                                |
 | `build`        | 否       | 准备命令，见 CLI 参考。                                                                                    |
+| `checkout`     | 否       | 插件不需要其目录以外的任何文件时设为 `"directory"`。从子目录进行的 Git 安装随后只检出该目录。              |
 
 路径相对于 `paseo-plugin.json`，使用正斜杠，并且不能包含 `..` 片段。即使 `media` 在运行时 manifest 中是可选的，可视化插件的注册表展示页仍然需要一张界面图片。接受的格式和展示页要求见[图标和截图](/docs/plugins/publishing#icons-and-screenshots)。Paseo 会校验这些引用，但不会打开本地资源或获取 URL。
 
