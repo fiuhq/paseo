@@ -193,7 +193,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     leading = (
       <View style={styles.leadingSwap}>
         <View style={shown ? styles.leadingHidden : undefined}>{visual}</View>
-        <View style={shown ? styles.leadingOverlay : styles.leadingOverlayHidden}>
+        <View style={[styles.leadingOverlay, !shown && styles.leadingHidden]}>
           <SidebarWorkspaceChevron
             workspaceKey={workspace.workspaceKey}
             onFocusChange={setChevronFocused}
@@ -582,16 +582,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  leadingOverlayHidden: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    opacity: 0,
-  },
+
   workspaceStatusDot: {
     position: "relative",
     width: densityIconBox("md"),

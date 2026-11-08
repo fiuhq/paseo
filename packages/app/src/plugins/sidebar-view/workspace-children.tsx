@@ -13,6 +13,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
+import { isNative, isWeb } from "@/constants/platform";
+import { useIsCompactFormFactor } from "@/constants/layout";
+import { densityIconBox } from "@/styles/density";
 import { entityRefs } from "../client-state/refs";
 import { PluginEnvironmentProvider } from "../popover";
 import { SurfaceErrorBoundary } from "../surface-error-boundary";
@@ -97,7 +100,14 @@ export function SidebarWorkspaceChevron({
   const expanded = useIsExpanded(workspaceKey);
   const toggle = useExpandedWorkspaces((state) => state.toggle);
   const onPress = useCallback(() => toggle(workspaceKey), [toggle, workspaceKey]);
-  const onFocus = useCallback(() => onFocusChange?.(true), [onFocusChange]);
+  // A mouse click focuses the button too; only keyboard focus should keep it drawn.
+  const onFocus = useCallback(
+    (event: { target: unknown }) =>
+      onFocusChange?.(
+        !isWeb || (event.target instanceof Element && event.target.matches(":focus-visible")),
+      ),
+    [onFocusChange],
+  );
   const onBlur = useCallback(() => onFocusChange?.(false), [onFocusChange]);
   if (!view) return null;
   const Chevron = expanded ? ThemedChevronDown : ThemedChevronRight;
@@ -128,10 +138,16 @@ export function SidebarWorkspaceChildren({
 }) {
   const view = useContext(WorkspaceChildrenContext);
   const expanded = useIsExpanded(workspaceKey);
+  const compact = useIsCompactFormFactor();
   if (!view || !expanded) return null;
   const { Component } = view;
   return (
-    <View testID={`sidebar-workspace-children-${workspaceKey}`}>
+    // On touch the row gives the chevron a column of its own, so the section moves right by that
+    // column; a plugin indents from the same place in either layout.
+    <View
+      testID={`sidebar-workspace-children-${workspaceKey}`}
+      style={isNative || compact ? styles.touchIndent : undefined}
+    >
       <SurfaceErrorBoundary installation={view.installation} Surface={Component}>
         <PluginEnvironmentProvider environment={view.environment}>
           <Component {...view.props} workspace={entityRefs.workspace(serverId, workspaceId)} />
@@ -141,6 +157,13 @@ export function SidebarWorkspaceChildren({
   );
 }
 
-const styles = StyleSheet.create(() => ({
+const chevronColumn = densityIconBox("md");
+const styles = StyleSheet.create((theme) => ({
+  touchIndent: {
+    paddingLeft: {
+      xs: chevronColumn.xs + theme.spacing[2],
+      md: chevronColumn.md + theme.spacing[2],
+    },
+  },
   chevron: { width: 20, height: 20, padding: 0 },
 }));
