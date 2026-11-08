@@ -39,7 +39,10 @@ import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
 import {
   SidebarWorkspaceChevron,
   SidebarWorkspaceChildren,
+  useWorkspaceRowsExpandable,
 } from "@/plugins/sidebar-view/workspace-children";
+import { isNative } from "@/constants/platform";
+import { useIsCompactFormFactor } from "@/constants/layout";
 
 const needsInputColorMapping = (theme: Theme) => ({
   color: theme.colors.surface0,
@@ -141,6 +144,11 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   // The workspace carries label names; their colors live in its host's catalog, so the row is
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
+  const expandable = useWorkspaceRowsExpandable();
+  const compact = useIsCompactFormFactor();
+  // Like a project row, an expandable row swaps its leading visual for the chevron while hovered,
+  // so it takes no column of its own; touch has no hover, so there it stays.
+  const showChevron = expandable && (isHovered || isNative || compact);
   const workspaceBranchTextStyle = useMemo(
     () => [
       styles.workspaceBranchText,
@@ -151,28 +159,40 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     [isHovered, isCreating, titleHeld],
   );
 
+  let leading: ReactNode;
+  if (showChevron) {
+    leading = (
+      <View style={styles.workspaceStatusDot}>
+        <SidebarWorkspaceChevron workspaceKey={workspace.workspaceKey} />
+      </View>
+    );
+  } else if (leadingProjectName) {
+    leading = (
+      <ProjectStatusIndicator
+        iconDataUri={leadingProjectIconDataUri}
+        displayName={leadingProjectName}
+        projectViewKey={workspace.projectViewKey}
+        statusBucket={workspace.statusBucket}
+        backdrop={backdrop}
+        loading={isLoading}
+        testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
+      />
+    );
+  } else {
+    leading = (
+      <WorkspaceStatusIndicator
+        bucket={workspace.statusBucket}
+        workspaceKind={workspace.workspaceKind}
+        loading={isLoading}
+        reserveIdleSpace={reserveIdleStatusIndicatorSpace}
+      />
+    );
+  }
+
   return (
     <View style={styles.workspaceRowContent}>
       <View style={styles.workspaceRowMain}>
-        <SidebarWorkspaceChevron workspaceKey={workspace.workspaceKey} />
-        {leadingProjectName ? (
-          <ProjectStatusIndicator
-            iconDataUri={leadingProjectIconDataUri}
-            displayName={leadingProjectName}
-            projectViewKey={workspace.projectViewKey}
-            statusBucket={workspace.statusBucket}
-            backdrop={backdrop}
-            loading={isLoading}
-            testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
-          />
-        ) : (
-          <WorkspaceStatusIndicator
-            bucket={workspace.statusBucket}
-            workspaceKind={workspace.workspaceKind}
-            loading={isLoading}
-            reserveIdleSpace={reserveIdleStatusIndicatorSpace}
-          />
-        )}
+        {leading}
         <View style={styles.workspaceContentColumn}>
           <View style={styles.workspaceTitleRow}>
             <Text

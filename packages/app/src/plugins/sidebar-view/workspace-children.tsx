@@ -78,6 +78,11 @@ const chevronColor = (theme: { colors: { foregroundMuted: string } }) => ({
   color: theme.colors.foregroundMuted,
 });
 
+/** Whether rows are expandable: a sidebar view with WorkspaceChildren is selected. */
+export function useWorkspaceRowsExpandable(): boolean {
+  return useContext(WorkspaceChildrenContext) !== null;
+}
+
 /** The row's expand control, drawn only while such a view is active. */
 export function SidebarWorkspaceChevron({ workspaceKey }: { workspaceKey: string }) {
   const { t } = useTranslation();
