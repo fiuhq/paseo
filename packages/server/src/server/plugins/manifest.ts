@@ -35,8 +35,8 @@ const PluginManifestSchema = z.object({
   requirements: PluginRequirementsSchema.strict().optional(),
   build: z.array(PluginBuildCommandSchema).min(1).optional(),
   // "directory": the plugin needs nothing outside its own directory, so a Git install from a
-  // subdirectory checks out only that directory. Anything else checks out the whole repository.
-  checkout: z.enum(["repository", "directory"]).optional(),
+  // subdirectory checks out only that directory. Without it the whole repository is checked out.
+  checkout: z.literal("directory").optional(),
 });
 
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;
