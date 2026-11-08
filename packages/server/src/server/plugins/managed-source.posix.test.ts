@@ -113,6 +113,32 @@ async function serveSmartHttp(
 }
 
 describe("managed Git plugin sources", () => {
+  it("checks out the whole repository for a plugin whose build may read beside its directory", async () => {
+    const repository = await createRepository();
+    const nested = path.join(repository, "plugins", "review");
+    await mkdir(nested, { recursive: true });
+    await writeFile(
+      path.join(nested, "paseo-plugin.json"),
+      JSON.stringify({ id: "managed-example", build: [["npm", "ci"]] }),
+    );
+    await rename(path.join(repository, "index.server.ts"), path.join(nested, "index.server.ts"));
+    await rm(path.join(repository, "paseo-plugin.json"));
+    await mkdir(path.join(repository, "packages", "shared"), { recursive: true });
+    await writeFile(path.join(repository, "packages", "shared", "index.ts"), "export {};\n");
+    await commitAll(repository, "workspace member plugin");
+    await runGitCommand(["config", "uploadpack.allowFilter", "true"], { cwd: repository });
+    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-build-"));
+    roots.push(home);
+    const candidate = await new ManagedPluginSources(home).prepareInstall({
+      source: pathToFileURL(repository).href,
+      pluginPath: "plugins/review",
+    });
+    const checkoutRoot = path.resolve(candidate.directory, "..", "..");
+    expect(await readFile(path.join(checkoutRoot, "packages", "shared", "index.ts"), "utf8")).toBe(
+      "export {};\n",
+    );
+  });
+
   it("fetches a partial clone's plugin files through a remote that carries credentials", async () => {
     const repository = await createRepository();
     const nested = path.join(repository, "plugins", "review");

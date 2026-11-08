@@ -559,8 +559,11 @@ async function checkout(
   // A partial clone fetches the checked-out files on demand, so these commands reach the remote too.
   const { envOverlay } = remoteAccess(remote);
   try {
-    if (pluginPath !== ".") {
-      const sparsePath = pluginPath.split(path.sep).join("/");
+    const sparsePath = pluginPath.split(path.sep).join("/");
+    if (
+      sparsePath !== "." &&
+      !(await mayReadOutsideDirectory(checkoutRoot, commit, sparsePath, envOverlay))
+    ) {
       await runGitCommand(["sparse-checkout", "set", "--cone", "--", sparsePath], {
         cwd: checkoutRoot,
         envOverlay,
@@ -580,6 +583,31 @@ async function checkout(
     envOverlay: GIT_ENV,
     timeout: GIT_TIMEOUT_MS,
   });
+}
+
+/**
+ * Whether the plugin's preparation could read files beside its directory. Only a manifest `build`
+ * runs anything in the checkout (an `npm ci` in a workspace member needs its siblings); without one
+ * the compiler reads the plugin directory alone. An unreadable manifest gets the full checkout, and
+ * manifest validation then reports it.
+ */
+async function mayReadOutsideDirectory(
+  checkoutRoot: string,
+  commit: string,
+  sparsePath: string,
+  envOverlay: Record<string, string>,
+): Promise<boolean> {
+  try {
+    const { stdout } = await runGitCommand(["show", `${commit}:${sparsePath}/paseo-plugin.json`], {
+      cwd: checkoutRoot,
+      envOverlay,
+      timeout: GIT_TIMEOUT_MS,
+    });
+    const manifest: unknown = JSON.parse(stdout);
+    return typeof manifest !== "object" || manifest === null || "build" in manifest;
+  } catch {
+    return true;
+  }
 }
 
 async function resolveRequestedRef(
