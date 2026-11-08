@@ -16,6 +16,7 @@ import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
 import type { LayoutChangeEvent } from "react-native";
 import { ExplorerSidebarDock } from "@/screens/workspace/explorer-sidebar";
 import { ForgeShorthandProvider } from "@/git/forge-shorthand";
+import { ExplorerEdgeHandle } from "./explorer-sidebar/edge-handle";
 import { ExplorerFrame } from "./explorer-sidebar/frame";
 import { WorkspaceTabDragScope } from "@/components/workspace-tab-drag-scope";
 import {
@@ -3706,6 +3707,12 @@ function WorkspaceScreenContent({
       <View style={styles.centerContent}>
         <View style={styles.content}>{desktopContent}</View>
       </View>
+      {desktopFocusModeEnabled ? null : (
+        <ExplorerEdgeHandle
+          isOpen={isExplorerSidebarShowing}
+          onToggle={handleToggleExplorerSidebar}
+        />
+      )}
     </View>
   );
 
