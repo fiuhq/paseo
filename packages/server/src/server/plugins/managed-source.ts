@@ -189,7 +189,7 @@ export class ManagedPluginSources {
         const commit = await resolveRequestedRef(sourceRoot, input.ref);
         if (target?.kind === "git" && commit !== target.commit)
           throw new Error("Git target changed since review");
-        await checkout(sourceRoot, commit, pluginPath);
+        await checkout(remote, sourceRoot, commit, pluginPath);
         record = { kind: "git", remote };
       }
       const directory = path.resolve(sourceRoot, pluginPath);
@@ -489,18 +489,31 @@ function assertPluginPath(checkoutRoot: string, directory: string): void {
   }
 }
 
-async function clone(remote: string, checkoutRoot: string): Promise<void> {
+/**
+ * The remote Git is told about and the environment that reaches it. A remote carrying credentials is
+ * recorded as a placeholder and rewritten back to the real URL only for the commands that fetch, so the
+ * credentials never land in the checkout's config.
+ */
+function remoteAccess(remote: string): {
+  cloneRemote: string;
+  envOverlay: Record<string, string>;
+} {
   const publicRemote = redactRemoteCredentials(remote);
   const cloneRemote = publicRemote === remote ? remote : "https://paseo.invalid/plugin.git";
   const envOverlay =
     cloneRemote === remote
-      ? GIT_ENV
+      ? { ...GIT_ENV }
       : {
           ...GIT_ENV,
           GIT_CONFIG_COUNT: "1",
           GIT_CONFIG_KEY_0: `url.${remote}.insteadOf`,
           GIT_CONFIG_VALUE_0: cloneRemote,
         };
+  return { cloneRemote, envOverlay };
+}
+
+async function clone(remote: string, checkoutRoot: string): Promise<void> {
+  const { cloneRemote, envOverlay } = remoteAccess(remote);
   try {
     // Blobs arrive on checkout, so a plugin in a subdirectory of a large repository downloads only
     // its own files. A server without filter support ignores the flag and sends the full pack.
@@ -537,19 +550,31 @@ function redactRemoteError(error: unknown, remote: string): Error {
   return new Error(message);
 }
 
-async function checkout(checkoutRoot: string, commit: string, pluginPath: string): Promise<void> {
-  if (pluginPath !== ".") {
-    await runGitCommand(["sparse-checkout", "set", "--cone", "--", pluginPath], {
+async function checkout(
+  remote: string,
+  checkoutRoot: string,
+  commit: string,
+  pluginPath: string,
+): Promise<void> {
+  // A partial clone fetches the checked-out files on demand, so these commands reach the remote too.
+  const { envOverlay } = remoteAccess(remote);
+  try {
+    if (pluginPath !== ".") {
+      const sparsePath = pluginPath.split(path.sep).join("/");
+      await runGitCommand(["sparse-checkout", "set", "--cone", "--", sparsePath], {
+        cwd: checkoutRoot,
+        envOverlay,
+        timeout: GIT_TIMEOUT_MS,
+      });
+    }
+    await runGitCommand(["checkout", "--detach", commit], {
       cwd: checkoutRoot,
-      envOverlay: GIT_ENV,
+      envOverlay,
       timeout: GIT_TIMEOUT_MS,
     });
+  } catch (error) {
+    throw redactRemoteError(error, remote);
   }
-  await runGitCommand(["checkout", "--detach", commit], {
-    cwd: checkoutRoot,
-    envOverlay: GIT_ENV,
-    timeout: GIT_TIMEOUT_MS,
-  });
   await runGitCommand(["submodule", "update", "--init", "--recursive"], {
     cwd: checkoutRoot,
     envOverlay: GIT_ENV,
@@ -575,17 +600,7 @@ async function resolveRequestedRef(
 async function resolveRemoteCommit(remote: string, cwd: string, ref?: string): Promise<string> {
   if (ref?.startsWith("-")) throw new Error("Plugin Git ref cannot start with '-'");
   if (ref && /^[0-9a-f]{40,64}$/.test(ref)) return ref;
-  const publicRemote = redactRemoteCredentials(remote);
-  const cloneRemote = publicRemote === remote ? remote : "https://paseo.invalid/plugin.git";
-  const envOverlay =
-    cloneRemote === remote
-      ? GIT_ENV
-      : {
-          ...GIT_ENV,
-          GIT_CONFIG_COUNT: "1",
-          GIT_CONFIG_KEY_0: `url.${remote}.insteadOf`,
-          GIT_CONFIG_VALUE_0: cloneRemote,
-        };
+  const { cloneRemote, envOverlay } = remoteAccess(remote);
   try {
     const names = ref
       ? [`refs/heads/${ref}`, `refs/tags/${ref}^{}`, `refs/tags/${ref}`, ref]

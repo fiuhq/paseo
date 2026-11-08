@@ -1,5 +1,6 @@
 import { mkdir, rename, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -55,7 +56,97 @@ async function withGitHubFixture(repository: string, run: () => Promise<void>): 
   }
 }
 
+/** Serves a repository over Git's smart HTTP protocol, which, unlike a static file server, honours clone filters. */
+async function serveSmartHttp(
+  repository: string,
+): Promise<{ port: number; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    const url = new URL(request.url!, "http://localhost");
+    const backend = spawn("git", ["http-backend"], {
+      env: {
+        ...process.env,
+        GIT_PROJECT_ROOT: path.join(repository, ".git"),
+        GIT_HTTP_EXPORT_ALL: "1",
+        PATH_INFO: url.pathname,
+        QUERY_STRING: url.search.slice(1),
+        REQUEST_METHOD: request.method ?? "GET",
+        CONTENT_TYPE: request.headers["content-type"] ?? "",
+        HTTP_CONTENT_ENCODING: request.headers["content-encoding"] ?? "",
+        GIT_PROTOCOL: String(request.headers["git-protocol"] ?? ""),
+      },
+    });
+    request.pipe(backend.stdin);
+    let head = Buffer.alloc(0);
+    let headersSent = false;
+    backend.stdout.on("data", (chunk: Buffer) => {
+      if (headersSent) {
+        response.write(chunk);
+        return;
+      }
+      head = Buffer.concat([head, chunk]);
+      const end = head.indexOf("\r\n\r\n");
+      if (end < 0) return;
+      let status = 200;
+      for (const line of head.subarray(0, end).toString().split("\r\n")) {
+        const separator = line.indexOf(":");
+        const name = line.slice(0, separator);
+        const value = line.slice(separator + 1).trim();
+        if (name.toLowerCase() === "status") status = Number.parseInt(value, 10);
+        else response.setHeader(name, value);
+      }
+      response.writeHead(status);
+      headersSent = true;
+      response.write(head.subarray(end + 4));
+    });
+    backend.stdout.on("end", () => response.end());
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Expected HTTP port");
+  return {
+    port: address.port,
+    close: async () => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
 describe("managed Git plugin sources", () => {
+  it("fetches a partial clone's plugin files through a remote that carries credentials", async () => {
+    const repository = await createRepository();
+    const nested = path.join(repository, "plugins", "review");
+    await mkdir(nested, { recursive: true });
+    for (const name of ["paseo-plugin.json", "index.server.ts"])
+      await rename(path.join(repository, name), path.join(nested, name));
+    await mkdir(path.join(repository, "app"));
+    await writeFile(path.join(repository, "app", "bundle.js"), "unrelated application code\n");
+    await commitAll(repository, "plugin beside an application");
+    await runGitCommand(["config", "uploadpack.allowFilter", "true"], { cwd: repository });
+    const unrelated = (
+      await runGitCommand(["rev-parse", "HEAD:app/bundle.js"], { cwd: repository })
+    ).stdout.trim();
+    const served = await serveSmartHttp(repository);
+    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-credential-sparse-"));
+    roots.push(home);
+    try {
+      const candidate = await new ManagedPluginSources(home).prepareInstall({
+        source: `http://fixture:fake-secret@127.0.0.1:${served.port}/`,
+        pluginPath: "plugins/review",
+      });
+      const checkoutRoot = path.resolve(candidate.directory, "..", "..");
+      expect(
+        JSON.parse(await readFile(path.join(candidate.directory, "paseo-plugin.json"), "utf8")),
+      ).toEqual({ id: "managed-example" });
+      const { stdout } = await runGitCommand(["rev-list", "--objects", "--missing=print", "HEAD"], {
+        cwd: checkoutRoot,
+      });
+      expect(stdout.split("\n")).toContain(`?${unrelated}`);
+    } finally {
+      await served.close();
+    }
+  }, 30_000);
+
   it("downloads and checks out only the plugin directory of a larger repository", async () => {
     const repository = await createRepository();
     const nested = path.join(repository, "plugins", "review");
