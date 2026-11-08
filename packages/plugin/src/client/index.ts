@@ -17,6 +17,7 @@ export type {
   PluginSidebarItemProps,
   PluginSidebarViewProps,
   PluginSidebarViewContribution,
+  PluginSidebarWorkspaceChildrenProps,
   PluginSidebarItemContribution,
   PluginIcon,
   PluginPanelLocation,

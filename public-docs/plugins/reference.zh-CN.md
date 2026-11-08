@@ -513,7 +513,7 @@ export default function contribute(client: PluginClientContext) {
 
 ## 侧边栏视图 {#sidebar-views}
 
-`addSidebarView({ id, title, description?, Component })` 注册可替换侧边栏内容区域的视图，并返回清理函数。用户在设置的侧边栏页面中选择视图；注册不会激活它。视图属性、基于引用的查询与操作、设备状态和主题令牌见[构建侧边栏视图](sidebar-views.md)。
+`addSidebarView({ id, title, description?, Component | WorkspaceChildren })` 注册可替换侧边栏内容区域的视图，并返回清理函数。传入 `WorkspaceChildren` 而非 `Component` 时，Paseo 保留自身的侧边栏，并在每个工作区行下渲染可展开的区域。用户在设置的侧边栏页面中选择视图；注册不会激活它。视图属性、基于引用的查询与操作、设备状态和主题令牌见[构建侧边栏视图](sidebar-views.md)。
 
 ## 界面和侧边栏项 {#screens-and-sidebar-items}
 

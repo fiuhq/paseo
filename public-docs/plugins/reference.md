@@ -639,10 +639,12 @@ Register async handlers with `server.addHook(name, handler)`. See [Hooks](/docs/
 
 ## Sidebar views
 
-`addSidebarView({ id, title, description?, Component })` registers an optional replacement for the
-sidebar content region. It returns cleanup. The user selects one view in Settings > Sidebar;
-registration does not activate it. See [Build a sidebar view](sidebar-views.md) for the props,
-ref-based queries and actions, device state and theme tokens.
+`addSidebarView({ id, title, description?, Component | WorkspaceChildren })` registers an optional
+replacement for the sidebar content region. It returns cleanup. Pass `WorkspaceChildren` instead
+of `Component` to keep Paseo's sidebar and render an expandable section under each workspace row.
+The user selects one view in Settings > Sidebar; registration does not activate it. See
+[Build a sidebar view](sidebar-views.md) for the props, ref-based queries and actions, device
+state and theme tokens.
 
 ## Screens and sidebar items
 

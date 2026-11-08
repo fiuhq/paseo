@@ -1194,6 +1194,8 @@ export const ar: TranslationResources = {
     view: {
       failed: "تعذر تحميل عرض الشريط الجانبي.",
       useDefault: "استخدام العرض الافتراضي",
+      expandWorkspace: "توسيع مساحة العمل",
+      collapseWorkspace: "طي مساحة العمل",
       readFailed: "تعذر تحميل تفضيل عرض الشريط الجانبي.",
       agentUnavailable: "لم يعد الوكيل متاحًا",
       terminalUnavailable: "لم تعد الطرفية متاحة",

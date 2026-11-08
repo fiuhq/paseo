@@ -1201,6 +1201,8 @@ export const ko: TranslationResources = {
     view: {
       failed: "사이드바 보기를 불러오지 못했습니다.",
       useDefault: "기본 보기 사용",
+      expandWorkspace: "워크스페이스 펼치기",
+      collapseWorkspace: "워크스페이스 접기",
       readFailed: "사이드바 보기 설정을 불러오지 못했습니다.",
       agentUnavailable: "에이전트를 더 이상 사용할 수 없습니다",
       terminalUnavailable: "터미널을 더 이상 사용할 수 없습니다",

@@ -1202,6 +1202,8 @@ export const en = {
     view: {
       failed: "Sidebar view failed to load.",
       useDefault: "Use default view",
+      expandWorkspace: "Expand workspace",
+      collapseWorkspace: "Collapse workspace",
       readFailed: "Could not load your sidebar view preference.",
       agentUnavailable: "Agent is no longer available",
       terminalUnavailable: "Terminal is no longer available",
