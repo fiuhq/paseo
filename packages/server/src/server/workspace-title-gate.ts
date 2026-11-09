@@ -10,11 +10,24 @@ import type { AgentManager, AgentManagerEvent } from "./agent/agent-manager.js";
 import type { PluginLifecycle } from "./plugins/lifecycle/index.js";
 import type { GeneratedWorkspaceName } from "./worktree-branch-name-generator.js";
 import type { PersistedWorkspaceRecord, WorkspaceRegistry } from "./workspace-registry.js";
+import { withTimeout } from "../utils/promise-timeout.js";
 
 const TITLE_HOOK = "workspace.title.before";
 const MAX_TRIES = 3;
 const SOURCE_TEXT_CHARS = 2000;
 const REPLY_CONTEXT_CHARS = 4000;
+
+/**
+ * How long one try may wait on each step. Every later try for the workspace queues behind
+ * the current one, so a model or plugin that never answers would otherwise hold the title
+ * at `Naming…` forever, with no Rename button, because the state never reaches `exhausted`.
+ */
+const DEFAULT_DEADLINES: TitleGateDeadlines = { generateMs: 120_000, judgeMs: 30_000 };
+
+export interface TitleGateDeadlines {
+  generateMs: number;
+  judgeMs: number;
+}
 
 export const HELD_TITLE_STATE: WorkspaceTitleState = {
   status: "naming",
@@ -47,6 +60,7 @@ interface WorkspaceTitleGateDeps {
   apply(input: ApplyJudgedTitleInput): Promise<void>;
   emit(workspaceId: string): Promise<void>;
   logger: pino.Logger;
+  deadlines?: TitleGateDeadlines;
 }
 
 /**
@@ -61,8 +75,10 @@ interface WorkspaceTitleGateDeps {
 export class WorkspaceTitleGate {
   private readonly starts = new Map<string, { context: FirstAgentContext; selection: unknown }>();
   private readonly queues = new Map<string, Promise<void>>();
+  private readonly deadlines: TitleGateDeadlines;
 
   constructor(private readonly deps: WorkspaceTitleGateDeps) {
+    this.deadlines = deps.deadlines ?? DEFAULT_DEADLINES;
     deps.agentManager.subscribe((event) => this.onAgentEvent(event), { replayState: false });
   }
 
@@ -134,11 +150,7 @@ export class WorkspaceTitleGate {
     if (!workspace || !state || !isWorkspaceTitleHeld(state)) return;
     const attempt = state.attempts + 1;
 
-    const generated = await this.deps.generate({
-      workspace,
-      firstAgentContext,
-      selection: this.starts.get(workspaceId)?.selection,
-    });
+    const generated = await this.generate(workspace, firstAgentContext);
     if (!generated?.title) {
       await this.refused(workspaceId, attempt, { ...state, attempts: attempt });
       return;
@@ -179,9 +191,37 @@ export class WorkspaceTitleGate {
     this.starts.delete(workspaceId);
   }
 
+  /** A name that never comes back is a failed try, so the next one can run. */
+  private async generate(
+    workspace: PersistedWorkspaceRecord,
+    firstAgentContext: FirstAgentContext,
+  ): Promise<GeneratedWorkspaceName | null> {
+    try {
+      return await withTimeout({
+        promise: this.deps.generate({
+          workspace,
+          firstAgentContext,
+          selection: this.starts.get(workspace.workspaceId)?.selection,
+        }),
+        timeoutMs: this.deadlines.generateMs,
+        label: "workspace title generation",
+      });
+    } catch (error) {
+      this.deps.logger.warn(
+        { err: error, workspaceId: workspace.workspaceId },
+        "Workspace title generation failed; counting the try as refused",
+      );
+      return null;
+    }
+  }
+
   private async judge(request: PluginWorkspaceTitleRequest): Promise<Verdict> {
     try {
-      const { verdict } = await this.deps.lifecycle.before(TITLE_HOOK, request);
+      const { verdict } = await withTimeout({
+        promise: this.deps.lifecycle.before(TITLE_HOOK, request),
+        timeoutMs: this.deadlines.judgeMs,
+        label: "workspace title judge",
+      });
       return verdict ?? { decision: "unchecked", score: null, judge: null };
     } catch (error) {
       this.deps.logger.warn(
