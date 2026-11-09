@@ -144,6 +144,7 @@ describe("useAgentInputDraft live contract", () => {
       drafts: {},
       createModalDraft: null,
       attachmentFocusRequestByDraftKey: {},
+      textReplacementRequestByDraftKey: {},
     });
   });
 
@@ -574,6 +575,37 @@ describe("useAgentInputDraft live contract", () => {
 
     expect(draft().textSource.getSnapshot()).toBe("First message");
     expect(draft().textReplacement.text).toBe("First message");
+  });
+
+  it("shows text another module put in the draft while the input is retained off screen", async () => {
+    let latest: ReturnType<typeof useAgentInputDraft> | null = null;
+    function getLatest(): ReturnType<typeof useAgentInputDraft> {
+      if (!latest) throw new Error("Expected hook result");
+      return latest;
+    }
+    function Probe() {
+      latest = useAgentInputDraft({ draftKey: "draft:replaced" });
+      return null;
+    }
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing root container");
+    const root = createTestRoot(container);
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <Probe />
+        </QueryClientProvider>,
+      );
+    });
+    const before = getLatest().textReplacement.key;
+
+    await act(async () => {
+      useDraftStore.getState().replaceDraftText({ draftKey: "draft:replaced", text: "from away" });
+    });
+
+    expect(getLatest().textReplacement).toMatchObject({ kind: "replace", text: "from away" });
+    expect(getLatest().textReplacement.key).not.toBe(before);
+    expect(getLatest().textSource.getSnapshot()).toBe("from away");
   });
 
   it("clear resets text and attachments", async () => {

@@ -1,4 +1,6 @@
+import type { ComposerOptionControls } from "@/agent-controls/option-controls";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { Keyboard, StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
@@ -58,7 +60,7 @@ interface AutoSubmitConfig {
   modeId: string | null;
   model: string | null;
   thinkingOptionId: string | null;
-  featureValues: Record<string, unknown>;
+  providerOptions: Record<string, unknown>;
 }
 
 function resolveAutoSubmitConfig(
@@ -67,7 +69,7 @@ function resolveAutoSubmitConfig(
     modeId?: string | null;
     model?: string | null;
     thinkingOptionId?: string | null;
-    featureValues?: Record<string, unknown>;
+    providerOptions?: Record<string, unknown>;
   } | null,
 ): AutoSubmitConfig | null {
   if (!pending) return null;
@@ -76,7 +78,7 @@ function resolveAutoSubmitConfig(
     modeId: pending.modeId ?? null,
     model: pending.model ?? null,
     thinkingOptionId: pending.thinkingOptionId ?? null,
-    featureValues: pending.featureValues ?? {},
+    providerOptions: pending.providerOptions ?? {},
   };
 }
 
@@ -124,7 +126,8 @@ async function submitDraftCreateRequest(input: {
     effectiveModeId: string;
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
-    featureValues: Record<string, unknown> | undefined;
+    providerOptions: Record<string, unknown> | undefined;
+    metadata: Record<string, JsonValue>;
   };
   hostDisconnectedMessage: string;
   selectModelMessage: string;
@@ -163,7 +166,7 @@ async function submitDraftCreateRequest(input: {
     model: autoSubmitConfig?.model ?? (composerState.effectiveModelId || undefined),
     thinkingOptionId:
       autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || undefined),
-    featureValues: autoSubmitConfig?.featureValues ?? composerState.featureValues,
+    providerOptions: autoSubmitConfig?.providerOptions ?? composerState.providerOptions,
   });
 
   const attachmentsArray = Array.isArray(attachments) ? attachments : undefined;
@@ -174,6 +177,7 @@ async function submitDraftCreateRequest(input: {
     workspaceId,
     initialPrompt: text,
     clientMessageId: attempt.clientMessageId,
+    ...(Object.keys(composerState.metadata).length > 0 ? { metadata: composerState.metadata } : {}),
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
     ...(attachmentsArray && attachmentsArray.length > 0 ? { attachments: attachmentsArray } : {}),
   };
@@ -197,7 +201,7 @@ function buildDraftAgentSnapshot(input: {
     effectiveThinkingOptionId: string | null;
     effectiveModeId: string;
     selectedProvider: string | null;
-    agentControls: { features?: Agent["features"] };
+    agentControls: { optionControls?: ComposerOptionControls };
   };
   selectModelMessage: string;
 }): Agent {
@@ -234,7 +238,8 @@ function buildDraftAgentSnapshot(input: {
     title: "Agent",
     cwd: workspaceDirectory,
     model,
-    features: composerState.agentControls.features,
+    options: composerState.agentControls.optionControls?.options,
+    controls: composerState.agentControls.optionControls?.controls,
     thinkingOptionId,
     parentAgentId: null,
     labels: {},
@@ -320,7 +325,7 @@ export function WorkspaceDraftComposer({
     composer: {
       initialServerId: serverId,
       initialValues: draftInitialValues,
-      initialFeatureValues: draftSetup?.featureValues,
+      initialProviderOptions: draftSetup?.providerOptions,
       isVisible: true,
       lockedWorkingDir: draftWorkingDirectory ?? undefined,
     },
@@ -338,8 +343,7 @@ export function WorkspaceDraftComposer({
   const draftModeOptions = composerState.modeOptions;
   const draftSelectedMode = composerState.selectedMode;
   const draftSetMode = composerState.setModeFromUser;
-  const draftFeatures = composerState.agentControls.features;
-  const draftOnSetFeature = composerState.agentControls.onSetFeature;
+  const draftOptionControls = composerState.agentControls.optionControls;
 
   const clearDraftInput = draftInput.clear;
   const carryDraftTo = draftInput.carryTo;
@@ -483,7 +487,9 @@ export function WorkspaceDraftComposer({
         providers: composerState.modelSelectorProviders,
         selectedProvider: draftProvider,
         selectedModelId: composerState.effectiveModelId,
-        select: composerState.setProviderAndModelFromUser,
+        select: (provider, modelId) => {
+          composerState.setProviderAndModelFromUser(provider, modelId);
+        },
       },
       thinking: {
         options: draftThinkingOptions,
@@ -495,10 +501,7 @@ export function WorkspaceDraftComposer({
         selectedId: draftSelectedMode,
         select: draftSetMode,
       },
-      features: {
-        list: draftFeatures,
-        set: draftOnSetFeature,
-      },
+      optionControls: draftOptionControls ?? null,
     },
   });
   const isReadyForPendingAutoSubmit = Boolean(

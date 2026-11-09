@@ -13,6 +13,7 @@ import {
 import type { AgentToolDefinition } from "@getpaseo/plugin/server";
 import type { AgentStreamEvent } from "../../agent/agent-sdk-types.js";
 import { z } from "zod";
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { CreateAgentRequestMessageSchema } from "@getpaseo/protocol/messages";
 import type {
   PluginHookAgent,
@@ -91,6 +92,7 @@ const beforeSchemas = {
   "agent.create.before": CreateAgentRequestMessageSchema.pick({
     config: true,
     env: true,
+    metadata: true,
   }).strict(),
   "agent.open.before": z
     .object({
@@ -102,6 +104,8 @@ const beforeSchemas = {
       purpose: z.enum(["interactive", "history"]),
       title: z.string().nullable(),
       labels: z.record(z.string(), z.string()),
+      // Optional so a plugin that returns its own object keeps working; omitted means unchanged.
+      metadata: z.record(z.string(), z.custom<JsonValue>()).optional(),
       tools: z.array(agentToolMetadataSchema),
       env: z.record(z.string(), z.string()),
       mcpServers: CreateAgentRequestMessageSchema.shape.config.shape.mcpServers.unwrap(),
@@ -171,6 +175,7 @@ export function describeHookWorkspace(workspace: PersistedWorkspaceRecord): Plug
     cwd: workspace.cwd,
     name: workspace.title,
     archivedAt: workspace.archivedAt,
+    metadata: workspace.metadata,
   };
 }
 
@@ -181,6 +186,7 @@ export function describeHookAgent(agent: {
   cwd: string;
   title?: string | null;
   labels: Record<string, string>;
+  metadata: Record<string, JsonValue>;
 }): PluginHookAgent {
   return {
     id: agent.id,
@@ -189,6 +195,7 @@ export function describeHookAgent(agent: {
     provider: agent.provider,
     cwd: agent.cwd,
     title: agent.title ?? null,
+    metadata: agent.metadata,
   };
 }
 
@@ -231,6 +238,23 @@ export function publishAgentStream(
   }
 }
 
+type OpenBeforeRequest = ReturnType<(typeof beforeSchemas)["agent.open.before"]["parse"]>;
+
+/** agent.open.before may change only env, tools and mcpServers. */
+function openBeforeKeepsIdentity(previous: OpenBeforeRequest, next: OpenBeforeRequest): boolean {
+  return (
+    previous.agentId === next.agentId &&
+    previous.workspaceId === next.workspaceId &&
+    previous.provider === next.provider &&
+    previous.cwd === next.cwd &&
+    previous.reason === next.reason &&
+    previous.purpose === next.purpose &&
+    previous.title === next.title &&
+    isDeepStrictEqual(previous.labels, next.labels) &&
+    (next.metadata === undefined || isDeepStrictEqual(previous.metadata, next.metadata))
+  );
+}
+
 export async function validateBeforeResult<Name extends keyof PluginWireBeforeRequests>(
   name: Name,
   input: PluginWireBeforeRequests[Name],
@@ -240,18 +264,10 @@ export async function validateBeforeResult<Name extends keyof PluginWireBeforeRe
   if (name === "agent.open.before") {
     const previous = beforeSchemas["agent.open.before"].parse(input);
     const next = beforeSchemas["agent.open.before"].parse(result);
-    if (
-      previous.agentId !== next.agentId ||
-      previous.workspaceId !== next.workspaceId ||
-      previous.provider !== next.provider ||
-      previous.cwd !== next.cwd ||
-      previous.reason !== next.reason ||
-      previous.purpose !== next.purpose ||
-      previous.title !== next.title ||
-      !isDeepStrictEqual(previous.labels, next.labels)
-    ) {
+    if (!openBeforeKeepsIdentity(previous, next)) {
       throw new Error("agent.open.before hooks can only change env, tools, and mcpServers");
     }
+    return { ...result, metadata: previous.metadata };
   }
   if (name === "agent.create.before") {
     const previous = beforeSchemas["agent.create.before"].parse(input);
@@ -259,6 +275,14 @@ export async function validateBeforeResult<Name extends keyof PluginWireBeforeRe
     if (previous.config.cwd !== next.config.cwd) {
       throw new Error("agent.create.before hooks cannot change the workspace directory");
     }
+    // Omitted means unchanged: the next hook sees what this one was handed.
+    return { ...result, metadata: next.metadata ?? previous.metadata };
+  }
+  if (name === "workspace.create.before") {
+    const previous = beforeSchemas["workspace.create.before"].parse(input);
+    const next = beforeSchemas["workspace.create.before"].parse(result);
+    // Omitted means unchanged; an explicit {} still replaces.
+    return { ...result, metadata: next.metadata ?? previous.metadata };
   }
   if (name === "workspace.title.before") {
     const previous = beforeSchemas["workspace.title.before"].parse(input);

@@ -1,3 +1,4 @@
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type { PluginLifecycle } from "./plugins/lifecycle/index.js";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -41,6 +42,7 @@ export interface CreatePaseoWorktreeInput extends CreateWorktreeCoreInput {
   title?: string;
   /** No agent will reply, so a title judge has nothing better to wait for. */
   noInitialAgent?: boolean;
+  metadata?: Record<string, JsonValue>;
   background?: boolean;
   callerWorkspaceId?: string;
 }
@@ -95,7 +97,7 @@ async function createPaseoWorktreeWithPriority(
         },
       });
     }
-    await maybeMarkFirstAgentBranchAutoNameEligible({ createdWorktree });
+    await maybeMarkFirstAgentBranchAutoNameEligible({ createdWorktree, input });
     const workspaceCwd = mapWorkspaceRelativeCwdToWorktree({
       relativeWorkspaceCwd: workspaceCwdPlan.relativeWorkspaceCwd,
       targetWorktreePath: createdWorktree.worktree.worktreePath,
@@ -122,6 +124,7 @@ async function createPaseoWorktreeWithPriority(
       title: input.title?.trim() || resolveFirstAgentPromptTitle(input.firstAgentContext),
       promptTitleContext:
         input.title?.trim() || input.noInitialAgent ? undefined : input.firstAgentContext,
+      metadata: input.metadata,
       expectsInitialAgent: Boolean(input.firstAgentContext),
       background: input.background,
       callerWorkspaceId: input.callerWorkspaceId,
@@ -289,9 +292,14 @@ async function findAvailableBranchName(options: {
 
 async function maybeMarkFirstAgentBranchAutoNameEligible(options: {
   createdWorktree: Awaited<ReturnType<typeof createWorktreeCore>>;
+  input: Pick<CreatePaseoWorktreeInput, "branchName">;
 }): Promise<void> {
-  const { createdWorktree } = options;
+  const { createdWorktree, input } = options;
   if (!createdWorktree.created || createdWorktree.intent.kind !== "branch-off") {
+    return;
+  }
+  // A branch the caller named is their choice; only a placeholder slug is replaced.
+  if (input.branchName !== undefined) {
     return;
   }
 
