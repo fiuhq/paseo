@@ -1,0 +1,11 @@
+{
+  "name": "@fiuhq/workfloor-provider",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paseo plugin: a provider whose agents are your private Workfloor conversations",
+  "scripts": {
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "verify": "tsgo -p tsconfig.json --noEmit && bun test"
+  }
+}
