@@ -17,6 +17,7 @@ import {
   WorkfloorError,
   type Detail,
   type Message,
+  type WaitingQuestion,
   type WorkfloorAuth,
 } from "./workfloor.js";
 
@@ -25,6 +26,7 @@ const CAPABILITIES = [
   "session.configure",
   "session.list",
   "session.persistence",
+  "permission",
 ] as const;
 
 /** Engine states in which a session's agent is still at work; any other state has handed the turn back. */
@@ -65,6 +67,8 @@ interface Session {
   seen: Set<string>;
   turns: number;
   turn?: Turn;
+  /** The agent's question raised in Paseo: its Workfloor id, and each question by the header Paseo answers it under. */
+  asked?: { id: string; keys: Array<{ header: string; questionId: string; options: string[] }> };
   /** Workfloor's agent being stopped after a Stop: the next message waits for it, so it is never the one stopped. */
   stopping?: Promise<void>;
 }
@@ -187,6 +191,17 @@ function fail(input: ProviderInput, error: unknown, state: State): void {
       clientMessageId: input.prompt.clientMessageId,
       result: { type: "failed", error: failure },
     });
+  else if (input.type === "session.permission")
+    state.emit({
+      type: "timeline.item",
+      sessionId: input.sessionId,
+      item: {
+        type: "notification",
+        id: `${input.permissionId}-unanswered`,
+        level: "error",
+        message: `Your answer did not reach Workfloor: ${failure.message}`,
+      },
+    });
 }
 
 async function dispatch(input: ProviderInput, state: State): Promise<void> {
@@ -211,6 +226,9 @@ async function dispatch(input: ProviderInput, state: State): Promise<void> {
       return;
     case "session.configure":
       await configure(input, state);
+      return;
+    case "session.permission":
+      await answerQuestion(input, state);
       return;
     case "session.interrupt":
       await interrupt(input.sessionId, state);
@@ -274,8 +292,16 @@ async function openSession(
   const card = cardOf(input.persistence);
   const session: Session = { id: input.sessionId, config: input.config, seen: new Set(), turns: 0 };
   let history: Message[] = [];
-  if (card) {
-    const detail = await (await state.workfloor()).detail(card.project, card.card);
+  let busy = false;
+  const wf = card ? await state.workfloor() : undefined;
+  if (card && wf) {
+    const [detail, waiting] = await Promise.all([
+      wf.detail(card.project, card.card),
+      wf.question(card.project, card.card),
+    ]);
+    const current = detail.sessions?.find((s) => s.id === detail.sessionId);
+    // Opened while its agent still works or waits on a question: the turn is picked up and followed.
+    busy = (!!current && WORKING.has(current.state)) || waiting?.kind === "agent";
     session.card = card;
     session.workfloorSession = detail.sessionId;
     const agent = detail.sessions?.find((s) => s.id === detail.sessionId)?.agentProfileId;
@@ -309,6 +335,7 @@ async function openSession(
       if (item) state.emit({ type: "timeline.item", sessionId: input.sessionId, item });
     }
   state.emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
+  if (busy && wf) startTurn(session, newTurn(session), wf, state);
 }
 
 async function configState(session: Session, state: State): Promise<ProviderConfigState> {
@@ -372,6 +399,10 @@ async function prompt(
   const wf = await state.workfloor();
   await session.stopping;
   if (session.card) {
+    // The agent's session may have started since this Paseo session last read the conversation.
+    session.workfloorSession ??= (
+      await wf.detail(session.card.project, session.card.card)
+    ).sessionId;
     if (!session.workfloorSession)
       throw new WorkfloorError(
         "This conversation's agent has not started yet: try again in a moment",
@@ -391,14 +422,7 @@ async function prompt(
     });
   }
 
-  session.turns += 1;
-  const turn: Turn = {
-    id: `turn-${session.turns}`,
-    abort: new AbortController(),
-    replied: false,
-    worked: false,
-  };
-  session.turn = turn;
+  const turn = newTurn(session);
   state.emit({
     type: "timeline.item",
     sessionId: session.id,
@@ -410,6 +434,22 @@ async function prompt(
     },
   });
   answer({ type: "turn", turnId: turn.id });
+  startTurn(session, turn, wf, state);
+}
+
+function newTurn(session: Session): Turn {
+  session.turns += 1;
+  const turn: Turn = {
+    id: `turn-${session.turns}`,
+    abort: new AbortController(),
+    replied: false,
+    worked: false,
+  };
+  session.turn = turn;
+  return turn;
+}
+
+function startTurn(session: Session, turn: Turn, wf: Workfloor, state: State): void {
   state.emit({ type: "session.turn", sessionId: session.id, turnId: turn.id, state: "started" });
   void follow(session, turn, wf, state);
 }
@@ -444,7 +484,11 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
     try {
       do {
         again = false;
-        const outcome = step(session, turn, await wf.detail(card.project, card.card), wf, state);
+        const [detail, waiting] = await Promise.all([
+          wf.detail(card.project, card.card),
+          wf.question(card.project, card.card),
+        ]);
+        const outcome = step(session, turn, detail, waiting, wf, state);
         if (outcome) return end(outcome.state, outcome.error);
       } while (again && !turn.abort.signal.aborted);
     } catch (error) {
@@ -479,6 +523,7 @@ function step(
   session: Session,
   turn: Turn,
   detail: Detail,
+  waiting: WaitingQuestion | undefined,
   wf: Workfloor,
   state: State,
 ): { state: "completed" | "failed"; error?: string } | undefined {
@@ -489,7 +534,7 @@ function step(
   const fresh = detail.messages.filter((m) => !session.seen.has(m.id));
   // The newest message may still be growing while the agent works, unless Workfloor waits on the
   // person: then it is the question they must see.
-  const hold = working && !detail.pendingAction;
+  const hold = working && !detail.pendingAction && !waiting;
   for (const m of hold ? fresh.slice(0, -1) : fresh) {
     session.seen.add(m.id);
     const item = timelineItem(m, false);
@@ -502,9 +547,24 @@ function step(
       state: "failed",
       error: current.error || `Workfloor's agent stopped: ${current.state.toLowerCase()}`,
     };
-  if (detail.pendingAction) {
+  // The agent's own question is answered here, in Paseo, while the turn stays open; one answered
+  // in Workfloor meanwhile is no longer asked.
+  if (waiting?.kind === "agent") {
+    if (session.asked?.id !== waiting.id) raise(session, waiting, state);
+    return undefined;
+  }
+  if (session.asked) {
+    state.emit({
+      type: "session.permission_resolved",
+      sessionId: session.id,
+      permissionId: session.asked.id,
+    });
+    session.asked = undefined;
+  }
+  // A lane's own ask or approval, or a permission request, is Workfloor's alone to take.
+  if (detail.pendingAction || waiting) {
     const what =
-      detail.pendingAction === "question" ? "asks you something" : "asks for your permission";
+      detail.pendingAction === "permission" ? "asks for your permission" : "asks you something";
     state.emit({
       type: "timeline.item",
       sessionId: session.id,
@@ -549,6 +609,92 @@ function timelineItem(m: Message, replay: boolean): ProviderTimelineItem | undef
   return m.body.trim() ? { type: "assistant_message", id: m.id, text: m.body } : undefined;
 }
 
+/** Raises the agent's `card_ask` as a Paseo question: its context in the chat, each question with its options. */
+function raise(session: Session, waiting: WaitingQuestion, state: State): void {
+  const asks: NonNullable<WaitingQuestion["questions"]> = waiting.questions?.length
+    ? waiting.questions
+    : [{ prompt: waiting.question, options: (waiting.options ?? []).map((label) => ({ label })) }];
+  const headers = new Set<string>();
+  const keys = asks.map((q, i) => {
+    let header = (q.title || `Question ${i + 1}`).trim();
+    if (headers.has(header)) header = `${header} (${i + 1})`;
+    headers.add(header);
+    // Workfloor keys a lone question by the ask's id, several by the agent's own ids (#950).
+    const questionId = asks.length === 1 ? waiting.id : ("id" in q && q.id) || `q${i + 1}`;
+    return { header, questionId, options: (q.options ?? []).map((o) => o.label) };
+  });
+  session.asked = { id: waiting.id, keys };
+  if (waiting.context?.trim())
+    state.emit({
+      type: "timeline.item",
+      sessionId: session.id,
+      item: { type: "assistant_message", id: `${waiting.id}-context`, text: waiting.context },
+    });
+  state.emit({
+    type: "session.permission",
+    sessionId: session.id,
+    request: {
+      id: waiting.id,
+      name: "question",
+      kind: "question",
+      title: "Workfloor's agent asks",
+      input: {
+        questions: asks.map((q, i) => ({
+          question: q.prompt,
+          header: keys[i]!.header,
+          options: (q.options ?? []).map((o) => ({
+            label: o.label,
+            ...(o.description ? { description: o.description } : {}),
+          })),
+          allowOther: true,
+        })),
+      },
+    },
+  });
+}
+
+/** Sends the person's answer, or their decline, to the question Workfloor's agent waits on. */
+async function answerQuestion(
+  input: Extract<ProviderInput, { type: "session.permission" }>,
+  state: State,
+): Promise<void> {
+  const session = state.sessions.get(input.sessionId)!;
+  const asked = session.asked;
+  if (!asked || asked.id !== input.permissionId || !session.card)
+    throw new WorkfloorError("That question is no longer waiting in Workfloor");
+  const wf = await state.workfloor();
+  const response = input.response;
+  if (response.behavior === "deny") {
+    await wf.answer(session.card.project, session.card.card, asked.id, {
+      reject: response.message ?? "",
+    });
+  } else {
+    const given = response.updatedInput?.answers;
+    const record = given && typeof given === "object" && !Array.isArray(given) ? given : {};
+    const answers = asked.keys.map((key) => {
+      const value = record[key.header];
+      const words = typeof value === "string" ? value.trim() : "";
+      const n = key.options.indexOf(words);
+      return n >= 0
+        ? { questionId: key.questionId, optionId: String(n + 1) }
+        : { questionId: key.questionId, text: words };
+    });
+    await wf.answer(session.card.project, session.card.card, asked.id, { answers });
+  }
+  session.asked = undefined;
+  // Workfloor queues the answer as the agent's next prompt, so its session reads idle for a moment:
+  // the turn ends only once the agent has been seen at work again and stopped.
+  if (session.turn) {
+    session.turn.worked = false;
+    session.turn.replied = false;
+  }
+  state.emit({
+    type: "session.permission_resolved",
+    sessionId: session.id,
+    permissionId: asked.id,
+  });
+}
+
 /**
  * Stop cancels the turn in Paseo at once, then stops Workfloor's agent as a best effort: a Workfloor
  * that fails or is slow never keeps the turn open, and a failure says the agent may still be working.
@@ -567,7 +713,9 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
       const wf = await state.workfloor();
       // Stopped before the first read named the agent's session: read it, so Workfloor's agent stops too.
       session.workfloorSession ??= (await wf.detail(card.project, card.card)).sessionId;
-      if (session.workfloorSession) await wf.stop({ ...card, session: session.workfloorSession });
+      if (!session.workfloorSession)
+        throw new WorkfloorError("Workfloor has not started its agent yet");
+      await wf.stop({ ...card, session: session.workfloorSession });
     } catch (error) {
       console.error(`[workfloor-provider] stopping ${card.card}: ${message(error)}`);
       state.emit({

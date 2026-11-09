@@ -19,6 +19,9 @@ class FakeWorkfloor {
       messages: Array<Record<string, unknown>>;
       agent: string;
       pending?: string;
+      /** The agent's `card_ask` waiting on the person, as Workfloor's questions route reads it. */
+      asks?: Record<string, unknown>;
+      answered?: Record<string, unknown>;
     }
   >();
   requests: Array<{ method: string; path: string; body?: unknown; auth: string | null }> = [];
@@ -27,6 +30,7 @@ class FakeWorkfloor {
   reply = (card: string, words: string) => {
     setTimeout(() => {
       const c = this.cards.get(card)!;
+      c.state = "RUNNING";
       c.messages.push({
         id: `m${c.messages.length + 1}`,
         role: "agent",
@@ -125,6 +129,22 @@ class FakeWorkfloor {
         })),
         archivedCount: 0,
       });
+    if (url.pathname === "/api/lane-flows/questions" && init?.method === "POST") {
+      const c = this.cards.get(body.card)!;
+      c.answered = body;
+      c.asks = undefined;
+      // Workfloor queues the answer as the agent's next prompt: the session reads idle until it starts.
+      c.state = "WAITING_FOR_INPUT";
+      this.changed();
+      this.reply(body.card, JSON.stringify(body.answers ?? body.reject));
+      return json({});
+    }
+    if (url.pathname === "/api/lane-flows/questions")
+      return json(
+        this.cards.get(q.get("card")!)?.asks
+          ? { question: this.cards.get(q.get("card")!)!.asks }
+          : {},
+      );
     if (url.pathname === "/api/conversation") {
       const c = this.cards.get(body.task)!;
       if (body.command.kind === "send") {
@@ -146,7 +166,13 @@ async function connect(
   const provider = createWorkfloorProvider({ auth, fetch: wf.fetch });
   const connection = await provider.connect({
     versions: [1],
-    capabilities: ["prompt.message", "session.configure", "session.list", "session.persistence"],
+    capabilities: [
+      "prompt.message",
+      "session.configure",
+      "session.list",
+      "session.persistence",
+      "permission",
+    ],
   });
   const events: ProviderEvent[] = [];
   connection.onEvent((event) => events.push(event));
@@ -315,7 +341,10 @@ describe("the Workfloor provider", () => {
     await until(events, (e) => e.type === "session.turn" && e.state === "started");
     await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
     expect(await until(events, turnEnded)).toMatchObject({ state: "canceled" });
-    expect(wf.requests.at(-1)?.body).toMatchObject({ command: { kind: "stop" } });
+    await until(events, (e) => e.type === "request.completed" && e.requestId === "i1");
+    expect(wf.requests.filter((r) => r.path === "/api/conversation").at(-1)?.body).toMatchObject({
+      command: { kind: "stop" },
+    });
   });
 
   test("a failed start answers the prompt as failed with Workfloor's words", async () => {
@@ -440,5 +469,255 @@ describe("the Workfloor provider", () => {
       },
     });
     expect(events.filter(turnEnded)).toHaveLength(1);
+  });
+
+  test("a message to a conversation whose agent session started late reads it, instead of refusing for good", async () => {
+    const wf = new FakeWorkfloor();
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "one");
+    await until(events, turnEnded);
+    const real = wf.fetch;
+    let blind = true;
+    // Reopened while Workfloor's read names no agent session yet; it has one by the next message.
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const answer = await real(input, init);
+      if (!blind || !String(input).includes("view=detail")) return answer;
+      blind = false;
+      const { sessionId: _, ...detail } = await answer.json();
+      return new Response(JSON.stringify(detail), {
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const { connection: later, events: laterEvents } = await connect(wf);
+    await open(later, laterEvents, "s2", {
+      persistence: { version: 1, data: { project: P, card: "card-1" } },
+    });
+    await say(later, "s2", "two");
+    expect(await until(laterEvents, turnEnded)).toMatchObject({
+      state: "completed",
+      turnId: "turn-1",
+    });
+  });
+
+  test("a Stop that finds no agent session says the agent may still be working", async () => {
+    const wf = new FakeWorkfloor();
+    wf.reply = () => {};
+    const real = wf.fetch;
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const answer = await real(input, init);
+      if (!String(input).includes("view=detail")) return answer;
+      const { sessionId: _, sessions: __, ...detail } = await answer.json();
+      return new Response(JSON.stringify(detail), {
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "hello");
+    await until(events, (e) => e.type === "session.turn" && e.state === "started");
+    await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
+    expect(await until(events, turnEnded)).toMatchObject({ state: "canceled" });
+    expect(
+      await until(events, (e) => e.type === "timeline.item" && e.item.type === "notification"),
+    ).toMatchObject({
+      item: {
+        message:
+          "Workfloor's agent may still be working: stopping it failed (Workfloor has not started its agent yet). Stop it in Workfloor.",
+      },
+    });
+  });
+
+  test("the agent's question is asked in Paseo, and the person's answer goes back to Workfloor by option and words", async () => {
+    const wf = new FakeWorkfloor();
+    const answered = wf.reply;
+    wf.reply = (card) =>
+      setTimeout(() => {
+        wf.cards.get(card)!.asks = {
+          id: "ask-1",
+          kind: "agent",
+          question: "How do you want to test making a card?\n\nWhich tools?",
+          context: "I ran the read-only tools.",
+          questions: [
+            {
+              id: "card",
+              title: "Test card",
+              prompt: "How do you want to test making a card?",
+              options: [
+                { label: "Skip it", description: "Make none." },
+                { label: "Handoff, you close it" },
+              ],
+            },
+            {
+              id: "scope",
+              title: "Tool scope",
+              prompt: "Which tools?",
+              options: [{ label: "This card only" }],
+            },
+          ],
+        };
+        wf.changed();
+      }, 20);
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "test your tools");
+    const asked = await until(events, (e) => e.type === "session.permission");
+    expect(asked).toMatchObject({
+      request: {
+        id: "ask-1",
+        kind: "question",
+        input: {
+          questions: [
+            {
+              question: "How do you want to test making a card?",
+              header: "Test card",
+              options: [
+                { label: "Skip it", description: "Make none." },
+                { label: "Handoff, you close it" },
+              ],
+              allowOther: true,
+            },
+            {
+              question: "Which tools?",
+              header: "Tool scope",
+              options: [{ label: "This card only" }],
+              allowOther: true,
+            },
+          ],
+        },
+      },
+    });
+    expect(
+      events.some(
+        (e) =>
+          e.type === "timeline.item" &&
+          e.item.type === "assistant_message" &&
+          e.item.text === "I ran the read-only tools.",
+      ),
+    ).toBe(true);
+    expect(events.some(turnEnded)).toBe(false);
+    wf.reply = answered;
+    await connection.send({
+      type: "session.permission",
+      sessionId: "s1",
+      permissionId: "ask-1",
+      response: {
+        behavior: "allow",
+        updatedInput: {
+          answers: { "Test card": "Handoff, you close it", "Tool scope": "only read" },
+        },
+      },
+    });
+    expect(await until(events, (e) => e.type === "session.permission_resolved")).toMatchObject({
+      permissionId: "ask-1",
+    });
+    expect(wf.cards.get("card-1")!.answered).toEqual({
+      workspace: P,
+      card: "card-1",
+      question: "ask-1",
+      answers: [
+        { questionId: "card", optionId: "2" },
+        { questionId: "scope", text: "only read" },
+      ],
+    });
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed", turnId: "turn-1" });
+    // The agent's words after the answer arrive before the turn ends, not after it.
+    const end = events.findIndex(turnEnded);
+    const after = events.findIndex(
+      (e) =>
+        e.type === "timeline.item" &&
+        e.item.type === "assistant_message" &&
+        e.item.text.startsWith("Hello! You said: [{"),
+    );
+    expect(after).toBeGreaterThan(-1);
+    expect(after).toBeLessThan(end);
+  });
+
+  test("a declined question reaches Workfloor as a decline with the person's reason", async () => {
+    const wf = new FakeWorkfloor();
+    wf.reply = (card) =>
+      setTimeout(() => {
+        wf.cards.get(card)!.asks = {
+          id: "ask-1",
+          kind: "agent",
+          question: "Go on?",
+          options: ["Yes", "No"],
+        };
+        wf.changed();
+      }, 20);
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "hello");
+    expect(await until(events, (e) => e.type === "session.permission")).toMatchObject({
+      request: {
+        input: {
+          questions: [
+            {
+              question: "Go on?",
+              header: "Question 1",
+              options: [{ label: "Yes" }, { label: "No" }],
+            },
+          ],
+        },
+      },
+    });
+    wf.reply = () => {};
+    await connection.send({
+      type: "session.permission",
+      sessionId: "s1",
+      permissionId: "ask-1",
+      response: { behavior: "deny", message: "not now" },
+    });
+    await until(events, (e) => e.type === "session.permission_resolved");
+    expect(wf.cards.get("card-1")!.answered).toEqual({
+      workspace: P,
+      card: "card-1",
+      question: "ask-1",
+      reject: "not now",
+    });
+  });
+
+  test("a question answered in Workfloor meanwhile is no longer asked in Paseo", async () => {
+    const wf = new FakeWorkfloor();
+    wf.reply = (card) =>
+      setTimeout(() => {
+        wf.cards.get(card)!.asks = {
+          id: "ask-1",
+          kind: "agent",
+          question: "Go on?",
+          options: ["Yes"],
+        };
+        wf.changed();
+      }, 20);
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "hello");
+    await until(events, (e) => e.type === "session.permission");
+    wf.cards.get("card-1")!.asks = undefined;
+    wf.changed();
+    expect(await until(events, (e) => e.type === "session.permission_resolved")).toMatchObject({
+      permissionId: "ask-1",
+    });
+  });
+
+  test("a conversation opened while its agent waits on a question picks the turn up and asks it", async () => {
+    const wf = new FakeWorkfloor();
+    const first = await connect(wf);
+    await open(first.connection, first.events, "s1");
+    await say(first.connection, "s1", "hello");
+    await until(first.events, turnEnded);
+    const c = wf.cards.get("card-1")!;
+    c.state = "RUNNING";
+    c.asks = { id: "ask-1", kind: "agent", question: "Go on?", options: ["Yes"] };
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s2", {
+      persistence: { version: 1, data: { project: P, card: "card-1" } },
+    });
+    expect(await until(events, (e) => e.type === "session.turn")).toMatchObject({
+      state: "started",
+    });
+    expect(await until(events, (e) => e.type === "session.permission")).toMatchObject({
+      request: { id: "ask-1" },
+    });
   });
 });

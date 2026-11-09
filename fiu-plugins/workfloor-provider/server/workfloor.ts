@@ -35,6 +35,24 @@ export interface Conversation {
   title: string;
   updatedAt?: string;
 }
+/** What waits on the person: the agent's `card_ask` (`agent`), or the lane's own ask or approval. */
+export interface WaitingQuestion {
+  id: string;
+  kind: "ask" | "approval" | "agent";
+  question: string;
+  options?: string[];
+  questions?: Array<{
+    id?: string;
+    title?: string;
+    prompt: string;
+    options?: Array<{ label: string; description?: string }>;
+  }>;
+  context?: string;
+}
+/** One answer per question, an option by its number ("1", "2", …) or the person's words; or a decline. */
+export type QuestionReply =
+  | { answers: Array<{ questionId: string; optionId?: string; text?: string }> }
+  | { reject: string };
 /** A conversation's agent session, by the IDs Workfloor's routes take. */
 export interface Scope {
   project: string;
@@ -106,6 +124,21 @@ export class Workfloor {
       task: card,
     });
     return this.request(`connection?${query}`);
+  }
+
+  /** What waits on the person on this card, as Workfloor's card panel reads it. */
+  async question(project: string, card: string): Promise<WaitingQuestion | undefined> {
+    const query = new URLSearchParams({ workspace: project, card });
+    return (await this.request<{ question?: WaitingQuestion }>(`lane-flows/questions?${query}`))
+      .question;
+  }
+
+  /** Answers the question the card waits on, as its question form does. */
+  answer(project: string, card: string, question: string, reply: QuestionReply): Promise<unknown> {
+    return this.request("lane-flows/questions", {
+      method: "POST",
+      body: JSON.stringify({ workspace: project, card, question, ...reply }),
+    });
   }
 
   send(scope: Scope, body: string): Promise<unknown> {
