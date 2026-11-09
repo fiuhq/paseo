@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import {
   Workfloor,
   WorkfloorError,
+  cardIdOfShortLink,
   cardOfLink,
   lane,
   type Attachment,
@@ -288,6 +289,39 @@ function cardOf(persistence: ProviderPersistence | undefined): Card | undefined 
   return { project, card, lane: typeof saved === "string" ? saved : lane(project) };
 }
 
+/**
+ * Where a short link's card is: the lane of a project the token reaches that shows it, its
+ * Conversations lane included. Workfloor answers a card only on the lane it is on, so each lane is
+ * asked once, all at once.
+ */
+async function placeShortLink(
+  wf: Workfloor,
+  projects: ReadonlyArray<{ id: string }>,
+  card: string | undefined,
+): Promise<Card | undefined> {
+  if (!card) return undefined;
+  const refs = (
+    await Promise.all(
+      projects.map(async (p) =>
+        [...(await wf.lanes(p.id).catch(() => [])), lane(p.id)].map((l) => ({
+          project: p.id,
+          card,
+          lane: l,
+        })),
+      ),
+    )
+  ).flat();
+  const found = await Promise.all(
+    refs.map((ref) =>
+      wf.detail(ref).then(
+        () => ref,
+        () => undefined,
+      ),
+    ),
+  );
+  return found.find((ref) => ref !== undefined);
+}
+
 async function listSessions(
   input: Extract<ProviderInput, { type: "sessions" }>,
   state: State,
@@ -295,7 +329,8 @@ async function listSessions(
   const wf = await state.workfloor();
   const projects = await wf.projects();
   // A Workfloor card's link, pasted into the search, lists that card: any lane's, to open and drive here.
-  const linked = cardOfLink(input.query);
+  const linked =
+    cardOfLink(input.query) ?? (await placeShortLink(wf, projects, cardIdOfShortLink(input.query)));
   if (linked) {
     const detail = await wf.detail(linked);
     const project = projects.find((p) => p.id === linked.project);
@@ -304,7 +339,9 @@ async function listSessions(
         persistence: persistenceOf(linked),
         cwd: input.cwd ?? homedir(),
         title: detail.title || linked.card,
-        description: `Workfloor · ${project?.name ?? linked.project}`,
+        // Paseo's Import matches the search against a row's words again, so the row carries the
+        // link it was found by; without it the card is dropped after Workfloor found it.
+        description: `Workfloor · ${project?.name ?? linked.project} · ${input.query?.trim()}`,
       },
     ];
     state.emit({ type: "sessions", requestId: input.requestId, sessions });

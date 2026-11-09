@@ -148,6 +148,8 @@ class FakeWorkfloor {
       if (!bytes || q.get("session") !== session) return json({ error: "Not found" }, 404);
       return new Response(bytes as BodyInit, { headers: { "content-type": "image/png" } });
     }
+    if (url.pathname === "/api/connection" && q.get("view") === "workflows")
+      return json({ workflows: [{ id: "normal-lane" }, { id: "other-lane" }] });
     if (url.pathname === "/api/conversations" && init?.method === "POST") {
       const id = `card-${this.cards.size + 1}`;
       this.cards.set(id, {
@@ -898,7 +900,7 @@ describe("the Workfloor provider", () => {
           persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
           cwd: "/work",
           title: "Server heap crashes",
-          description: "Workfloor · codev",
+          description: expect.stringContaining("Workfloor · codev"),
         },
       ],
     });
@@ -1349,5 +1351,90 @@ describe("the Workfloor provider", () => {
       expect.objectContaining({ type: "assistant_message", text: "Added it." }),
     ]);
     await connection.close();
+  });
+
+  /** Paseo's Import keeps a provider's row only when the search is in its words (agent-manager's match). */
+  const keptByImport = (
+    session: { title?: string; description?: string; cwd: string },
+    query: string,
+  ) =>
+    [session.title, session.description, session.cwd.split("/").pop()].some((v) =>
+      v?.toLowerCase().includes(query.trim().toLowerCase()),
+    );
+
+  test("a card found by its link survives Import's own match on the search words", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "IDLE",
+      agent: "build-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    const link = `https://wf.test/?page=lanes&project=${P}&workflow=normal-lane&task=lane-card`;
+    await connection.send({ type: "sessions", requestId: "l1", cwd: "/work", query: link });
+    const listed = (await until(events, (e) => e.type === "sessions")) as Extract<
+      ProviderEvent,
+      { type: "sessions" }
+    >;
+    expect(listed.sessions).toHaveLength(1);
+    expect(keptByImport(listed.sessions[0]!, link)).toBe(true);
+  });
+
+  test("a short card link (/c/<card>) is found on the lane that shows it", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    const link = "https://wf.test/c/lane-card";
+    await connection.send({ type: "sessions", requestId: "l1", cwd: "/work", query: link });
+    const listed = (await until(events, (e) => e.type === "sessions")) as Extract<
+      ProviderEvent,
+      { type: "sessions" }
+    >;
+    expect(listed.sessions).toEqual([
+      expect.objectContaining({
+        persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+        title: "Scratch pools run past 6 hours",
+      }),
+    ]);
+    expect(keptByImport(listed.sessions[0]!, link)).toBe(true);
+  });
+
+  test("a short link to a conversation is found on the Conversations lane; an unknown card lists nothing", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("conv-card", { title: "hello world", state: "IDLE", agent: A, messages: [] });
+    const { connection, events } = await connect(wf);
+    await connection.send({
+      type: "sessions",
+      requestId: "l1",
+      cwd: "/work",
+      query: "https://wf.test/c/conv-card",
+    });
+    const listed = (await until(
+      events,
+      (e) => e.type === "sessions" && e.requestId === "l1",
+    )) as Extract<ProviderEvent, { type: "sessions" }>;
+    expect(listed.sessions[0]?.persistence).toEqual({
+      version: 1,
+      data: { project: P, card: "conv-card" },
+    });
+    await connection.send({
+      type: "sessions",
+      requestId: "l2",
+      cwd: "/work",
+      query: "https://wf.test/c/nope",
+    });
+    const none = (await until(
+      events,
+      (e) => e.type === "sessions" && e.requestId === "l2",
+    )) as Extract<ProviderEvent, { type: "sessions" }>;
+    expect(none.sessions).toEqual([]);
   });
 });

@@ -5,7 +5,8 @@ agents as the model (`Buildy · codev`); the first message starts a conversation
 Workfloor, and every later message goes to that conversation's agent. Paseo's session list shows
 your conversations, so you can open one you started in Workfloor.
 
-A card on an assembly lane opens the same way: paste its Workfloor link into Import's search, and
+A card on an assembly lane opens the same way: paste its Workfloor link (the long one, or the short `/c/<card>` one Copy link gives) into Import's
+search, and
 the card is listed to open. The agent takes the card's name, its history replays, your messages go
 to the agent of the stage it is on now (the next stage's agent, once the lane moves it on), and the
 agent's questions are asked in Paseo. The lane still moves the card; a stage's go and an approval

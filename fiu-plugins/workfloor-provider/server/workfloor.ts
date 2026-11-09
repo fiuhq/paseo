@@ -109,6 +109,17 @@ export function cardOfLink(text: string | undefined): CardRef | undefined {
   }
 }
 
+/** The card a Workfloor short link names (`/c/<card id>`, its Copy link), from any text holding one. */
+export function cardIdOfShortLink(text: string | undefined): string | undefined {
+  const found = text?.match(/https?:\/\/\S+/)?.[0];
+  if (!found) return undefined;
+  try {
+    return new URL(found).pathname.match(/^\/c\/([^/]+)\/?$/)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
 export class Workfloor {
   constructor(
     private readonly auth: WorkfloorAuth,
@@ -134,6 +145,13 @@ export class Workfloor {
     return this.request(
       `connection?${new URLSearchParams({ view: "agents", workspace: project, workflow: lane(project) })}`,
     );
+  }
+
+  /** The project's lanes, by id; its Conversations lane is not among them. */
+  async lanes(project: string): Promise<string[]> {
+    const query = new URLSearchParams({ view: "workflows", workspace: project });
+    const read = await this.request<{ workflows?: Array<{ id: string }> }>(`connection?${query}`);
+    return (read.workflows ?? []).map((w) => w.id);
   }
 
   async conversations(project: string): Promise<Conversation[]> {
