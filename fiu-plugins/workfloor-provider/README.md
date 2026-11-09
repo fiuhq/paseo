@@ -22,7 +22,7 @@ gate or a permission. So:
 - the agent's question is asked in Paseo, while the turn stays open: pick an option, write your own
   answer, or decline it; one you answer in Workfloor meanwhile is withdrawn here;
 - a plan step's go, an approval, a handoff or issue the agent offers, and a permission request are
-  answered in Workfloor: the turn ends with a link to the conversation;
+  answered in Workfloor: the turn ends with a link to the card;
 - the agent works in Workfloor, on its project's repositories, not in your Paseo workspace;
 - a conversation keeps the agent it started with.
 
