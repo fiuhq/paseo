@@ -516,21 +516,36 @@ async function prompt(
       // The card's agent now: its session may have started, or the card moved on to its next
       // stage's agent, since this Paseo session last read it.
       await track(session, await wf.detail(session.card), state);
-      if (!session.workfloorSession)
-        throw new WorkfloorError("This card's agent has not started yet: try again in a moment");
-      const scope = { ...session.card, session: session.workfloorSession };
-      // Each picture goes up to the card's current session first, as Workfloor's composer sends
-      // them.
-      const attachments = await Promise.all(
-        images.map((image, i) =>
-          wf.upload(scope, {
-            name: `picture-${i + 1}.${image.mimeType.split("/")[1] ?? "png"}`,
-            mimeType: image.mimeType,
-            bytes: Buffer.from(image.data, "base64"),
-          }),
-        ),
-      );
-      await wf.send(scope, text, attachments);
+      if (!session.workfloorSession) {
+        // No agent on the card: its stage's agent never started (a card made without one). The
+        // person's message starts it, as Workfloor's Start agent does, their words in its handoff.
+        const idle = await wf.idleStage(session.card);
+        if (!idle?.yours)
+          throw new WorkfloorError(
+            idle
+              ? `No agent is on this card in ${idle.stage}, and only its assignee or a project admin may start it: ${wf.link(session.card)}`
+              : `No agent is on this card, and Workfloor has none to start here: ${wf.link(session.card)}`,
+          );
+        if (images.length)
+          throw new WorkfloorError(
+            `No agent is on this card yet: send your words first to start ${idle.stage}'s agent, then the pictures`,
+          );
+        await wf.startStageAgent(session.card, idle, text);
+      } else {
+        const scope = { ...session.card, session: session.workfloorSession };
+        // Each picture goes up to the card's current session first, as Workfloor's composer sends
+        // them.
+        const attachments = await Promise.all(
+          images.map((image, i) =>
+            wf.upload(scope, {
+              name: `picture-${i + 1}.${image.mimeType.split("/")[1] ?? "png"}`,
+              mimeType: image.mimeType,
+              bytes: Buffer.from(image.data, "base64"),
+            }),
+          ),
+        );
+        await wf.send(scope, text, attachments);
+      }
     } else {
       const picked = parseModel(session.model);
       if (!picked) throw new WorkfloorError("Pick a Workfloor agent first");

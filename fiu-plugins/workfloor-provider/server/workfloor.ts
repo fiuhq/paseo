@@ -66,6 +66,13 @@ export interface WaitingQuestion {
   handoff?: unknown;
   issue?: unknown;
 }
+/** A card's stage whose agent never started there. */
+export interface IdleStage {
+  stageId: string;
+  stage: string;
+  entry: number;
+  yours?: boolean;
+}
 /** One answer per question, an option by its number ("1", "2", …) or the person's words; or a decline. */
 export type QuestionReply =
   | { answers: Array<{ questionId: string; optionId?: string; text?: string }> }
@@ -179,6 +186,29 @@ export class Workfloor {
       task: ref.card,
     });
     return this.request(`connection?${query}`);
+  }
+
+  /**
+   * The card's stage whose agent never started there (a card made or moved without its agent),
+   * as Workfloor's Start agent reads it; `yours` when the person may start it.
+   */
+  async idleStage(ref: CardRef): Promise<IdleStage | undefined> {
+    const query = new URLSearchParams({ workspace: ref.project, card: ref.card });
+    return (await this.request<{ idle?: IdleStage }>(`lane-flows/agent-failure?${query}`)).idle;
+  }
+
+  /** Starts that stage's agent as the person, with their words in its handoff (Start agent). */
+  startStageAgent(ref: CardRef, idle: IdleStage, words: string): Promise<unknown> {
+    return this.request("lane-flows/agent-start", {
+      method: "POST",
+      body: JSON.stringify({
+        workspace: ref.project,
+        card: ref.card,
+        stage: idle.stageId,
+        entry: idle.entry,
+        ...(words ? { context: words } : {}),
+      }),
+    });
   }
 
   /** What waits on the person on this card, as Workfloor's card panel reads it. */

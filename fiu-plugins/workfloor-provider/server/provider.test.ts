@@ -22,6 +22,8 @@ class FakeWorkfloor {
       lane?: string;
       /** The card's current agent session, once its lane moved it on to another stage's agent. */
       session?: string;
+      /** Its stage's agent never started: no session yet, and Start agent can start it (yours or not). */
+      idle?: { stage: string; yours: boolean };
       pending?: string;
       /** The agent's `card_ask` waiting on the person, as Workfloor's questions route reads it. */
       asks?: Record<string, unknown>;
@@ -112,6 +114,8 @@ class FakeWorkfloor {
       if (!c || q.get("workflow") !== (c.lane ?? `conversations:${P}`))
         return json({ error: "Not found" }, 404);
       const session = c.session ?? `s-${q.get("task")}`;
+      if (c.idle)
+        return json({ title: c.title, sessionId: null, sessions: [], messages: c.messages });
       return json({
         title: c.title,
         sessionId: session,
@@ -150,6 +154,29 @@ class FakeWorkfloor {
     }
     if (url.pathname === "/api/connection" && q.get("view") === "workflows")
       return json({ workflows: [{ id: "normal-lane" }, { id: "other-lane" }] });
+    if (url.pathname === "/api/lane-flows/agent-failure") {
+      const c = this.cards.get(q.get("card")!);
+      return json(
+        c?.idle
+          ? {
+              idle: {
+                stageId: `stage-${c.idle.stage}`,
+                stage: c.idle.stage,
+                entry: 7,
+                yours: c.idle.yours,
+              },
+            }
+          : {},
+      );
+    }
+    if (url.pathname === "/api/lane-flows/agent-start" && init?.method === "POST") {
+      const c = this.cards.get(body.card)!;
+      c.idle = undefined;
+      c.state = "RUNNING";
+      c.messages.push({ id: `m${c.messages.length + 1}`, role: "user", body: body.context });
+      this.reply(body.card, body.context);
+      return json({ started: true });
+    }
     if (url.pathname === "/api/conversations" && init?.method === "POST") {
       const id = `card-${this.cards.size + 1}`;
       this.cards.set(id, {
@@ -1436,5 +1463,62 @@ describe("the Workfloor provider", () => {
       (e) => e.type === "sessions" && e.requestId === "l2",
     )) as Extract<ProviderEvent, { type: "sessions" }>;
     expect(none.sessions).toEqual([]);
+  });
+
+  test("a message to an imported card whose stage's agent never started starts it, with the message", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("plan-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "planny",
+      lane: "normal-lane",
+      idle: { stage: "Plan", yours: true },
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "plan-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "plan the 6h fix");
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    expect(wf.requests.find((r) => r.path === "/api/lane-flows/agent-start")?.body).toEqual({
+      workspace: P,
+      card: "plan-card",
+      stage: "stage-Plan",
+      entry: 7,
+      context: "plan the 6h fix",
+    });
+    const texts = events.flatMap((e) =>
+      e.type === "timeline.item" && e.item.type === "assistant_message" ? [e.item.text] : [],
+    );
+    expect(texts).toContain("Hello! You said: plan the 6h fix");
+  });
+
+  test("a card with no agent that isn't the person's to start says so, with its link, and starts nothing", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("plan-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "planny",
+      lane: "normal-lane",
+      idle: { stage: "Plan", yours: false },
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "plan-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "plan it");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message: expect.stringMatching(
+            /^No agent is on this card in Plan, and only its assignee.*task=plan-card/,
+          ),
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/lane-flows/agent-start")).toBe(false);
   });
 });
