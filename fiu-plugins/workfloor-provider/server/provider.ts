@@ -322,6 +322,8 @@ async function openSession(
   const session: Session = { id: input.sessionId, config: input.config, seen: new Set(), turns: 0 };
   let history: Message[] = [];
   let busy = false;
+  // The card's name in Workfloor: Paseo names an imported agent with it.
+  let title = input.config.title;
   const wf = card ? await state.workfloor() : undefined;
   if (card && wf) {
     const [detail, waiting] = await Promise.all([
@@ -337,6 +339,7 @@ async function openSession(
     if (agent) session.model = modelId(card.project, agent);
     history = detail.messages;
     for (const m of history) session.seen.add(m.id);
+    title ||= detail.title;
   } else {
     session.model = parseModel(input.config.model)
       ? input.config.model
@@ -350,7 +353,7 @@ async function openSession(
     capabilities: state.capabilities,
     restoration: "core",
     ...(card ? { persistence: persistenceOf(card) } : {}),
-    ...(input.config.title ? { title: input.config.title } : {}),
+    ...(title ? { title } : {}),
     cwd: input.config.cwd,
   });
   state.emit({

@@ -56,6 +56,8 @@ interface ProviderHarnessOptions {
   closeAcknowledgementOnly?: boolean;
   openChildren?: (rootSessionId: string, emit: (event: ProviderEvent) => void) => void;
   handleInput?: (input: ProviderInput, emit: (event: ProviderEvent) => void) => Promise<boolean>;
+  /** The title the provider opens each session with. */
+  openedTitle?: string;
 }
 
 function controlKey(control: { key: string }): string {
@@ -106,6 +108,7 @@ function createProviderHarness(options: ProviderHarnessOptions = {}) {
           capabilities,
           restoration: "core",
           persistence: { version: 1, data: { token: "root" } },
+          ...(options.openedTitle ? { title: options.openedTitle } : {}),
           cwd: input.config.cwd,
         });
         emit({
@@ -2585,6 +2588,33 @@ test("plugin without a runtime safety capability uses baseline collection withou
     await registry.shutdown();
     await storage.flush();
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("plugin provider import names the agent with the title the provider opened the session with", async () => {
+  const harness = createProviderHarness({ openedTitle: "Server heap crashes on a large project" });
+  const registry = new PluginAgentClientRegistry(createTestLogger());
+  registry.replace([harness.registration]);
+  const client = registry.clients()[harness.registration.id]!;
+  const storedConfig = { provider: harness.registration.id, cwd: "/project" };
+  const handle = {
+    providerHandleId: 'plugin:{"version":1,"data":{"token":"root"}}',
+    cwd: "/project",
+  };
+  try {
+    const imported = await client.importSession!(handle, { config: storedConfig, storedConfig });
+    expect(imported.config).toEqual({
+      ...storedConfig,
+      title: "Server heap crashes on a large project",
+    });
+    await imported.session.close();
+    // A title the import itself sets wins over the provider's.
+    const named = { ...storedConfig, title: "Mine" };
+    const renamed = await client.importSession!(handle, { config: named, storedConfig: named });
+    expect(renamed.config.title).toBe("Mine");
+    await renamed.session.close();
+  } finally {
+    await registry.shutdown();
   }
 });
 

@@ -595,6 +595,8 @@ class ProviderRuntime {
 
 class ProviderRuntimeSession {
   readonly history: ProviderEvent[] = [];
+  /** The title the provider opened the session with: the name it has there, if it has one. */
+  title: string | undefined;
   private historyClaimed = false;
   private readonly listeners = new Set<(event: ProviderEvent) => void>();
   private capabilities: readonly string[] = [];
@@ -769,6 +771,7 @@ class ProviderRuntimeSession {
     if (event.type === "session.opened") {
       this.capabilities = [...event.capabilities];
       this.persistence = this.restoration === "core" ? (event.persistence ?? null) : null;
+      this.title = event.title;
       return;
     }
     const openRequest = this.openRequest;
@@ -1068,9 +1071,16 @@ class PluginAgentClient implements AgentClient {
     });
     const persistence = session.describePersistence();
     if (!persistence) throw new Error(`Plugin provider '${this.provider}' did not persist import`);
+    // An imported session keeps the name the provider gives it, unless the import names it.
+    const title = context.storedConfig.title ?? session.openedTitle;
     return {
       session,
-      config: { ...context.storedConfig, provider: this.provider, cwd: input.cwd },
+      config: {
+        ...context.storedConfig,
+        ...(title ? { title } : {}),
+        provider: this.provider,
+        cwd: input.cwd,
+      },
       persistence,
       timeline: session.timelineHistory(),
       providerSubagentEvents: session.subagentHistory(),
@@ -1246,6 +1256,11 @@ class PluginAgentSession implements AgentSession {
       (entry) => entry.item.type === "notification",
     );
     this.unsubscribe = bridge.onEvent((event) => this.accept(event, true));
+  }
+
+  /** The title the provider opened this session with. */
+  get openedTitle(): string | undefined {
+    return this.bridge.title;
   }
 
   get id(): string {
