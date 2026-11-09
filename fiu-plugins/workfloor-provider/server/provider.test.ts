@@ -766,6 +766,11 @@ describe("the Workfloor provider", () => {
     await until(events, (e) => e.type === "session.permission");
     await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
     await until(events, (e) => e.type === "request.completed" && e.requestId === "i1");
+    expect(events).toContainEqual({
+      type: "session.permission_resolved",
+      sessionId: "s1",
+      permissionId: "ask-1",
+    });
     wf.reply = () => {};
     events.length = 0;
     await say(connection, "s1", "two");

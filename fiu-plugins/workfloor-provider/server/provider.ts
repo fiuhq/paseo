@@ -469,8 +469,8 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
     if (turn.abort.signal.aborted) return;
     turn.abort.abort();
     if (session.turn === turn) session.turn = undefined;
-    // Paseo resolves a turn's open questions when it ends: ask a question still waiting again next turn.
-    session.asked = undefined;
+    // A question still waiting is asked again next turn.
+    forget(session, state);
     state.emit({
       type: "session.turn",
       sessionId: session.id,
@@ -711,7 +711,7 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
   if (!turn || turn.abort.signal.aborted) return;
   turn.abort.abort();
   session.turn = undefined;
-  session.asked = undefined;
+  forget(session, state);
   state.emit({ type: "session.turn", sessionId, turnId: turn.id, state: "canceled" });
   const card = session.card;
   if (!card) return;
@@ -738,6 +738,17 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
     }
   })();
   await session.stopping;
+}
+
+/** Drops the question raised in Paseo, resolving it there too, so Paseo keeps no stale copy. */
+function forget(session: Session, state: State): void {
+  if (!session.asked) return;
+  state.emit({
+    type: "session.permission_resolved",
+    sessionId: session.id,
+    permissionId: session.asked.id,
+  });
+  session.asked = undefined;
 }
 
 /**
