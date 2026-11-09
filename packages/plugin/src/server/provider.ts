@@ -395,6 +395,8 @@ export interface ProviderSessionSummary {
   title?: string;
   description?: string;
   updatedAt?: string;
+  /** This row is what the search names, found by the provider itself (a link it recognised), not a text match. */
+  exact?: boolean;
 }
 
 export interface ProviderCommand {
@@ -1380,6 +1382,7 @@ export const ProviderEventSchema: z.ZodType<ProviderEvent> = z.discriminatedUnio
             title: z.string().optional(),
             description: z.string().optional(),
             updatedAt: z.string().optional(),
+            exact: z.boolean().optional(),
           })
           .strip(),
       ),

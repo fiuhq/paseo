@@ -1048,14 +1048,18 @@ class PluginAgentClient implements AgentClient {
       cwd: options.cwd,
       limit: options.limit,
     });
-    return sessions.map((session) => ({
-      providerHandleId: encodePersistence(session.persistence),
-      cwd: session.cwd,
-      title: session.title ?? null,
-      firstPromptPreview: null,
-      lastPromptPreview: session.description ?? null,
-      lastActivityAt: parseProviderDate(session.updatedAt),
-    }));
+    return sessions.map((session) => {
+      const entry: ImportableProviderSession = {
+        providerHandleId: encodePersistence(session.persistence),
+        cwd: session.cwd,
+        title: session.title ?? null,
+        firstPromptPreview: null,
+        lastPromptPreview: session.description ?? null,
+        lastActivityAt: parseProviderDate(session.updatedAt),
+      };
+      if (session.exact) entry.exact = true;
+      return entry;
+    });
   }
 
   async importSession(

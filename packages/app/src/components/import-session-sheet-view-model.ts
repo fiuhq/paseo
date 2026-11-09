@@ -85,6 +85,28 @@ export function aggregateSessionEntries(
   return collected;
 }
 
+/**
+ * The one session a pasted link names, to import without a click: the search is a single link, and
+ * among the answers fetched since the sheet opened (not cached ones from before, nor a previous
+ * search's results still on screen) exactly one row is `exact`, found by the provider that knows
+ * the link. A row that only mentions the link in its words never counts, so slower providers aren't
+ * waited for.
+ */
+export function pastedLinkSession(
+  query: string,
+  queries: ReadonlyArray<
+    SessionsQueryResult & { isPlaceholderData?: boolean; dataUpdatedAt?: number }
+  >,
+  openedAt: number,
+): FetchRecentProviderSessionEntry | null {
+  if (!/^https?:\/\/\S+$/i.test(query.trim())) return null;
+  const answered = queries.filter(
+    (q) => !q.isPlaceholderData && (q.dataUpdatedAt ?? 0) >= openedAt,
+  );
+  const exact = aggregateSessionEntries(answered).filter((entry) => entry.exact);
+  return exact.length === 1 ? exact[0]! : null;
+}
+
 export function sumFilteredAlreadyImportedCount(
   queries: ReadonlyArray<SessionsQueryResult>,
 ): number {

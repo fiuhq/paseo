@@ -53,6 +53,7 @@ import type {
   AgentSlashCommand,
   AgentStreamEvent,
   AgentTimelineItem,
+  ImportableProviderSession,
   ImportProviderSessionInput,
   ImportProviderSessionContext,
   ResolveAgentDefaultModeInput,
@@ -12397,6 +12398,27 @@ test("listImportableSessions narrows to the providerFilter when supplied", async
   expect(claudeClient.calls).toBe(1);
   expect(codexClient.calls).toBe(0);
   expect(result.sessions.map((d) => d.provider)).toEqual(["claude"]);
+});
+
+test("listImportableSessions keeps an exact session the search words miss and filters the rest by text", async () => {
+  const link = "https://wf.test/c/card-1";
+  const base = { cwd: "/tmp/recent", firstPromptPreview: null, lastActivityAt: new Date() };
+  const sessions: ImportableProviderSession[] = [
+    { ...base, providerHandleId: "card", title: "Card", lastPromptPreview: null, exact: true },
+    { ...base, providerHandleId: "unrelated", title: "Other", lastPromptPreview: null },
+    { ...base, providerHandleId: "mentions", title: "Chat", lastPromptPreview: `see ${link}` },
+  ];
+  const client = new RecordingPersistedAgentsClient("claude");
+  Object.defineProperty(client, "listImportableSessions", { value: async () => sessions });
+  const manager = new AgentManager({
+    clients: { claude: client },
+    providerDefinitions: { claude: { enabled: true, derivedFromProviderId: null } },
+    logger,
+  });
+
+  const result = await manager.listImportableSessions({ query: link });
+
+  expect(result.sessions.map((d) => d.providerHandleId).sort()).toEqual(["card", "mentions"]);
 });
 
 test("listImportableSessions skips providers that lack supportsSessionListing even when row listing is defined", async () => {

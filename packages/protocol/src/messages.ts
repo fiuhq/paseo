@@ -977,6 +977,7 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   firstPromptPreview: z.string().nullable(),
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
+  exact: z.boolean().optional(),
 });
 
 export type RecentProviderSessionDescriptorPayload = z.infer<

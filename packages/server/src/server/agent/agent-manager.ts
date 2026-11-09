@@ -1212,7 +1212,10 @@ export class AgentManager {
           );
           return {
             sessions: sessions
-              .filter((session) => matchesImportableSessionQuery(session, options?.query))
+              .filter(
+                (session) =>
+                  session.exact || matchesImportableSessionQuery(session, options?.query),
+              )
               .map((session) => Object.assign(session, { provider })),
             error: null,
           };

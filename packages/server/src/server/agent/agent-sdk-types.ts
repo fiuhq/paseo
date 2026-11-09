@@ -582,6 +582,8 @@ export interface ImportableProviderSession {
   firstPromptPreview: string | null;
   lastPromptPreview: string | null;
   lastActivityAt: Date;
+  /** What the search names, found by the provider itself; Import never text-filters it. */
+  exact?: boolean;
 }
 
 export interface ImportProviderSessionInput {
