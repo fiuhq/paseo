@@ -10,6 +10,11 @@ the card is listed to open. Its history replays, your messages go to the agent o
 on now (the next stage's agent, once the lane moves it on), and the agent's questions are asked in
 Paseo. The lane still moves the card; a stage's go and an approval stay Workfloor's.
 
+Pictures go both ways. One you attach in Paseo is uploaded to the card's current session and sent
+with your message (a new conversation takes pictures from its second message, as Workfloor does);
+one a card's message carries in Workfloor shows under its words in Paseo, or as a link to the card
+when Workfloor can't give it back.
+
 Connect it in Paseo's Settings, Workfloor: Workfloor's address and a personal token that can read
 and write (Workfloor: Settings, Personal tokens). The token stays on this host, in the plugin's
 settings.

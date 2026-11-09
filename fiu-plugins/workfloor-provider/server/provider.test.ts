@@ -29,6 +29,11 @@ class FakeWorkfloor {
     }
   >();
   requests: Array<{ method: string; path: string; body?: unknown; auth: string | null }> = [];
+  /** Files uploaded for a message: their form fields and bytes. */
+  uploads: Array<{ fields: Record<string, string>; name: string; type: string; bytes: number[] }> =
+    [];
+  /** Each picture's bytes by its file id, as the thumbnail route answers. */
+  pictureBytes = new Map<string, Uint8Array>();
   private streams = new Set<ReadableStreamDefaultController<Uint8Array>>();
   /** What the agent does with a message: by default it works a moment, then answers and waits. */
   reply = (card: string, words: string) => {
@@ -65,7 +70,7 @@ class FakeWorkfloor {
   fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
     const auth = new Headers(init?.headers).get("authorization");
-    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : (init?.body ?? undefined);
     this.requests.push({
       method: init?.method ?? "GET",
       path: url.pathname + url.search,
@@ -114,6 +119,34 @@ class FakeWorkfloor {
         ...(c.pending ? { pendingAction: c.pending } : {}),
         messages: c.messages,
       });
+    }
+    if (url.pathname === "/api/attachments" && init?.method === "POST") {
+      const form = body as FormData;
+      const file = form.get("file") as File;
+      const fields = Object.fromEntries(
+        ["workspace", "workflow", "task", "session"].map((k) => [k, String(form.get(k))]),
+      );
+      this.uploads.push({
+        fields,
+        name: file.name,
+        type: file.type,
+        bytes: [...new Uint8Array(await file.arrayBuffer())],
+      });
+      return json({
+        id: `wfat_${this.uploads.length}`,
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+        kind: "image",
+        deliveryMode: "prompt",
+      });
+    }
+    if (url.pathname === "/api/attachments/content") {
+      const bytes = this.pictureBytes.get(q.get("id")!);
+      const c = this.cards.get(q.get("task")!);
+      const session = c?.session ?? `s-${q.get("task")}`;
+      if (!bytes || q.get("session") !== session) return json({ error: "Not found" }, 404);
+      return new Response(bytes as BodyInit, { headers: { "content-type": "image/png" } });
     }
     if (url.pathname === "/api/conversations" && init?.method === "POST") {
       const id = `card-${this.cards.size + 1}`;
@@ -177,6 +210,7 @@ async function connect(
     versions: [1],
     capabilities: [
       "prompt.message",
+      "prompt.image",
       "session.configure",
       "session.list",
       "session.persistence",
@@ -913,5 +947,119 @@ describe("the Workfloor provider", () => {
         .filter((r) => r.path.startsWith("/api/events") || r.path.includes("view=detail"))
         .every((r) => r.path.includes("workflow=normal-lane")),
     ).toBe(true);
+  });
+  test("a picture a card's message carries is shown inline under its words; one Workfloor can't give back is a link", async () => {
+    const wf = new FakeWorkfloor();
+    wf.pictureBytes.set("wfap_1", new Uint8Array([137, 80, 78, 71]));
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "IDLE",
+      agent: "test-agent",
+      lane: "normal-lane",
+      messages: [
+        {
+          id: "m1",
+          role: "agent",
+          body: "The Runs page hides the runs.",
+          attachments: [{ id: "wfap_1", name: "runs.png", mimeType: "image/png", size: 4 }],
+        },
+        {
+          id: "m2",
+          role: "agent",
+          body: "",
+          attachments: [{ id: "wfap_gone", name: "lost.png", mimeType: "image/png", size: 9 }],
+        },
+      ],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    const texts = events.flatMap((e) =>
+      e.type === "timeline.item" && e.item.type === "assistant_message" ? [e.item.text] : [],
+    );
+    expect(texts).toEqual([
+      "The Runs page hides the runs.\n\n![runs.png](data:image/png;base64,iVBORw==)",
+      expect.stringMatching(
+        /^\[lost\.png: open it in Workfloor\]\(https:\/\/wf\.test\/\?.*task=lane-card/,
+      ),
+    ]);
+  });
+
+  test("a picture sent from Paseo goes up to the card's current session and with the message", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      lane: "normal-lane",
+      session: "s-e2e",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await connection.send({
+      type: "session.prompt",
+      sessionId: "s1",
+      prompt: {
+        clientMessageId: "c-pic",
+        delivery: "auto",
+        input: {
+          type: "message",
+          content: [
+            { type: "text", text: "put this in the report" },
+            {
+              type: "image",
+              data: Buffer.from([1, 2, 3]).toString("base64"),
+              mimeType: "image/png",
+            },
+          ],
+        },
+      },
+    });
+    await until(events, turnEnded);
+    expect(wf.uploads).toEqual([
+      {
+        fields: { workspace: P, workflow: "normal-lane", task: "lane-card", session: "s-e2e" },
+        name: "picture-1.png",
+        type: "image/png",
+        bytes: [1, 2, 3],
+      },
+    ]);
+    expect(wf.requests.find((r) => r.path === "/api/conversation")?.body).toMatchObject({
+      session: "s-e2e",
+      command: {
+        kind: "send",
+        body: "put this in the report",
+        attachments: [{ id: "wfat_1", name: "picture-1.png", mimeType: "image/png" }],
+      },
+    });
+  });
+
+  test("a picture on a new conversation's first message is refused, saying to send words first", async () => {
+    const wf = new FakeWorkfloor();
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await connection.send({
+      type: "session.prompt",
+      sessionId: "s1",
+      prompt: {
+        clientMessageId: "c-first",
+        delivery: "auto",
+        input: {
+          type: "message",
+          content: [{ type: "image", data: "AQID", mimeType: "image/png" }],
+        },
+      },
+    });
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: { message: expect.stringContaining("send your words first") },
+      },
+    });
+    expect(wf.uploads).toEqual([]);
   });
 });
