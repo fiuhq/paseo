@@ -59,6 +59,8 @@ interface Turn {
   replied: boolean;
   /** Its agent was seen at work: a turn whose agent stops without a word (Stop in Workfloor) still ends. */
   worked: boolean;
+  /** The person's words Paseo sent and drew for this turn, until Workfloor's copy is read. */
+  sent?: string;
 }
 interface Session {
   id: string;
@@ -70,8 +72,13 @@ interface Session {
   seen: Set<string>;
   turns: number;
   turn?: Turn;
-  /** The agent's question the person stopped on: the watch leaves it for their next message. */
-  stoppedOn?: string;
+  /**
+   * Until the next turn, what a Stop left on the card, which the watch starts no turn for: the
+   * agent's question it stopped on, and the messages the card held once the stop landed.
+   */
+  stopped?: { question?: string; messages?: ReadonlySet<string> };
+  /** A message on its way to Workfloor: the turn it starts follows the card, not the watch. */
+  sending?: boolean;
   /** Between turns, the watch on the card that follows its lane: stage moves, a new agent's work. */
   watch?: AbortController;
   /** The agent's question raised in Paseo: its Workfloor id, and each question by the header Paseo answers it under. */
@@ -167,7 +174,10 @@ function createConnection(
     async close() {
       if (closed) return;
       closed = true;
-      for (const session of sessions.values()) session.turn?.abort.abort();
+      for (const session of sessions.values()) {
+        session.turn?.abort.abort();
+        unwatch(session);
+      }
       sessions.clear();
       listeners.clear();
     },
@@ -383,7 +393,7 @@ async function openSession(
       : new Map<string, string>();
   if (input.history === "replay")
     for (const m of history) {
-      const item = timelineItem(m, true, shown);
+      const item = timelineItem(m, shown);
       if (item) state.emit({ type: "timeline.item", sessionId: input.sessionId, item });
     }
   state.emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
@@ -437,7 +447,7 @@ async function prompt(
     });
   if (input.prompt.input.type !== "message")
     return answer({ type: "failed", error: { message: "Workfloor takes messages only" } });
-  if (session.turn)
+  if (session.turn || session.sending)
     return answer({
       type: "failed",
       error: { message: "Workfloor's agent is still answering: wait for it, or stop it" },
@@ -460,58 +470,68 @@ async function prompt(
       },
     });
 
-  const wf = await state.workfloor();
-  await session.stopping;
-  if (session.card) {
-    // The card's agent now: its session may have started, or the card moved on to its next stage's
-    // agent, since this Paseo session last read it.
-    await track(session, await wf.detail(session.card), state);
-    if (!session.workfloorSession)
-      throw new WorkfloorError("This card's agent has not started yet: try again in a moment");
-    const scope = { ...session.card, session: session.workfloorSession };
-    // Each picture goes up to the card's current session first, as Workfloor's composer sends them.
-    const attachments = await Promise.all(
-      images.map((image, i) =>
-        wf.upload(scope, {
-          name: `picture-${i + 1}.${image.mimeType.split("/")[1] ?? "png"}`,
-          mimeType: image.mimeType,
-          bytes: Buffer.from(image.data, "base64"),
-        }),
-      ),
-    );
-    await wf.send(scope, text, attachments);
-  } else {
-    const picked = parseModel(session.model);
-    if (!picked) throw new WorkfloorError("Pick a Workfloor agent first");
-    session.card = {
-      project: picked.project,
-      card: await wf.start(picked.project, picked.agent, text),
-      lane: lane(picked.project),
-    };
-    state.emit({
-      type: "session.persistence",
-      sessionId: session.id,
-      persistence: persistenceOf(session.card),
-    });
-  }
+  session.sending = true;
+  unwatch(session);
+  try {
+    const wf = await state.workfloor();
+    await session.stopping;
+    if (session.card) {
+      // The card's agent now: its session may have started, or the card moved on to its next
+      // stage's agent, since this Paseo session last read it.
+      await track(session, await wf.detail(session.card), state);
+      if (!session.workfloorSession)
+        throw new WorkfloorError("This card's agent has not started yet: try again in a moment");
+      const scope = { ...session.card, session: session.workfloorSession };
+      // Each picture goes up to the card's current session first, as Workfloor's composer sends
+      // them.
+      const attachments = await Promise.all(
+        images.map((image, i) =>
+          wf.upload(scope, {
+            name: `picture-${i + 1}.${image.mimeType.split("/")[1] ?? "png"}`,
+            mimeType: image.mimeType,
+            bytes: Buffer.from(image.data, "base64"),
+          }),
+        ),
+      );
+      await wf.send(scope, text, attachments);
+    } else {
+      const picked = parseModel(session.model);
+      if (!picked) throw new WorkfloorError("Pick a Workfloor agent first");
+      session.card = {
+        project: picked.project,
+        card: await wf.start(picked.project, picked.agent, text),
+        lane: lane(picked.project),
+      };
+      state.emit({
+        type: "session.persistence",
+        sessionId: session.id,
+        persistence: persistenceOf(session.card),
+      });
+    }
 
-  const turn = newTurn(session);
-  state.emit({
-    type: "timeline.item",
-    sessionId: session.id,
-    item: {
-      type: "user_message",
-      id: `${turn.id}-you`,
-      text,
-      clientMessageId: input.prompt.clientMessageId,
-    },
-  });
-  answer({ type: "turn", turnId: turn.id });
-  startTurn(session, turn, wf, state);
+    const turn = newTurn(session);
+    turn.sent = text;
+    state.emit({
+      type: "timeline.item",
+      sessionId: session.id,
+      item: {
+        type: "user_message",
+        id: `${turn.id}-you`,
+        text,
+        clientMessageId: input.prompt.clientMessageId,
+      },
+    });
+    answer({ type: "turn", turnId: turn.id });
+    startTurn(session, turn, wf, state);
+  } finally {
+    session.sending = false;
+    watch(session, state);
+  }
 }
 
 function newTurn(session: Session): Turn {
   unwatch(session);
+  session.stopped = undefined;
   session.turns += 1;
   const turn: Turn = {
     id: `turn-${session.turns}`,
@@ -608,11 +628,20 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
  * it when that agent works, asks, or has written since Paseo last read the card.
  */
 function watch(session: Session, state: State): void {
-  if (!session.card || session.turn || session.watch || state.sessions.get(session.id) !== session)
+  if (
+    !session.card ||
+    session.turn ||
+    session.watch ||
+    session.sending ||
+    state.sessions.get(session.id) !== session
+  )
     return;
   const abort = new AbortController();
   session.watch = abort;
   const card = session.card;
+  const end = () => {
+    if (session.watch === abort) unwatch(session);
+  };
   void (async () => {
     const wf = await state.workfloor();
     let reading = false;
@@ -632,15 +661,22 @@ function watch(session: Session, state: State): void {
           ]);
           if (abort.signal.aborted) return;
           await track(session, detail, state);
+          if (abort.signal.aborted) return;
           const current = detail.sessions?.find((s) => s.id === detail.sessionId);
-          const fresh = detail.messages.some((m) => !session.seen.has(m.id));
+          // After a Stop, the agent it stopped may still read as working a moment, and the message
+          // its turn held back is no news: only a new message or another question starts a turn.
+          const stopped = session.stopped;
+          if (stopped) stopped.messages ??= new Set(detail.messages.map((m) => m.id));
+          const fresh = detail.messages.some(
+            (m) => !session.seen.has(m.id) && !stopped?.messages?.has(m.id),
+          );
           // While Workfloor waits on the person for what only its page takes, a turn would just end
           // with the same link again: follow only what the agent writes then.
           const held = !!detail.pendingAction || (!!waiting && !answerable(waiting));
-          const working = !!current && WORKING.has(current.state);
-          const asks = answerable(waiting) && waiting.id !== session.stoppedOn;
+          const working = !stopped && !!current && WORKING.has(current.state);
+          const asks = answerable(waiting) && waiting.id !== stopped?.question;
           if (asks || fresh || (working && !held)) {
-            if (!session.turn) startTurn(session, newTurn(session), wf, state);
+            startTurn(session, newTurn(session), wf, state);
             return;
           }
         } while (again && !abort.signal.aborted);
@@ -657,14 +693,15 @@ function watch(session: Session, state: State): void {
       } catch (error) {
         if (abort.signal.aborted) return;
         // A token Workfloor no longer takes, or a card that is gone: nothing left to follow.
-        if (gone(error)) return unwatch(session);
+        if (gone(error)) return end();
         console.error(`[workfloor-provider] live stream for ${card.card}: ${message(error)}`);
       }
       if (!abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-  })().catch((error: unknown) =>
-    console.error(`[workfloor-provider] watching ${card.card}: ${message(error)}`),
-  );
+  })().catch((error: unknown) => {
+    console.error(`[workfloor-provider] watching ${card.card}: ${message(error)}`);
+    end();
+  });
 }
 
 function unwatch(session: Session): void {
@@ -722,7 +759,12 @@ function step(
   const hold = working && !detail.pendingAction && !waiting;
   for (const m of hold ? fresh.slice(0, -1) : fresh) {
     session.seen.add(m.id);
-    const item = timelineItem(m, false, shown);
+    // Paseo drew the message it sent this turn already; one written in Workfloor shows.
+    if (m.role === "user" && turn.sent !== undefined && m.body.trim() === turn.sent) {
+      turn.sent = undefined;
+      continue;
+    }
+    const item = timelineItem(m, shown);
     if (!item) continue;
     if (m.role === "agent") turn.replied = true;
     state.emit({ type: "timeline.item", sessionId: session.id, item });
@@ -766,17 +808,13 @@ function step(
   return !working && (turn.replied || turn.worked) ? { state: "completed" } : undefined;
 }
 
-/**
- * A Workfloor message as a timeline item, its pictures shown under its words; a person's own message
- * is left out while live (Paseo drew it already).
- */
+/** A Workfloor message as a timeline item, its pictures shown under its words. */
 function timelineItem(
   m: Message,
-  replay: boolean,
   shown: ReadonlyMap<string, string>,
 ): ProviderTimelineItem | undefined {
   const text = [m.body.trim(), shown.get(m.id)].filter(Boolean).join("\n\n");
-  if (m.role === "user") return replay ? { type: "user_message", id: m.id, text } : undefined;
+  if (m.role === "user") return { type: "user_message", id: m.id, text };
   if (m.tool) {
     const detail = { type: "plain_text" as const, label: m.tool.name, text: m.tool.input };
     return m.tool.status === "failed"
@@ -970,10 +1008,9 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
   if (!turn || turn.abort.signal.aborted) return;
   turn.abort.abort();
   session.turn = undefined;
-  session.stoppedOn = session.asked?.id;
+  session.stopped = { question: session.asked?.id };
   forget(session, state);
   state.emit({ type: "session.turn", sessionId, turnId: turn.id, state: "canceled" });
-  watch(session, state);
   const card = session.card;
   if (!card) return;
   session.stopping = (async () => {
@@ -999,6 +1036,7 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
     }
   })();
   await session.stopping;
+  watch(session, state);
 }
 
 /** Drops the question raised in Paseo, resolving it there too, so Paseo keeps no stale copy. */
