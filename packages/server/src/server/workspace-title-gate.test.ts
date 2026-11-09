@@ -19,6 +19,8 @@ function harness(options: {
     context: FirstAgentContext,
   ) => { title: string | null; branch: string | null } | null;
   reply?: string | null;
+  /** The first call to this step never settles, as a stalled model or plugin would. */
+  hangFirst?: "generate" | "judge";
 }) {
   let record: PersistedWorkspaceRecord = {
     ...createPersistedWorkspaceRecord({
@@ -38,11 +40,17 @@ function harness(options: {
   const emitted: string[] = [];
   const subscribers: ((event: AgentManagerEvent) => void)[] = [];
   const verdicts = [...options.verdicts];
+  let hang = options.hangFirst ?? null;
+  const never = <T>(): Promise<T> => new Promise<T>(() => {});
 
   const gate = new WorkspaceTitleGate({
     lifecycle: {
       before: async (_name, request) => {
         judged.push(request);
+        if (hang === "judge") {
+          hang = null;
+          return never();
+        }
         const next = verdicts.shift();
         if (next instanceof Error) throw next;
         return { ...request, verdict: next ?? null };
@@ -66,6 +74,10 @@ function harness(options: {
     },
     generate: async ({ firstAgentContext }) => {
       contexts.push(firstAgentContext);
+      if (hang === "generate") {
+        hang = null;
+        return never();
+      }
       return options.generated
         ? options.generated(firstAgentContext)
         : { title: "Guess", branch: "guess" };
@@ -78,6 +90,7 @@ function harness(options: {
       emitted.push(workspaceId);
     },
     logger: pino({ level: "silent" }),
+    deadlines: { generateMs: 20, judgeMs: 20 },
   });
 
   return {
@@ -108,6 +121,36 @@ const accept = (score: number): Verdict => ({ decision: "accept", score, judge: 
 const unchecked: Verdict = { decision: "unchecked", score: null, judge: "Jev" };
 
 describe("WorkspaceTitleGate", () => {
+  test("a name that never comes back counts as a failed try, so the next turn tries again", async () => {
+    const h = harness({ verdicts: [accept(0.9)], hangFirst: "generate" });
+
+    await h.gate.start(h.record(), PROMPT);
+
+    expect(h.record().titleState).toMatchObject({ status: "naming", attempts: 1 });
+    expect(h.emitted).toEqual(["workspace-1"]);
+
+    await h.endTurn("turn_completed");
+
+    expect(h.applied).toEqual([{ title: "Guess", branch: "guess", unchecked: false }]);
+  });
+
+  test("names that never come back end in exhausted, which offers Rename", async () => {
+    const h = harness({ verdicts: [], generated: () => null, hangFirst: "generate" });
+
+    await h.gate.start(h.record(), PROMPT);
+    await h.endTurn("turn_completed");
+
+    expect(h.record().titleState).toMatchObject({ status: "exhausted", attempts: 3 });
+  });
+
+  test("a judge that never answers lets the title on unchecked", async () => {
+    const h = harness({ verdicts: [], hangFirst: "judge" });
+
+    await h.gate.start(h.record(), PROMPT);
+
+    expect(h.applied).toEqual([{ title: "Guess", branch: "guess", unchecked: true }]);
+  });
+
   test("a title the judge accepts goes on at once, with the prompt as its source", async () => {
     const h = harness({ verdicts: [accept(0.92)] });
 
