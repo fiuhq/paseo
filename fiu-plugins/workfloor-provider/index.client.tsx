@@ -8,14 +8,5 @@ export default function contribute(client: PluginClientContext) {
     icon: "MessagesSquare",
     Component: WorkfloorSettings,
   });
-  client.addCommandCenterItem({
-    id: "connect",
-    title: "Connect Workfloor",
-    icon: "MessagesSquare",
-    context: "global",
-    onSelect({ openSettings }) {
-      openSettings("workfloor");
-    },
-  });
   return () => {};
 }

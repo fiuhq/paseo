@@ -42,7 +42,15 @@ export interface Scope {
   session: string;
 }
 
-export class WorkfloorError extends Error {}
+export class WorkfloorError extends Error {
+  constructor(
+    message: string,
+    /** The HTTP status Workfloor answered with, when it answered. */
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
 export const lane = (project: string) => `conversations:${project}`;
 
@@ -128,7 +136,10 @@ export class Workfloor {
       signal,
     });
     if (!response.ok || !response.body)
-      throw new WorkfloorError(`Workfloor's live stream answered ${response.status}`);
+      throw new WorkfloorError(
+        `Workfloor's live stream answered ${response.status}`,
+        response.status,
+      );
     const decoder = new TextDecoder();
     let buffer = "";
     for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
@@ -167,6 +178,7 @@ export class Workfloor {
         typeof body?.error === "string"
           ? body.error
           : `Workfloor answered ${response.status} to ${route}`,
+        response.status,
       );
     }
     return body as T;

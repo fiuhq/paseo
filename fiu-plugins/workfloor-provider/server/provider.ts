@@ -52,6 +52,8 @@ interface Turn {
   id: string;
   abort: AbortController;
   replied: boolean;
+  /** Its agent was seen at work: a turn whose agent stops without a word (Stop in Workfloor) still ends. */
+  worked: boolean;
 }
 interface Session {
   id: string;
@@ -387,7 +389,12 @@ async function prompt(
   }
 
   session.turns += 1;
-  const turn: Turn = { id: `turn-${session.turns}`, abort: new AbortController(), replied: false };
+  const turn: Turn = {
+    id: `turn-${session.turns}`,
+    abort: new AbortController(),
+    replied: false,
+    worked: false,
+  };
   session.turn = turn;
   state.emit({
     type: "timeline.item",
@@ -438,13 +445,15 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
         if (outcome) return end(outcome.state, outcome.error);
       } while (again && !turn.abort.signal.aborted);
     } catch (error) {
-      // A failed read is retried on the next event; the stream reconnects below.
+      if (gone(error)) return end("failed", `Workfloor: ${message(error)}`);
+      // Any other failed read is retried on the next event; the stream reconnects below.
       console.error(`[workfloor-provider] reading ${card.card}: ${message(error)}`);
     } finally {
       reading = false;
     }
   };
   // ponytail: the live stream is the only wake-up; a stream that stays silent leaves the turn running until Stop.
+  // A token Workfloor no longer takes, or a conversation that is gone, ends the turn instead of retrying forever.
   while (!turn.abort.signal.aborted) {
     void read();
     try {
@@ -455,6 +464,7 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
       );
     } catch (error) {
       if (turn.abort.signal.aborted) return;
+      if (gone(error)) return end("failed", `Workfloor: ${message(error)}`);
       console.error(`[workfloor-provider] live stream for ${card.card}: ${message(error)}`);
     }
     if (!turn.abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -472,8 +482,12 @@ function step(
   session.workfloorSession = detail.sessionId ?? session.workfloorSession;
   const current = detail.sessions?.find((s) => s.id === detail.sessionId);
   const working = !current || WORKING.has(current.state);
+  if (current && WORKING.has(current.state)) turn.worked = true;
   const fresh = detail.messages.filter((m) => !session.seen.has(m.id));
-  for (const m of working ? fresh.slice(0, -1) : fresh) {
+  // The newest message may still be growing while the agent works, unless Workfloor waits on the
+  // person: then it is the question they must see.
+  const hold = working && !detail.pendingAction;
+  for (const m of hold ? fresh.slice(0, -1) : fresh) {
     session.seen.add(m.id);
     const item = timelineItem(m, false);
     if (!item) continue;
@@ -500,7 +514,7 @@ function step(
     });
     return { state: "completed" };
   }
-  return !working && turn.replied ? { state: "completed" } : undefined;
+  return !working && (turn.replied || turn.worked) ? { state: "completed" } : undefined;
 }
 
 /** A Workfloor message as a timeline item; a person's own words are left out while live (Paseo drew them already). */
@@ -536,11 +550,23 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
   const session = state.sessions.get(sessionId)!;
   const turn = session.turn;
   if (!turn) return;
-  if (session.card && session.workfloorSession)
-    await (await state.workfloor()).stop({ ...session.card, session: session.workfloorSession });
+  if (session.card) {
+    const wf = await state.workfloor();
+    // Stopped before the first read named the agent's session: read it, so Workfloor's agent stops too.
+    session.workfloorSession ??= (
+      await wf.detail(session.card.project, session.card.card)
+    ).sessionId;
+    if (session.workfloorSession)
+      await wf.stop({ ...session.card, session: session.workfloorSession });
+  }
   turn.abort.abort();
   session.turn = undefined;
   state.emit({ type: "session.turn", sessionId, turnId: turn.id, state: "canceled" });
+}
+
+/** Workfloor no longer takes the token, or the conversation is gone: retrying cannot help. */
+function gone(error: unknown): boolean {
+  return error instanceof WorkfloorError && [401, 403, 404].includes(error.status ?? 0);
 }
 
 function message(error: unknown): string {

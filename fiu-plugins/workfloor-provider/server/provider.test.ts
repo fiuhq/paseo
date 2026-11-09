@@ -13,7 +13,13 @@ const AUTH = { url: "https://wf.test", token: "wfpat_test" };
 class FakeWorkfloor {
   cards = new Map<
     string,
-    { title: string; state: string; messages: Array<Record<string, unknown>>; agent: string }
+    {
+      title: string;
+      state: string;
+      messages: Array<Record<string, unknown>>;
+      agent: string;
+      pending?: string;
+    }
   >();
   requests: Array<{ method: string; path: string; body?: unknown; auth: string | null }> = [];
   private streams = new Set<ReadableStreamDefaultController<Uint8Array>>();
@@ -39,6 +45,9 @@ class FakeWorkfloor {
       }, 20);
     }, 20);
   };
+
+  /** How long each read of a conversation takes. */
+  detailDelay = 0;
 
   changed() {
     for (const s of this.streams)
@@ -85,11 +94,13 @@ class FakeWorkfloor {
     if (url.pathname === "/api/connection" && q.get("view") === "agents")
       return json([{ id: A, name: "Buildy", model: "claude-opus-5-5" }]);
     if (url.pathname === "/api/connection" && q.get("view") === "detail") {
+      await Bun.sleep(this.detailDelay);
       const c = this.cards.get(q.get("task")!);
       if (!c) return json({ error: "Not found" }, 404);
       return json({
         sessionId: `s-${q.get("task")}`,
         sessions: [{ id: `s-${q.get("task")}`, state: c.state, agentProfileId: c.agent }],
+        ...(c.pending ? { pendingAction: c.pending } : {}),
         messages: c.messages,
       });
     }
@@ -327,6 +338,75 @@ describe("the Workfloor provider", () => {
         type: "failed",
         error: { message: "Add a repository to this project before starting a conversation." },
       },
+    });
+  });
+
+  test("a conversation gone from Workfloor ends the turn as failed instead of retrying forever", async () => {
+    const wf = new FakeWorkfloor();
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "one");
+    await until(events, turnEnded);
+    wf.reply = (card) =>
+      setTimeout(() => {
+        wf.cards.delete(card);
+        wf.changed();
+      }, 20);
+    events.length = 0;
+    await say(connection, "s1", "two");
+    expect(await until(events, turnEnded)).toMatchObject({
+      state: "failed",
+      error: { message: "Workfloor: Not found" },
+    });
+  });
+
+  test("an agent stopped in Workfloor without a word still ends the turn", async () => {
+    const wf = new FakeWorkfloor();
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "one");
+    await until(events, turnEnded);
+    wf.reply = (card) =>
+      setTimeout(() => {
+        wf.cards.get(card)!.state = "IDLE";
+        wf.changed();
+      }, 100);
+    events.length = 0;
+    await say(connection, "s1", "two");
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed", turnId: "turn-2" });
+  });
+
+  test("a question the agent waits on is shown before the turn ends", async () => {
+    const wf = new FakeWorkfloor();
+    wf.reply = (card) =>
+      setTimeout(() => {
+        const c = wf.cards.get(card)!;
+        c.messages.push({ id: "q1", role: "agent", body: "Which tenant?" });
+        c.pending = "question";
+        wf.changed();
+      }, 20);
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "check the tenant");
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    const items = events.flatMap((e) => (e.type === "timeline.item" ? [e.item] : []));
+    expect(items.map((i) => i.type)).toEqual(["user_message", "assistant_message", "notification"]);
+    expect(items[1]).toMatchObject({ text: "Which tenant?" });
+  });
+
+  test("Stop before the first read still stops Workfloor's agent", async () => {
+    const wf = new FakeWorkfloor();
+    wf.reply = () => {};
+    wf.detailDelay = 200;
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "hello");
+    await until(events, (e) => e.type === "session.turn" && e.state === "started");
+    await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
+    expect(await until(events, turnEnded)).toMatchObject({ state: "canceled" });
+    expect(wf.requests.find((r) => r.path === "/api/conversation")?.body).toMatchObject({
+      session: "s-card-1",
+      command: { kind: "stop" },
     });
   });
 });
