@@ -17,6 +17,7 @@ import {
   WorkfloorError,
   cardOfLink,
   lane,
+  type Attachment,
   type CardRef,
   type Detail,
   type Message,
@@ -708,9 +709,10 @@ function timelineItem(
 const PICTURE_READS = 4;
 
 /**
- * The pictures these messages carry, read from Workfloor once each and shown inline (a `data:`
- * image, which Paseo renders on every client), by message id. One Workfloor cannot give back is
- * shown as a link to the card instead, never dropped.
+ * What shows for the pictures these messages carry, by message id. An agent's are read from
+ * Workfloor and shown inline (a `data:` image, which Paseo renders on every client); one Workfloor
+ * cannot give back is a link to the card, read again next time. A person's message is plain text in
+ * Paseo, so its pictures are a note with the card's link, never read.
  */
 async function pictures(
   session: Session,
@@ -718,11 +720,21 @@ async function pictures(
   scope: CardRef & { session?: string },
   messages: readonly Message[],
 ): Promise<Map<string, string>> {
-  const wanted = messages.flatMap((m) =>
-    (m.attachments ?? [])
-      .filter((a) => a.mimeType.startsWith("image/"))
-      .map((a) => ({ messageId: m.id, file: a })),
-  );
+  const shown = new Map<string, string>();
+  const add = (id: string, text: string) =>
+    shown.set(id, [shown.get(id), text].filter(Boolean).join("\n\n"));
+  const wanted: Array<{ messageId: string; file: Attachment }> = [];
+  for (const m of messages) {
+    const files = (m.attachments ?? []).filter((a) => a.mimeType.startsWith("image/"));
+    if (!files.length) continue;
+    if (m.role === "user")
+      add(
+        m.id,
+        `${files.length} picture${files.length === 1 ? "" : "s"}, open in Workfloor: ${wf.link(scope)}`,
+      );
+    else if (!m.tool) wanted.push(...files.map((file) => ({ messageId: m.id, file })));
+  }
+  const failed = new Map<string, string>();
   // ponytail: whole-picture data: URLs in the timeline (Workfloor caps a file at 10 MiB); a cached file served to Paseo if timelines grow too heavy.
   for (let at = 0; at < wanted.length; at += PICTURE_READS)
     await Promise.all(
@@ -736,20 +748,25 @@ async function pictures(
           );
           session.pictures.set(
             file.id,
-            `![${file.name}](data:${type};base64,${Buffer.from(bytes).toString("base64")})`,
+            `![${markdownText(file.name)}](data:${type};base64,${Buffer.from(bytes).toString("base64")})`,
           );
         } catch (error) {
           console.error(`[workfloor-provider] picture ${file.id}: ${message(error)}`);
-          session.pictures.set(file.id, `[${file.name}: open it in Workfloor](${wf.link(scope)})`);
+          failed.set(
+            file.id,
+            `[${markdownText(file.name)}: open it in Workfloor](${wf.link(scope)})`,
+          );
         }
       }),
     );
-  const shown = new Map<string, string>();
-  for (const { messageId, file } of wanted) {
-    const picture = session.pictures.get(file.id);
-    if (picture) shown.set(messageId, [shown.get(messageId), picture].filter(Boolean).join("\n\n"));
-  }
+  for (const { messageId, file } of wanted)
+    add(messageId, session.pictures.get(file.id) ?? failed.get(file.id) ?? "");
   return shown;
+}
+
+/** A name as Markdown link text: on one line, its brackets and backslashes taken literally. */
+function markdownText(name: string): string {
+  return name.replace(/\s*[\r\n]+\s*/g, " ").replace(/[\\[\]]/g, "\\$&");
 }
 
 /** Raises the agent's `card_ask` as a Paseo question: its context in the chat, each question with its options. */

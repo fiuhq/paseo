@@ -961,7 +961,7 @@ describe("the Workfloor provider", () => {
           id: "m1",
           role: "agent",
           body: "The Runs page hides the runs.",
-          attachments: [{ id: "wfap_1", name: "runs.png", mimeType: "image/png", size: 4 }],
+          attachments: [{ id: "wfap_1", name: "runs].png", mimeType: "image/png", size: 4 }],
         },
         {
           id: "m2",
@@ -979,11 +979,84 @@ describe("the Workfloor provider", () => {
       e.type === "timeline.item" && e.item.type === "assistant_message" ? [e.item.text] : [],
     );
     expect(texts).toEqual([
-      "The Runs page hides the runs.\n\n![runs.png](data:image/png;base64,iVBORw==)",
+      "The Runs page hides the runs.\n\n![runs\\].png](data:image/png;base64,iVBORw==)",
       expect.stringMatching(
         /^\[lost\.png: open it in Workfloor\]\(https:\/\/wf\.test\/\?.*task=lane-card/,
       ),
     ]);
+  });
+
+  test("a person's replayed message with a picture shows a plain note with the card's link, never the picture's bytes", async () => {
+    const wf = new FakeWorkfloor();
+    wf.pictureBytes.set("wfap_u", new Uint8Array([137, 80, 78, 71]));
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "IDLE",
+      agent: "test-agent",
+      lane: "normal-lane",
+      messages: [
+        {
+          id: "m1",
+          role: "user",
+          body: "Look at this",
+          attachments: [{ id: "wfap_u", name: "mine.png", mimeType: "image/png", size: 4 }],
+        },
+      ],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    const texts = events.flatMap((e) =>
+      e.type === "timeline.item" && e.item.type === "user_message" ? [e.item.text] : [],
+    );
+    expect(texts).toEqual([
+      expect.stringMatching(
+        /^Look at this\n\n1 picture, open in Workfloor: https:\/\/wf\.test\/\?.*task=lane-card/,
+      ),
+    ]);
+    expect(texts[0]).not.toContain("data:");
+    expect(wf.requests.some((r) => r.path.startsWith("/api/attachments/content"))).toBe(false);
+  });
+
+  test("a picture Workfloor can't give back yet is read again, and shown inline once it can", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    wf.reply = (card) => {
+      const c = wf.cards.get(card)!;
+      c.messages.push({
+        id: "m-pic",
+        role: "agent",
+        body: "Here it is.",
+        attachments: [{ id: "wfap_late", name: "late.png", mimeType: "image/png", size: 4 }],
+      });
+      wf.changed();
+    };
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "send the picture");
+    for (
+      const end = Date.now() + 3000;
+      !wf.requests.some((r) => r.path.startsWith("/api/attachments/content"));
+      await Bun.sleep(10)
+    )
+      if (Date.now() > end) throw new Error("the picture was never read");
+    wf.pictureBytes.set("wfap_late", new Uint8Array([137, 80, 78, 71]));
+    wf.cards.get("lane-card")!.state = "WAITING_FOR_INPUT";
+    wf.changed();
+    await until(events, turnEnded);
+    const texts = events.flatMap((e) =>
+      e.type === "timeline.item" && e.item.type === "assistant_message" ? [e.item.text] : [],
+    );
+    expect(texts).toEqual(["Here it is.\n\n![late.png](data:image/png;base64,iVBORw==)"]);
   });
 
   test("a picture sent from Paseo goes up to the card's current session and with the message", async () => {
