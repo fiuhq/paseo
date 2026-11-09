@@ -1,4 +1,10 @@
 import {
+  DiffStreamRouter,
+  DiffSubscriptionError,
+  type DiffCompare,
+  type DiffState,
+} from "./diff/index.js";
+import {
   ChunkedTransport,
   ChunkedTransportProtocolError,
 } from "@getpaseo/protocol/chunked-transport";
@@ -1440,6 +1446,20 @@ export class DaemonClient {
   private connectionFailure: Error | undefined;
   private authFailureReasonValue: DaemonAuthFailureReason | null = null;
   private connectionState: ConnectionState = { status: "idle" };
+  private readonly diffStreams = new DiffStreamRouter({
+    modern: (compare) =>
+      this.observe(
+        "diff.subscribe.response",
+        { type: "diff.subscribe.request", ...compare },
+        {
+          validateSnapshot: (payload) => {
+            if (payload.error) throw new DiffSubscriptionError(payload.error);
+          },
+        },
+      ),
+    legacy: (cwd, compare) => this.observeCheckoutDiff(cwd, compare),
+    failed: (error) => this.logger.error({ err: error }, "Diff observer failed"),
+  });
   private readonly terminalStreams = new TerminalStreamRouter();
   private pendingBinaryFileReads = new Map<string, PendingBinaryFileRead>();
   private activeBinaryFileTransfers = new Map<string, BinaryFileTransferState>();
@@ -1799,6 +1819,7 @@ export class DaemonClient {
     this.disposeTransport(1000, "Client closed");
     this.providerSnapshotUpdates.clear();
     this.clearWaiters(new Error("Daemon client closed"));
+    await this.diffStreams.close();
     await this.owned.close();
     this.creations.close();
     this.rejectPendingSendQueue(new Error("Daemon client closed"));
@@ -1917,18 +1938,34 @@ export class DaemonClient {
       });
     }
   }
-  async openHostLink(channelId: string): Promise<string> {
+  openHostLink(channelId: string): Promise<string>;
+  openHostLink(
+    channelId: string,
+    options: { flowControl: true },
+  ): Promise<{ routeId: string; flowControl: boolean }>;
+  async openHostLink(
+    channelId: string,
+    options?: { flowControl: true },
+  ): Promise<string | { routeId: string; flowControl: boolean }> {
     this.requireConnectedHosts();
     if (this.getLastServerInfoMessage()?.features?.hostMultiplexing !== true)
       throw Object.assign(new Error("Update the destination daemon"), {
         code: "unsupported_capability",
       });
-    return (
-      await this.sendCorrelatedSessionRequest({
-        message: { type: "hosts.link.open.request", channelId },
-        responseType: "hosts.link.open.response",
-      })
-    ).routeId;
+    const response = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "hosts.link.open.request",
+        channelId,
+        ...(options?.flowControl ? { flowControl: true } : {}),
+      },
+      responseType: "hosts.link.open.response",
+    });
+    return options?.flowControl
+      ? { routeId: response.routeId, flowControl: response.flowControl === true }
+      : response.routeId;
+  }
+  acknowledgeHostLink(routeId: string, sequence: number): Promise<void> {
+    return this.sendSessionMessageStrict({ type: "hosts.link.ack.request", routeId, sequence });
   }
   sendHostFrame(routeId: string, data: string | Uint8Array): Promise<void> {
     if (typeof data === "string") {
@@ -2776,7 +2813,12 @@ export class DaemonClient {
   private observe<T extends CorrelatedResponseType>(
     responseType: T,
     message: { type: SessionInboundMessage["type"] } & Record<string, unknown>,
-    options?: { requestId?: string; timeout?: number; signal?: AbortSignal },
+    options?: {
+      requestId?: string;
+      timeout?: number;
+      signal?: AbortSignal;
+      validateSnapshot?: (payload: CorrelatedResponsePayload<T>) => void;
+    },
   ): OwnedSubscription<CorrelatedResponsePayload<T>> {
     let resetSource = false;
     return this.owned.observeRequest<CorrelatedResponsePayload<T>>(
@@ -2802,12 +2844,16 @@ export class DaemonClient {
                   requestType: message.type,
                   error: payload.error,
                 });
+              options?.validateSnapshot?.(payload);
               accept(payload);
               return payload;
             },
           });
         } catch (error) {
-          resetSource = !(error instanceof DaemonRpcError) && this.isConnected;
+          resetSource =
+            !(error instanceof DaemonRpcError) &&
+            !(error instanceof DiffSubscriptionError) &&
+            this.isConnected;
           throw error;
         }
       },
@@ -4840,6 +4886,26 @@ export class DaemonClient {
       responseType: "checkout.diff.get.response",
       requestId,
     });
+  }
+
+  observeDiff(compare: DiffCompare): OwnedSubscription<DiffState> {
+    return this.diffStreams.observe(compare);
+  }
+
+  async readDiff(compare: DiffCompare): Promise<DiffState> {
+    const observation = this.observeDiff(compare);
+    try {
+      return await new Promise<DiffState>((resolve) => {
+        observation.subscribe({
+          snapshot: (state) => {
+            if (state.phase !== "loading") resolve(state);
+          },
+          update: () => {},
+        });
+      });
+    } finally {
+      await observation.release();
+    }
   }
 
   observeCheckoutDiff(
@@ -7124,6 +7190,7 @@ export class DaemonClient {
     this.chunkedTransport?.close();
     this.chunkedTransport = null;
     this.owned.disconnected();
+    this.diffStreams.disconnected();
     this.providerSnapshotUpdates.clear();
     this.stopLivenessHeartbeat();
     this.cleanupTransport();
@@ -7313,6 +7380,10 @@ export class DaemonClient {
     }
     if (hostFrame) {
       for (const handler of this.hostFrameListeners) handler(hostFrame);
+      return true;
+    }
+    if (rawBytes[0] >= 0x40 && rawBytes[0] <= 0x4f) {
+      this.diffStreams.receive(rawBytes);
       return true;
     }
     if (isPluginFrameOpcode(rawBytes[0])) {
@@ -7517,6 +7588,7 @@ export class DaemonClient {
     }
 
     this.owned.disconnected();
+    this.diffStreams.disconnected();
     this.providerSnapshotUpdates.clear();
 
     // Clear all pending waiters and queued sends since the connection was lost
@@ -7694,6 +7766,7 @@ export class DaemonClient {
           this.reconnectAttempt = 0;
           this.updateConnectionState({ status: "connected" }, { event: "HELLO_SERVER_INFO" });
           this.startLivenessHeartbeat();
+          this.diffStreams.connected(serverInfo.features?.diffSubscription === true);
           this.owned.restore(serverInfo, {
             ...DEFAULT_CLIENT_CAPABILITIES,
             ...this.config.capabilities,
@@ -7970,3 +8043,5 @@ function resolveAgentConfig(options: CreateAgentRequestOptions): AgentSessionCon
     cwd: merged.cwd,
   };
 }
+
+export type { DiffCompare, DiffState, DiffEntry, ResolvedShas } from "./diff/index.js";
