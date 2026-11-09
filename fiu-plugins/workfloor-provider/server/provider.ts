@@ -15,6 +15,9 @@ import { homedir } from "node:os";
 import {
   Workfloor,
   WorkfloorError,
+  cardOfLink,
+  lane,
+  type CardRef,
   type Detail,
   type Message,
   type WaitingQuestion,
@@ -46,10 +49,8 @@ function parseModel(model: string | undefined): { project: string; agent: string
   return project && agent && !rest.length ? { project, agent } : undefined;
 }
 
-interface Card {
-  project: string;
-  card: string;
-}
+/** A conversation, or a card on one of the project's assembly lanes. */
+type Card = CardRef;
 interface Turn {
   id: string;
   abort: AbortController;
@@ -251,14 +252,20 @@ async function dispatch(input: ProviderInput, state: State): Promise<void> {
 
 const persistenceOf = (card: Card): ProviderPersistence => ({
   version: 1,
-  data: { project: card.project, card: card.card },
+  data: {
+    project: card.project,
+    card: card.card,
+    ...(card.lane !== lane(card.project) ? { lane: card.lane } : {}),
+  },
 });
 
+/** A saved card; one saved before lanes came is a conversation. */
 function cardOf(persistence: ProviderPersistence | undefined): Card | undefined {
   const data = persistence?.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
-  const { project, card } = data as Record<string, unknown>;
-  return typeof project === "string" && typeof card === "string" ? { project, card } : undefined;
+  const { project, card, lane: saved } = data as Record<string, unknown>;
+  if (typeof project !== "string" || typeof card !== "string") return undefined;
+  return { project, card, lane: typeof saved === "string" ? saved : lane(project) };
 }
 
 async function listSessions(
@@ -267,10 +274,30 @@ async function listSessions(
 ): Promise<void> {
   const wf = await state.workfloor();
   const projects = await wf.projects();
+  // A Workfloor card's link, pasted into the search, lists that card: any lane's, to open and drive here.
+  const linked = cardOfLink(input.query);
+  if (linked) {
+    const detail = await wf.detail(linked);
+    const project = projects.find((p) => p.id === linked.project);
+    const sessions = [
+      {
+        persistence: persistenceOf(linked),
+        cwd: input.cwd ?? homedir(),
+        title: detail.title || linked.card,
+        description: `Workfloor · ${project?.name ?? linked.project}`,
+      },
+    ];
+    state.emit({ type: "sessions", requestId: input.requestId, sessions });
+    return;
+  }
   const lists = await Promise.all(
     projects.map(async (project) =>
       (await wf.conversations(project.id)).map((conversation) => ({
-        persistence: persistenceOf({ project: project.id, card: conversation.id }),
+        persistence: persistenceOf({
+          project: project.id,
+          card: conversation.id,
+          lane: lane(project.id),
+        }),
         cwd: input.cwd ?? homedir(),
         title: conversation.title,
         description: `Workfloor · ${project.name}`,
@@ -298,7 +325,7 @@ async function openSession(
   const wf = card ? await state.workfloor() : undefined;
   if (card && wf) {
     const [detail, waiting] = await Promise.all([
-      wf.detail(card.project, card.card),
+      wf.detail(card),
       wf.question(card.project, card.card),
     ]);
     const current = detail.sessions?.find((s) => s.id === detail.sessionId);
@@ -359,7 +386,7 @@ async function configure(
   if (model !== undefined && model !== null && model !== session.model) {
     if (session.card)
       throw new WorkfloorError(
-        "A Workfloor conversation keeps its agent: start a new agent to talk to another one",
+        "A Workfloor card keeps its agents: start a new agent to talk to another one",
       );
     if (!parseModel(model)) throw new WorkfloorError(`${model} is not a Workfloor agent`);
     session.model = model;
@@ -401,14 +428,11 @@ async function prompt(
   const wf = await state.workfloor();
   await session.stopping;
   if (session.card) {
-    // The agent's session may have started since this Paseo session last read the conversation.
-    session.workfloorSession ??= (
-      await wf.detail(session.card.project, session.card.card)
-    ).sessionId;
+    // The card's agent now: its session may have started, or the card moved on to its next stage's
+    // agent, since this Paseo session last read it.
+    await track(session, await wf.detail(session.card), state);
     if (!session.workfloorSession)
-      throw new WorkfloorError(
-        "This conversation's agent has not started yet: try again in a moment",
-      );
+      throw new WorkfloorError("This card's agent has not started yet: try again in a moment");
     await wf.send({ ...session.card, session: session.workfloorSession }, text);
   } else {
     const picked = parseModel(session.model);
@@ -416,6 +440,7 @@ async function prompt(
     session.card = {
       project: picked.project,
       card: await wf.start(picked.project, picked.agent, text),
+      lane: lane(picked.project),
     };
     state.emit({
       type: "session.persistence",
@@ -489,9 +514,10 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
       do {
         again = false;
         const [detail, waiting] = await Promise.all([
-          wf.detail(card.project, card.card),
+          wf.detail(card),
           wf.question(card.project, card.card),
         ]);
+        await track(session, detail, state);
         const outcome = step(session, turn, detail, waiting, wf, state);
         if (outcome) return end(outcome.state, outcome.error);
       } while (again && !turn.abort.signal.aborted);
@@ -522,6 +548,22 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
   }
 }
 
+/** The card's agent now, which the lane moves on stage by stage, shown as the session's model. */
+async function track(session: Session, detail: Detail, state: State): Promise<void> {
+  session.workfloorSession = detail.sessionId ?? session.workfloorSession;
+  const agent = detail.sessions?.find((s) => s.id === detail.sessionId)?.agentProfileId;
+  if (!agent || !session.card) return;
+  const model = modelId(session.card.project, agent);
+  if (model === session.model) return;
+  try {
+    const config = await configState({ ...session, model }, state);
+    session.model = model;
+    state.emit({ type: "session.config", sessionId: session.id, config });
+  } catch (error) {
+    console.error(`[workfloor-provider] showing ${session.card.card}'s agent: ${message(error)}`);
+  }
+}
+
 /** One read of the card: hands over settled messages, and says how the turn ended, if it has. */
 function step(
   session: Session,
@@ -531,7 +573,6 @@ function step(
   wf: Workfloor,
   state: State,
 ): { state: "completed" | "failed"; error?: string } | undefined {
-  session.workfloorSession = detail.sessionId ?? session.workfloorSession;
   const current = detail.sessions?.find((s) => s.id === detail.sessionId);
   const working = !current || WORKING.has(current.state);
   if (current && WORKING.has(current.state)) turn.worked = true;
@@ -577,7 +618,7 @@ function step(
         type: "notification",
         id: `${turn.id}-waits`,
         level: "warning",
-        message: `Workfloor's agent ${what}: answer it in Workfloor, ${wf.link(session.card!.project, session.card!.card)}`,
+        message: `Workfloor's agent ${what}: answer it in Workfloor, ${wf.link(session.card!)}`,
       },
     });
     return { state: "completed" };
@@ -719,7 +760,7 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
     try {
       const wf = await state.workfloor();
       // Stopped before the first read named the agent's session: read it, so Workfloor's agent stops too.
-      session.workfloorSession ??= (await wf.detail(card.project, card.card)).sessionId;
+      session.workfloorSession ??= (await wf.detail(card)).sessionId;
       if (!session.workfloorSession)
         throw new WorkfloorError("Workfloor has not started its agent yet");
       await wf.stop({ ...card, session: session.workfloorSession });

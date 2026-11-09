@@ -26,6 +26,7 @@ export interface Message {
   tool?: { name: string; status: string; input: string };
 }
 export interface Detail {
+  title?: string;
   sessionId?: string;
   sessions?: Array<{ id: string; state: string; agentProfileId?: string; error?: string }>;
   messages: Message[];
@@ -59,10 +60,14 @@ export interface WaitingQuestion {
 export type QuestionReply =
   | { answers: Array<{ questionId: string; optionId?: string; text?: string }> }
   | { reject: string };
-/** A conversation's agent session, by the IDs Workfloor's routes take. */
-export interface Scope {
+/** A card by the IDs Workfloor's routes take: a conversation is a card on its project's Conversations lane. */
+export interface CardRef {
   project: string;
   card: string;
+  lane: string;
+}
+/** A card's agent session. */
+export interface Scope extends CardRef {
   session: string;
 }
 
@@ -78,19 +83,35 @@ export class WorkfloorError extends Error {
 
 export const lane = (project: string) => `conversations:${project}`;
 
+/** The card a Workfloor page link opens (`?project=…&workflow=…&task=…`), from any text holding one. */
+export function cardOfLink(text: string | undefined): CardRef | undefined {
+  const found = text?.match(/https?:\/\/\S+/)?.[0];
+  if (!found) return undefined;
+  try {
+    const query = new URL(found).searchParams;
+    const project = query.get("project");
+    const card = query.get("task");
+    const workflow = query.get("workflow");
+    if (!project || !card || !workflow) return undefined;
+    return { project, card, lane: workflow };
+  } catch {
+    return undefined;
+  }
+}
+
 export class Workfloor {
   constructor(
     private readonly auth: WorkfloorAuth,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  /** The conversation's page in Workfloor, for a person to open. */
-  link(project: string, card: string): string {
+  /** The card's page in Workfloor, for a person to open. */
+  link(ref: CardRef): string {
     const query = new URLSearchParams({
-      project,
-      workflow: lane(project),
-      page: "conversations",
-      task: card,
+      project: ref.project,
+      workflow: ref.lane,
+      page: ref.lane === lane(ref.project) ? "conversations" : "lanes",
+      task: ref.card,
     });
     return `${this.auth.url}/?${query}`;
   }
@@ -122,12 +143,12 @@ export class Workfloor {
     return started.conversation.id;
   }
 
-  detail(project: string, card: string): Promise<Detail> {
+  detail(ref: CardRef): Promise<Detail> {
     const query = new URLSearchParams({
       view: "detail",
-      workspace: project,
-      workflow: lane(project),
-      task: card,
+      workspace: ref.project,
+      workflow: ref.lane,
+      task: ref.card,
     });
     return this.request(`connection?${query}`);
   }
@@ -160,13 +181,13 @@ export class Workfloor {
    * (its page re-reads the card on these), until `signal` aborts or the stream ends.
    */
   async events(
-    scope: Pick<Scope, "project" | "card"> & { session?: string },
+    scope: CardRef & { session?: string },
     signal: AbortSignal,
     onEvent: () => void,
   ): Promise<void> {
     const query = new URLSearchParams({
       workspace: scope.project,
-      workflow: lane(scope.project),
+      workflow: scope.lane,
       task: scope.card,
       ...(scope.session ? { session: scope.session } : {}),
     });
@@ -194,7 +215,7 @@ export class Workfloor {
   private command(scope: Scope, command: Record<string, unknown>): Promise<unknown> {
     const body = {
       workspace: scope.project,
-      workflow: lane(scope.project),
+      workflow: scope.lane,
       task: scope.card,
       session: scope.session,
       command,

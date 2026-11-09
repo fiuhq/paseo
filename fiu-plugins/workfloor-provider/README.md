@@ -5,6 +5,11 @@ agents as the model (`Buildy · codev`); the first message starts a conversation
 Workfloor, and every later message goes to that conversation's agent. Paseo's session list shows
 your conversations, so you can open one you started in Workfloor.
 
+A card on an assembly lane opens the same way: paste its Workfloor link into Import's search, and
+the card is listed to open. Its history replays, your messages go to the agent of the stage it is
+on now (the next stage's agent, once the lane moves it on), and the agent's questions are asked in
+Paseo. The lane still moves the card; a stage's go and an approval stay Workfloor's.
+
 Connect it in Paseo's Settings, Workfloor: Workfloor's address and a personal token that can read
 and write (Workfloor: Settings, Personal tokens). The token stays on this host, in the plugin's
 settings.
@@ -17,7 +22,7 @@ gate or a permission. So:
 - the agent's question is asked in Paseo, while the turn stays open: pick an option, write your own
   answer, or decline it; one you answer in Workfloor meanwhile is withdrawn here;
 - a plan step's go, an approval, a handoff or issue the agent offers, and a permission request are
-  answered in Workfloor: the turn ends with a link to the conversation;
+  answered in Workfloor: the turn ends with a link to the card;
 - the agent works in Workfloor, on its project's repositories, not in your Paseo workspace;
 - a conversation keeps the agent it started with.
 
