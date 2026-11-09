@@ -83,10 +83,7 @@ export class WorkfloorError extends Error {
 
 export const lane = (project: string) => `conversations:${project}`;
 
-/**
- * The card a Workfloor page link opens (`?project=…&workflow=…&task=…`), from any text holding one;
- * a link without its lane is a conversation's.
- */
+/** The card a Workfloor page link opens (`?project=…&workflow=…&task=…`), from any text holding one. */
 export function cardOfLink(text: string | undefined): CardRef | undefined {
   const found = text?.match(/https?:\/\/\S+/)?.[0];
   if (!found) return undefined;
@@ -94,8 +91,9 @@ export function cardOfLink(text: string | undefined): CardRef | undefined {
     const query = new URL(found).searchParams;
     const project = query.get("project");
     const card = query.get("task");
-    if (!project || !card) return undefined;
-    return { project, card, lane: query.get("workflow") || lane(project) };
+    const workflow = query.get("workflow");
+    if (!project || !card || !workflow) return undefined;
+    return { project, card, lane: workflow };
   } catch {
     return undefined;
   }

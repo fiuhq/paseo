@@ -270,7 +270,7 @@ describe("the Workfloor provider", () => {
     expect(events).toContainEqual({
       type: "session.persistence",
       sessionId: "s1",
-      persistence: { version: 1, data: { project: P, card: "card-1", lane: `conversations:${P}` } },
+      persistence: { version: 1, data: { project: P, card: "card-1" } },
     });
   });
 
@@ -326,16 +326,39 @@ describe("the Workfloor provider", () => {
     await say(connection, "s1", "hello");
     await until(events, turnEnded);
     await connection.send({ type: "sessions", requestId: "l1", cwd: "/work" });
-    expect(await until(events, (e) => e.type === "sessions")).toMatchObject({
+    const listed = await until(events, (e) => e.type === "sessions");
+    expect(listed).toMatchObject({
       sessions: [
         {
-          persistence: { version: 1, data: { project: P, card: "card-1" } },
           cwd: "/work",
           title: "hello",
           description: "Workfloor · codev",
         },
       ],
     });
+    // Paseo knows an imported conversation by its persistence, saved before lanes came: it stays the same.
+    expect((listed as { sessions: Array<{ persistence: unknown }> }).sessions[0]!.persistence).toEqual(
+      { version: 1, data: { project: P, card: "card-1" } },
+    );
+  });
+
+  test("a link without its lane is no card's: the search lists conversations as before", async () => {
+    const wf = new FakeWorkfloor();
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "hello");
+    await until(events, turnEnded);
+    const reads = wf.requests.length;
+    await connection.send({
+      type: "sessions",
+      requestId: "l1",
+      cwd: "/work",
+      query: `https://wf.test/?project=${P}&task=card-1`,
+    });
+    expect(await until(events, (e) => e.type === "sessions")).toMatchObject({ sessions: [] });
+    const later = wf.requests.slice(reads).map((r) => r.path);
+    expect(later.some((path) => path.startsWith("/api/conversations"))).toBe(true);
+    expect(later.some((path) => path.includes("view=detail"))).toBe(false);
   });
 
   test("Stop stops Workfloor's agent and cancels the turn", async () => {
@@ -872,6 +895,13 @@ describe("the Workfloor provider", () => {
     events.length = 0;
     await say(connection, "s1", "two");
     expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session.config",
+        sessionId: "s1",
+        config: expect.objectContaining({ model: `${P}:build-agent` }),
+      }),
+    );
     expect(
       wf.requests.filter((r) => r.path === "/api/conversation").map((r) => r.body),
     ).toMatchObject([

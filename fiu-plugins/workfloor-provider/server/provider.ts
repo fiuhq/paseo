@@ -252,7 +252,11 @@ async function dispatch(input: ProviderInput, state: State): Promise<void> {
 
 const persistenceOf = (card: Card): ProviderPersistence => ({
   version: 1,
-  data: { project: card.project, card: card.card, lane: card.lane },
+  data: {
+    project: card.project,
+    card: card.card,
+    ...(card.lane !== lane(card.project) ? { lane: card.lane } : {}),
+  },
 });
 
 /** A saved card; one saved before lanes came is a conversation. */
@@ -426,8 +430,7 @@ async function prompt(
   if (session.card) {
     // The card's agent now: its session may have started, or the card moved on to its next stage's
     // agent, since this Paseo session last read it.
-    session.workfloorSession =
-      (await wf.detail(session.card)).sessionId ?? session.workfloorSession;
+    await track(session, await wf.detail(session.card), state);
     if (!session.workfloorSession)
       throw new WorkfloorError("This card's agent has not started yet: try again in a moment");
     await wf.send({ ...session.card, session: session.workfloorSession }, text);
@@ -514,6 +517,7 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
           wf.detail(card),
           wf.question(card.project, card.card),
         ]);
+        await track(session, detail, state);
         const outcome = step(session, turn, detail, waiting, wf, state);
         if (outcome) return end(outcome.state, outcome.error);
       } while (again && !turn.abort.signal.aborted);
@@ -544,6 +548,21 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
   }
 }
 
+/** The card's agent now, which the lane moves on stage by stage, shown as the session's model. */
+async function track(session: Session, detail: Detail, state: State): Promise<void> {
+  session.workfloorSession = detail.sessionId ?? session.workfloorSession;
+  const agent = detail.sessions?.find((s) => s.id === detail.sessionId)?.agentProfileId;
+  if (!agent || !session.card) return;
+  const model = modelId(session.card.project, agent);
+  if (model === session.model) return;
+  session.model = model;
+  state.emit({
+    type: "session.config",
+    sessionId: session.id,
+    config: await configState(session, state),
+  });
+}
+
 /** One read of the card: hands over settled messages, and says how the turn ended, if it has. */
 function step(
   session: Session,
@@ -553,7 +572,6 @@ function step(
   wf: Workfloor,
   state: State,
 ): { state: "completed" | "failed"; error?: string } | undefined {
-  session.workfloorSession = detail.sessionId ?? session.workfloorSession;
   const current = detail.sessions?.find((s) => s.id === detail.sessionId);
   const working = !current || WORKING.has(current.state);
   if (current && WORKING.has(current.state)) turn.worked = true;
