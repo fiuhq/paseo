@@ -1,0 +1,9 @@
+{
+  "id": "workfloor-provider",
+  "name": "fiu.Workfloor",
+  "description": "Talk to your Workfloor project's agents from Paseo: each agent is one of your private Workfloor conversations",
+  "requirements": {
+    "paseo": ">=0.15.3"
+  },
+  "checkout": "directory"
+}
