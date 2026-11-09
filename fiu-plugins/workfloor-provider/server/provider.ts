@@ -301,7 +301,7 @@ async function openSession(
     ]);
     const current = detail.sessions?.find((s) => s.id === detail.sessionId);
     // Opened while its agent still works or waits on a question: the turn is picked up and followed.
-    busy = (!!current && WORKING.has(current.state)) || waiting?.kind === "agent";
+    busy = (!!current && WORKING.has(current.state)) || answerable(waiting);
     session.card = card;
     session.workfloorSession = detail.sessionId;
     const agent = detail.sessions?.find((s) => s.id === detail.sessionId)?.agentProfileId;
@@ -549,7 +549,7 @@ function step(
     };
   // The agent's own question is answered here, in Paseo, while the turn stays open; one answered
   // in Workfloor meanwhile is no longer asked.
-  if (waiting?.kind === "agent") {
+  if (answerable(waiting)) {
     if (session.asked?.id !== waiting.id) raise(session, waiting, state);
     return undefined;
   }
@@ -731,6 +731,14 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
     }
   })();
   await session.stopping;
+}
+
+/**
+ * The agent's own question, which a token may answer: not a plan step's go (Workfloor refuses a
+ * token that), nor a handoff or issue it offers (its owner takes those on Workfloor's page).
+ */
+function answerable(waiting: WaitingQuestion | undefined): waiting is WaitingQuestion {
+  return waiting?.kind === "agent" && !waiting.step && !waiting.handoff && !waiting.issue;
 }
 
 /** Workfloor no longer takes the token, or the conversation is gone: retrying cannot help. */

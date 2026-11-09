@@ -10,11 +10,14 @@ and write (Workfloor: Settings, Personal tokens). The token stays on this host, 
 settings.
 
 It talks to Workfloor as you, through the routes Workfloor's own page uses
-(`/api/conversations`, `/api/conversation`, `/api/events`); Workfloor lets a token that writes reach
-them, audits each write as made by a token, and refuses it a go on a gate or a permission. So:
+(`/api/conversations`, `/api/conversation`, `/api/events`, `/api/lane-flows/questions`); Workfloor
+lets a token that writes reach them, audits each write as made by a token, and refuses it a go on a
+gate or a permission. So:
 
-- a question or permission request from the agent is answered in Workfloor: the turn ends with a
-  link to the conversation;
+- the agent's question is asked in Paseo, while the turn stays open: pick an option, write your own
+  answer, or decline it; one you answer in Workfloor meanwhile is withdrawn here;
+- a plan step's go, an approval, a handoff or issue the agent offers, and a permission request are
+  answered in Workfloor: the turn ends with a link to the conversation;
 - the agent works in Workfloor, on its project's repositories, not in your Paseo workspace;
 - a conversation keeps the agent it started with.
 

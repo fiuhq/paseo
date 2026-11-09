@@ -720,4 +720,31 @@ describe("the Workfloor provider", () => {
       request: { id: "ask-1" },
     });
   });
+
+  test("a question Workfloor keeps for its own page (a step's go) is not asked in Paseo: the turn ends with a link", async () => {
+    const wf = new FakeWorkfloor();
+    wf.reply = (card) =>
+      setTimeout(() => {
+        wf.cards.get(card)!.asks = {
+          id: "ask-1",
+          kind: "agent",
+          question: "Run step 2?",
+          options: ["Go"],
+          step: { n: 2 },
+        };
+        wf.changed();
+      }, 20);
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "hello");
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    expect(events.some((e) => e.type === "session.permission")).toBe(false);
+    expect(
+      await until(events, (e) => e.type === "timeline.item" && e.item.type === "notification"),
+    ).toMatchObject({
+      item: {
+        message: expect.stringContaining("answer it in Workfloor, https://wf.test/?project=proj-1"),
+      },
+    });
+  });
 });

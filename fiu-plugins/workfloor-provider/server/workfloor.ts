@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 
 /**
  * Workfloor's conversation routes, as its own page calls them, with a personal token (`wfpat_…`) as the
- * person: Workfloor lets a token that writes reach `conversations`, `conversation` and `/api/events`.
+ * person: Workfloor lets a token that writes reach `conversations`, `conversation`, `/api/events` and
+ * the card's questions (`lane-flows/questions`), but never a step's go or an approval.
  * A conversation is a private card on its project's Conversations lane (`conversations:<project>`).
  */
 export interface WorkfloorAuth {
@@ -48,6 +49,11 @@ export interface WaitingQuestion {
     options?: Array<{ label: string; description?: string }>;
   }>;
   context?: string;
+  /** A plan step waiting for its go: Workfloor refuses a token's answer to it. */
+  step?: unknown;
+  /** A handoff or an issue the agent offers to make: its owner takes it on Workfloor's page. */
+  handoff?: unknown;
+  issue?: unknown;
 }
 /** One answer per question, an option by its number ("1", "2", …) or the person's words; or a decline. */
 export type QuestionReply =
