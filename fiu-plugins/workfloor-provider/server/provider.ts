@@ -69,6 +69,8 @@ interface Session {
   turn?: Turn;
   /** The agent's question raised in Paseo: its Workfloor id, and each question by the header Paseo answers it under. */
   asked?: { id: string; keys: Array<{ header: string; questionId: string; options: string[] }> };
+  /** The question last answered here: a read that started before the answer never asks it again. */
+  answered?: string;
   /** Workfloor's agent being stopped after a Stop: the next message waits for it, so it is never the one stopped. */
   stopping?: Promise<void>;
 }
@@ -467,6 +469,8 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
     if (turn.abort.signal.aborted) return;
     turn.abort.abort();
     if (session.turn === turn) session.turn = undefined;
+    // Paseo resolves a turn's open questions when it ends: ask a question still waiting again next turn.
+    session.asked = undefined;
     state.emit({
       type: "session.turn",
       sessionId: session.id,
@@ -550,7 +554,8 @@ function step(
   // The agent's own question is answered here, in Paseo, while the turn stays open; one answered
   // in Workfloor meanwhile is no longer asked.
   if (answerable(waiting)) {
-    if (session.asked?.id !== waiting.id) raise(session, waiting, state);
+    if (session.asked?.id !== waiting.id && session.answered !== waiting.id)
+      raise(session, waiting, state);
     return undefined;
   }
   if (session.asked) {
@@ -682,6 +687,7 @@ async function answerQuestion(
     await wf.answer(session.card.project, session.card.card, asked.id, { answers });
   }
   session.asked = undefined;
+  session.answered = asked.id;
   // Workfloor queues the answer as the agent's next prompt, so its session reads idle for a moment:
   // the turn ends only once the agent has been seen at work again and stopped.
   if (session.turn) {
@@ -705,6 +711,7 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
   if (!turn || turn.abort.signal.aborted) return;
   turn.abort.abort();
   session.turn = undefined;
+  session.asked = undefined;
   state.emit({ type: "session.turn", sessionId, turnId: turn.id, state: "canceled" });
   const card = session.card;
   if (!card) return;

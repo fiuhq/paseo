@@ -747,4 +747,62 @@ describe("the Workfloor provider", () => {
       },
     });
   });
+
+  test("a question still waiting after a Stop is asked again on the next turn", async () => {
+    const wf = new FakeWorkfloor();
+    wf.reply = (card) =>
+      setTimeout(() => {
+        wf.cards.get(card)!.asks = {
+          id: "ask-1",
+          kind: "agent",
+          question: "Go on?",
+          options: ["Yes"],
+        };
+        wf.changed();
+      }, 20);
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "one");
+    await until(events, (e) => e.type === "session.permission");
+    await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
+    await until(events, (e) => e.type === "request.completed" && e.requestId === "i1");
+    wf.reply = () => {};
+    events.length = 0;
+    await say(connection, "s1", "two");
+    expect(await until(events, (e) => e.type === "session.permission")).toMatchObject({
+      request: { id: "ask-1" },
+    });
+  });
+
+  test("a read that started before the answer does not ask the answered question again", async () => {
+    const wf = new FakeWorkfloor();
+    const answered = wf.reply;
+    wf.reply = (card) =>
+      setTimeout(() => {
+        wf.cards.get(card)!.asks = {
+          id: "ask-1",
+          kind: "agent",
+          question: "Go on?",
+          options: ["Yes"],
+        };
+        wf.changed();
+      }, 20);
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "one");
+    await until(events, (e) => e.type === "session.permission");
+    wf.reply = answered;
+    // A read whose question is served now but whose conversation read lands after the answer.
+    wf.detailDelay = 150;
+    wf.changed();
+    await Bun.sleep(20);
+    await connection.send({
+      type: "session.permission",
+      sessionId: "s1",
+      permissionId: "ask-1",
+      response: { behavior: "allow", updatedInput: { answers: { "Question 1": "Yes" } } },
+    });
+    await until(events, turnEnded, 5000);
+    expect(events.filter((e) => e.type === "session.permission")).toHaveLength(1);
+  });
 });
