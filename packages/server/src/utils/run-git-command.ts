@@ -436,7 +436,7 @@ function executeGitCommand<Output>(
 
         if (remainingBytes <= 0) {
           truncated = true;
-          killProcessTree(child);
+          killProcessTree(child, { immediate: true });
           return;
         }
 
@@ -444,7 +444,7 @@ function executeGitCommand<Output>(
           stdoutChunks.push(buffer.subarray(0, remainingBytes));
           stdoutBytes += remainingBytes;
           truncated = true;
-          killProcessTree(child);
+          killProcessTree(child, { immediate: true });
           return;
         }
 

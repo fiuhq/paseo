@@ -3,8 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import treeKill from "tree-kill";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { killProcessTree } from "./kill-process-tree.js";
+
+vi.mock("tree-kill", () => ({ default: vi.fn() }));
 
 function isAlive(pid: number): boolean {
   try {
@@ -90,17 +93,31 @@ describe.skipIf(process.platform === "win32")("killProcessTree", () => {
 describe("killProcessTree on Windows", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.mocked(treeKill).mockReset();
   });
 
-  it("kills the child at once, so a caller that kills git to retry is not held up", () => {
+  function windowsChild(): { child: ChildProcess; kill: ReturnType<typeof vi.fn> } {
     vi.stubGlobal("process", { ...process, platform: "win32" });
     const kill = vi.fn();
-    killProcessTree({
-      pid: 4242,
-      exitCode: null,
-      signalCode: null,
-      kill,
-    } as unknown as ChildProcess);
+    const child = { pid: 4242, exitCode: null, signalCode: null, kill };
+    return { child: child as unknown as ChildProcess, kill };
+  }
+
+  it("kills the whole tree with taskkill /T, so a timed-out fetch leaves no ssh behind", () => {
+    const { child, kill } = windowsChild();
+
+    killProcessTree(child);
+
+    expect(treeKill).toHaveBeenCalledWith(4242, "SIGKILL", expect.any(Function));
+    expect(kill).not.toHaveBeenCalled();
+  });
+
+  it("kills only the child when immediate, so a caller that retries is not held up", () => {
+    const { child, kill } = windowsChild();
+
+    killProcessTree(child, { immediate: true });
+
     expect(kill).toHaveBeenCalledWith("SIGKILL");
+    expect(treeKill).not.toHaveBeenCalled();
   });
 });
