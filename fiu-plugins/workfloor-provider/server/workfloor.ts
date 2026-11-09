@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 
 /**
  * Workfloor's conversation routes, as its own page calls them, with a personal token (`wfpat_…`) as the
- * person: Workfloor lets a token that writes reach `conversations`, `conversation`, `/api/events` and
- * the card's questions (`lane-flows/questions`), but never a step's go or an approval.
+ * person: Workfloor lets a token that writes reach `conversations`, `conversation`, `/api/events`,
+ * `attachments` and the card's questions (`lane-flows/questions`), but never a step's go or an approval.
  * A conversation is a private card on its project's Conversations lane (`conversations:<project>`).
  */
 export interface WorkfloorAuth {

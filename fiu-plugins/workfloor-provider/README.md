@@ -12,17 +12,18 @@ Paseo. The lane still moves the card; a stage's go and an approval stay Workfloo
 
 Pictures go both ways. One you attach in Paseo is uploaded to the card's current session and sent
 with your message (a new conversation takes pictures from its second message, as Workfloor does);
-one a card's message carries in Workfloor shows under its words in Paseo, or as a link to the card
-when Workfloor can't give it back.
+one an agent's message carries in Workfloor shows under its words in Paseo, or as a link to the card
+when Workfloor can't give it back. A person's message replays with a note and a link to the card
+in place of its pictures.
 
 Connect it in Paseo's Settings, Workfloor: Workfloor's address and a personal token that can read
 and write (Workfloor: Settings, Personal tokens). The token stays on this host, in the plugin's
 settings.
 
 It talks to Workfloor as you, through the routes Workfloor's own page uses
-(`/api/conversations`, `/api/conversation`, `/api/events`, `/api/lane-flows/questions`); Workfloor
-lets a token that writes reach them, audits each write as made by a token, and refuses it a go on a
-gate or a permission. So:
+(`/api/conversations`, `/api/conversation`, `/api/events`, `/api/lane-flows/questions`,
+`/api/attachments`); Workfloor lets a token that writes reach them, audits each write as made by a
+token, and refuses it a go on a gate or a permission. So:
 
 - the agent's question is asked in Paseo, while the turn stays open: pick an option, write your own
   answer, or decline it; one you answer in Workfloor meanwhile is withdrawn here;
