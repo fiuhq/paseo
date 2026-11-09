@@ -22,6 +22,10 @@ class FakeWorkfloor {
       lane?: string;
       /** The card's current agent session, once its lane moved it on to another stage's agent. */
       session?: string;
+      /** Its stage's agent never started: no session yet, and Start agent can start it (yours or not). */
+      idle?: { stage: string; yours: boolean };
+      /** Its agent is starting: no session yet, and nothing idle for Start agent to start. */
+      starting?: boolean;
       pending?: string;
       /** The agent's `card_ask` waiting on the person, as Workfloor's questions route reads it. */
       asks?: Record<string, unknown>;
@@ -112,6 +116,8 @@ class FakeWorkfloor {
       if (!c || q.get("workflow") !== (c.lane ?? `conversations:${P}`))
         return json({ error: "Not found" }, 404);
       const session = c.session ?? `s-${q.get("task")}`;
+      if (c.idle || c.starting)
+        return json({ title: c.title, sessionId: null, sessions: [], messages: c.messages });
       return json({
         title: c.title,
         sessionId: session,
@@ -147,6 +153,31 @@ class FakeWorkfloor {
       const session = c?.session ?? `s-${q.get("task")}`;
       if (!bytes || q.get("session") !== session) return json({ error: "Not found" }, 404);
       return new Response(bytes as BodyInit, { headers: { "content-type": "image/png" } });
+    }
+    if (url.pathname === "/api/connection" && q.get("view") === "workflows")
+      return json({ workflows: [{ id: "normal-lane" }, { id: "other-lane" }] });
+    if (url.pathname === "/api/lane-flows/agent-failure") {
+      const c = this.cards.get(q.get("card")!);
+      return json(
+        c?.idle
+          ? {
+              idle: {
+                stageId: `stage-${c.idle.stage}`,
+                stage: c.idle.stage,
+                entry: 7,
+                yours: c.idle.yours,
+              },
+            }
+          : {},
+      );
+    }
+    if (url.pathname === "/api/lane-flows/agent-start" && init?.method === "POST") {
+      const c = this.cards.get(body.card)!;
+      c.idle = undefined;
+      c.state = "RUNNING";
+      c.messages.push({ id: `m${c.messages.length + 1}`, role: "user", body: body.context });
+      this.reply(body.card, body.context);
+      return json({ started: true });
     }
     if (url.pathname === "/api/conversations" && init?.method === "POST") {
       const id = `card-${this.cards.size + 1}`;
@@ -898,7 +929,7 @@ describe("the Workfloor provider", () => {
           persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
           cwd: "/work",
           title: "Server heap crashes",
-          description: "Workfloor · codev",
+          description: expect.stringContaining("Workfloor · codev"),
         },
       ],
     });
@@ -1349,5 +1380,202 @@ describe("the Workfloor provider", () => {
       expect.objectContaining({ type: "assistant_message", text: "Added it." }),
     ]);
     await connection.close();
+  });
+
+  /** Paseo's Import keeps a provider's row only when the search is in its words (agent-manager's match). */
+  const keptByImport = (
+    session: { title?: string; description?: string; cwd: string },
+    query: string,
+  ) =>
+    [session.title, session.description, session.cwd.split("/").pop()].some((v) =>
+      v?.toLowerCase().includes(query.trim().toLowerCase()),
+    );
+
+  test("a card found by its link survives Import's own match on the search words", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "IDLE",
+      agent: "build-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    const link = `https://wf.test/?page=lanes&project=${P}&workflow=normal-lane&task=lane-card`;
+    await connection.send({ type: "sessions", requestId: "l1", cwd: "/work", query: link });
+    const listed = (await until(events, (e) => e.type === "sessions")) as Extract<
+      ProviderEvent,
+      { type: "sessions" }
+    >;
+    expect(listed.sessions).toHaveLength(1);
+    expect(keptByImport(listed.sessions[0]!, link)).toBe(true);
+  });
+
+  test("a short card link (/c/<card>) is found on the lane that shows it", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    const link = "https://wf.test/c/lane-card";
+    await connection.send({ type: "sessions", requestId: "l1", cwd: "/work", query: link });
+    const listed = (await until(events, (e) => e.type === "sessions")) as Extract<
+      ProviderEvent,
+      { type: "sessions" }
+    >;
+    expect(listed.sessions).toEqual([
+      expect.objectContaining({
+        persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+        title: "Scratch pools run past 6 hours",
+      }),
+    ]);
+    expect(keptByImport(listed.sessions[0]!, link)).toBe(true);
+  });
+
+  test("a short link to a conversation is found on the Conversations lane; an unknown card lists nothing", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("conv-card", { title: "hello world", state: "IDLE", agent: A, messages: [] });
+    const { connection, events } = await connect(wf);
+    await connection.send({
+      type: "sessions",
+      requestId: "l1",
+      cwd: "/work",
+      query: "https://wf.test/c/conv-card",
+    });
+    const listed = (await until(
+      events,
+      (e) => e.type === "sessions" && e.requestId === "l1",
+    )) as Extract<ProviderEvent, { type: "sessions" }>;
+    expect(listed.sessions[0]?.persistence).toEqual({
+      version: 1,
+      data: { project: P, card: "conv-card" },
+    });
+    await connection.send({
+      type: "sessions",
+      requestId: "l2",
+      cwd: "/work",
+      query: "https://wf.test/c/nope",
+    });
+    const none = (await until(
+      events,
+      (e) => e.type === "sessions" && e.requestId === "l2",
+    )) as Extract<ProviderEvent, { type: "sessions" }>;
+    expect(none.sessions).toEqual([]);
+  });
+
+  test("a short link whose lane read fails lists the failure, not an empty result", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const answer = wf.fetch;
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const q = new URL(String(input)).searchParams;
+      return q.get("view") === "detail" && q.get("workflow") === "other-lane"
+        ? new Response(JSON.stringify({ error: "Internal error" }), { status: 500 })
+        : answer(input, init);
+    }) as typeof fetch;
+    const { connection, events } = await connect(wf);
+    await connection.send({
+      type: "sessions",
+      requestId: "l1",
+      cwd: "/work",
+      query: "https://wf.test/c/lane-card",
+    });
+    await until(events, (e) => e.type === "request.failed" || e.type === "sessions");
+    expect(events.filter((e) => e.type === "request.failed" || e.type === "sessions")).toEqual([
+      expect.objectContaining({ type: "request.failed", requestId: "l1" }),
+    ]);
+  });
+
+  test("a message to an imported card whose stage's agent never started starts it, with the message", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("plan-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "planny",
+      lane: "normal-lane",
+      idle: { stage: "Plan", yours: true },
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "plan-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "plan the 6h fix");
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    expect(wf.requests.find((r) => r.path === "/api/lane-flows/agent-start")?.body).toEqual({
+      workspace: P,
+      card: "plan-card",
+      stage: "stage-Plan",
+      entry: 7,
+      context: "plan the 6h fix",
+    });
+    const texts = events.flatMap((e) =>
+      e.type === "timeline.item" && e.item.type === "assistant_message" ? [e.item.text] : [],
+    );
+    expect(texts).toContain("Hello! You said: plan the 6h fix");
+  });
+
+  test("a card with no agent that isn't the person's to start says so, with its link, and starts nothing", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("plan-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "planny",
+      lane: "normal-lane",
+      idle: { stage: "Plan", yours: false },
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "plan-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "plan it");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message: expect.stringMatching(
+            /^No agent is on this card in Plan, and only its assignee.*task=plan-card/,
+          ),
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/lane-flows/agent-start")).toBe(false);
+  });
+
+  test("a card whose agent is still starting asks to try again in a moment, with its link", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("plan-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "planny",
+      lane: "normal-lane",
+      starting: true,
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "plan-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "plan it");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message: expect.stringMatching(/try again in a moment.*task=plan-card/),
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/lane-flows/agent-start")).toBe(false);
   });
 });

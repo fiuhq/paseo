@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 /**
  * Workfloor's conversation routes, as its own page calls them, with a personal token (`wfpat_…`) as the
  * person: Workfloor lets a token that writes reach `conversations`, `conversation`, `/api/events`,
- * `attachments` and the card's questions (`lane-flows/questions`), but never a step's go or an approval.
+ * `attachments`, the card's questions (`lane-flows/questions`) and Start agent (`lane-flows/agent-start`),
+ * but never a step's go or an approval.
  * A conversation is a private card on its project's Conversations lane (`conversations:<project>`).
  */
 export interface WorkfloorAuth {
@@ -66,6 +67,13 @@ export interface WaitingQuestion {
   handoff?: unknown;
   issue?: unknown;
 }
+/** A card's stage whose agent never started there. */
+export interface IdleStage {
+  stageId: string;
+  stage: string;
+  entry: number;
+  yours?: boolean;
+}
 /** One answer per question, an option by its number ("1", "2", …) or the person's words; or a decline. */
 export type QuestionReply =
   | { answers: Array<{ questionId: string; optionId?: string; text?: string }> }
@@ -109,6 +117,17 @@ export function cardOfLink(text: string | undefined): CardRef | undefined {
   }
 }
 
+/** The card a Workfloor short link names (`/c/<card id>`, its Copy link), from any text holding one. */
+export function cardIdOfShortLink(text: string | undefined): string | undefined {
+  const found = text?.match(/https?:\/\/\S+/)?.[0];
+  if (!found) return undefined;
+  try {
+    return new URL(found).pathname.match(/^\/c\/([^/]+)\/?$/)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
 export class Workfloor {
   constructor(
     private readonly auth: WorkfloorAuth,
@@ -136,6 +155,13 @@ export class Workfloor {
     );
   }
 
+  /** The project's lanes, by id; its Conversations lane is not among them. */
+  async lanes(project: string): Promise<string[]> {
+    const query = new URLSearchParams({ view: "workflows", workspace: project });
+    const read = await this.request<{ workflows?: Array<{ id: string }> }>(`connection?${query}`);
+    return (read.workflows ?? []).map((w) => w.id);
+  }
+
   async conversations(project: string): Promise<Conversation[]> {
     const query = new URLSearchParams({ workspace: project });
     return (await this.request<{ conversations: Conversation[] }>(`conversations?${query}`))
@@ -161,6 +187,29 @@ export class Workfloor {
       task: ref.card,
     });
     return this.request(`connection?${query}`);
+  }
+
+  /**
+   * The card's stage whose agent never started there (a card made or moved without its agent),
+   * as Workfloor's Start agent reads it; `yours` when the person may start it.
+   */
+  async idleStage(ref: CardRef): Promise<IdleStage | undefined> {
+    const query = new URLSearchParams({ workspace: ref.project, card: ref.card });
+    return (await this.request<{ idle?: IdleStage }>(`lane-flows/agent-failure?${query}`)).idle;
+  }
+
+  /** Starts that stage's agent as the person, with their words in its handoff (Start agent). */
+  startStageAgent(ref: CardRef, idle: IdleStage, words: string): Promise<unknown> {
+    return this.request("lane-flows/agent-start", {
+      method: "POST",
+      body: JSON.stringify({
+        workspace: ref.project,
+        card: ref.card,
+        stage: idle.stageId,
+        entry: idle.entry,
+        ...(words ? { context: words } : {}),
+      }),
+    });
   }
 
   /** What waits on the person on this card, as Workfloor's card panel reads it. */

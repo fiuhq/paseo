@@ -5,11 +5,13 @@ agents as the model (`Buildy · codev`); the first message starts a conversation
 Workfloor, and every later message goes to that conversation's agent. Paseo's session list shows
 your conversations, so you can open one you started in Workfloor.
 
-A card on an assembly lane opens the same way: paste its Workfloor link into Import's search, and
-the card is listed to open. The agent takes the card's name, its history replays, your messages go
-to the agent of the stage it is on now (the next stage's agent, once the lane moves it on), and the
-agent's questions are asked in Paseo. The lane still moves the card; a stage's go and an approval
-stay Workfloor's.
+A card on an assembly lane opens the same way: paste its Workfloor link (the long one, or the
+short `/c/<card>` one Copy link gives) into Import's search, and the card is listed to open. The
+agent takes the card's name, its history replays, your messages go to the agent of the stage it is
+on now (the next stage's agent, once the lane moves it on), and the agent's questions are asked in
+Paseo. A card whose stage has no agent yet starts one with your message, as Workfloor's Start agent
+does, if you are its assignee or a project admin; send words first, pictures after. The lane still
+moves the card; a stage's go and an approval stay Workfloor's.
 While the card is open in Paseo, its lane is followed between your messages too: when the card
 moves to another stage, Paseo shows that stage's agent, says the card moved on, and follows what it
 writes. A message you write on Workfloor's page shows in Paseo too.
@@ -26,8 +28,8 @@ settings.
 
 It talks to Workfloor as you, through the routes Workfloor's own page uses
 (`/api/conversations`, `/api/conversation`, `/api/events`, `/api/lane-flows/questions`,
-`/api/attachments`); Workfloor lets a token that writes reach them, audits each write as made by a
-token, and refuses it a go on a gate or a permission. So:
+`/api/lane-flows/agent-start`, `/api/attachments`); Workfloor lets a token that writes reach them,
+audits each write as made by a token, and refuses it a go on a gate or a permission. So:
 
 - the agent's question is asked in Paseo, while the turn stays open: pick an option, write your own
   answer, or decline it; one you answer in Workfloor meanwhile is withdrawn here;
