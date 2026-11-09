@@ -1,0 +1,9 @@
+{
+  "id": "fiu-storyboard",
+  "name": "fiu.Storyboard",
+  "description": "Each workspace's newest fiu mock or fiu sb board, live in a panel beside the chat; it opens only when you open it",
+  "requirements": {
+    "paseo": ">=0.15.3"
+  },
+  "checkout": "directory"
+}
