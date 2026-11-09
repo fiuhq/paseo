@@ -381,8 +381,9 @@ frame (`0x22`) becomes a synthetic `plugin.rpc.invoke.request` and runs through 
 path, so it is authorized like any other invoke. The author contract, including the native upload
 limit, is in [stream events from the daemon](../public-docs/plugins/reference.md#subscriptions).
 
-`usePaseo()` and the handler's `{ paseo }` context expose the same `PaseoApi`: projects,
-workspaces, agents, terminals, providers, and daemon config. They do not expose connection lifecycle.
+`usePaseo()`, the handler's `{ paseo }` context, and `server.paseo` expose the same `PaseoApi`:
+projects, workspaces, agents, terminals, providers, and daemon config. They do not expose connection
+lifecycle.
 
 `usePaseo()` is the plugin's one client: `InstalledPlugin.paseo`, created with the installation in
 `packages/app/src/plugins/registry.ts` over the host's existing connection and passed to setup as

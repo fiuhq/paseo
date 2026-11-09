@@ -129,6 +129,8 @@ if (input.type === "catalog") {
 
 对于持久化的、作用于主机的插件设置，请使用 `server.registerSettings()` 返回的句柄。在目录和会话回调中读取它；当 Provider 在内存中保留配置时，订阅它。`read()` 和 `subscribe()` 的契约见[设置](./reference.md#persisted-values)。
 
+要在 Provider 代码中调用 Paseo（例如为会话创建工作区），请使用 `server.paseo`。它与处理函数通过 `{ paseo }` 收到的 [Paseo SDK](./reference.md#use-the-paseo-sdk) 相同。
+
 用选中的目录值创建原生会话，然后发布它实际生效的状态：
 
 ```ts
