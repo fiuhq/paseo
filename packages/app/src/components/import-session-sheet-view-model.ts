@@ -86,17 +86,26 @@ export function aggregateSessionEntries(
 }
 
 /**
- * The one session a pasted link names, to import without a click: the search is a single link, and
- * the providers that answered it (not a previous search's results still on screen) found exactly
- * one session. A slower provider isn't waited for: a link is found by the provider that knows it,
- * not by matching another provider's titles.
+ * The one session a pasted link names, to import without a click: the search is a single link,
+ * every provider has answered it (none still loading, failed, or showing a previous search's
+ * results), and exactly one session matched across all of them. While any provider is still
+ * answering, nothing is named; its row still shows and can be clicked.
  */
 export function pastedLinkSession(
   query: string,
   queries: ReadonlyArray<SessionsQueryResult & { isPlaceholderData?: boolean }>,
 ): FetchRecentProviderSessionEntry | null {
   if (!/^https?:\/\/\S+$/i.test(query.trim())) return null;
-  const entries = aggregateSessionEntries(queries.filter((q) => !q.isPlaceholderData));
+  const answered = queries.every(
+    (q) =>
+      !q.isLoading &&
+      !q.isPending &&
+      !q.isPlaceholderData &&
+      !q.isError &&
+      !q.data?.providerErrors?.length,
+  );
+  if (!answered) return null;
+  const entries = aggregateSessionEntries(queries);
   return entries.length === 1 ? entries[0]! : null;
 }
 

@@ -472,9 +472,32 @@ describe("pastedLinkSession", () => {
   const card = entry({ providerId: "workfloor", providerHandleId: 'plugin:{"card":"c1"}' });
   const link = "https://flxbl.workfloor.cloud/c/c1";
 
-  it("names the one session a pasted link found, without waiting for slower providers", () => {
+  it("names nothing while another provider is still answering the link", () => {
     const slow = { data: undefined, isError: false, isLoading: true, isPending: true };
-    expect(pastedLinkSession(link, [settled({ entries: [card] }), slow])).toBe(card);
+    expect(pastedLinkSession(link, [settled({ entries: [card] }), slow])).toBeNull();
+  });
+
+  it("names the one session once every provider has answered the link", () => {
+    expect(pastedLinkSession(link, [settled({ entries: [card] }), settled({ entries: [] })])).toBe(
+      card,
+    );
+  });
+
+  it("names nothing when another provider also matched the link or failed to answer", () => {
+    const claude = settled({ entries: [entry({ lastPromptPreview: link })] });
+    expect(pastedLinkSession(link, [settled({ entries: [card] }), claude])).toBeNull();
+    expect(
+      pastedLinkSession(link, [
+        settled({ entries: [card] }),
+        settled(undefined, { isError: true }),
+      ]),
+    ).toBeNull();
+    expect(
+      pastedLinkSession(link, [
+        settled({ entries: [card] }),
+        settled({ entries: [], providerErrors: [{ provider: "claude", message: "down" }] }),
+      ]),
+    ).toBeNull();
   });
 
   it("names nothing for words, more than one session, or a previous search's results still shown", () => {
