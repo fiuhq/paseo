@@ -21,5 +21,4 @@ gate or a permission. So:
 - the agent works in Workfloor, on its project's repositories, not in your Paseo workspace;
 - a conversation keeps the agent it started with.
 
-Check it with `bun install --frozen-lockfile && bun run verify` here, after `npm ci` and building
-`@getpaseo/client` and `@getpaseo/plugin` at the repository root.
+Check it as [every fiu plugin](../README.md) that draws in the app.
