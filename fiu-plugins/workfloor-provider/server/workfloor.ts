@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 
 /**
  * Workfloor's conversation routes, as its own page calls them, with a personal token (`wfpat_…`) as the
- * person: Workfloor lets a token that writes reach `conversations`, `conversation`, `/api/events` and
- * the card's questions (`lane-flows/questions`), but never a step's go or an approval.
+ * person: Workfloor lets a token that writes reach `conversations`, `conversation`, `/api/events`,
+ * `attachments` and the card's questions (`lane-flows/questions`), but never a step's go or an approval.
  * A conversation is a private card on its project's Conversations lane (`conversations:<project>`).
  */
 export interface WorkfloorAuth {
@@ -19,11 +19,21 @@ export interface Agent {
   name: string;
   model?: string;
 }
+/** A file a message carries, as Workfloor lists it and as a send takes it once uploaded. */
+export interface Attachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  kind?: string;
+  deliveryMode?: string;
+}
 export interface Message {
   id: string;
   role: "agent" | "user";
   body: string;
   tool?: { name: string; status: string; input: string };
+  attachments?: Attachment[];
 }
 export interface Detail {
   title?: string;
@@ -168,8 +178,49 @@ export class Workfloor {
     });
   }
 
-  send(scope: Scope, body: string): Promise<unknown> {
-    return this.command(scope, { kind: "send", body, attachments: [], clientId: randomUUID() });
+  send(scope: Scope, body: string, attachments: Attachment[] = []): Promise<unknown> {
+    return this.command(scope, { kind: "send", body, attachments, clientId: randomUUID() });
+  }
+
+  /** Uploads a file for the next message to the card's current session, as its composer does. */
+  upload(
+    scope: Scope,
+    file: { name: string; mimeType: string; bytes: Uint8Array },
+  ): Promise<Attachment> {
+    const form = new FormData();
+    form.append("workspace", scope.project);
+    form.append("workflow", scope.lane);
+    form.append("task", scope.card);
+    form.append("session", scope.session);
+    form.append("file", new File([new Uint8Array(file.bytes)], file.name, { type: file.mimeType }));
+    return this.request("attachments", { method: "POST", body: form });
+  }
+
+  /** A picture a message on the card carries, as its thumbnail reads it. */
+  async picture(
+    scope: Scope & { message: string },
+    id: string,
+  ): Promise<{ bytes: Uint8Array; type: string }> {
+    const query = new URLSearchParams({
+      workspace: scope.project,
+      workflow: scope.lane,
+      task: scope.card,
+      session: scope.session,
+      message: scope.message,
+      id,
+    });
+    const response = await this.fetchImpl(`${this.auth.url}/api/attachments/content?${query}`, {
+      headers: { authorization: `Bearer ${this.auth.token}` },
+    });
+    if (!response.ok)
+      throw new WorkfloorError(
+        `Workfloor answered ${response.status} to a picture`,
+        response.status,
+      );
+    return {
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      type: response.headers.get("content-type") ?? "image/png",
+    };
   }
 
   stop(scope: Scope): Promise<unknown> {
@@ -228,7 +279,8 @@ export class Workfloor {
       ...init,
       headers: {
         authorization: `Bearer ${this.auth.token}`,
-        ...(init?.body ? { "content-type": "application/json" } : {}),
+        // A form sets its own multipart type.
+        ...(typeof init?.body === "string" ? { "content-type": "application/json" } : {}),
       },
     });
     const body = (await response.json().catch(() => undefined)) as { error?: unknown } | undefined;

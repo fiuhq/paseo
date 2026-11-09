@@ -17,6 +17,7 @@ import {
   WorkfloorError,
   cardOfLink,
   lane,
+  type Attachment,
   type CardRef,
   type Detail,
   type Message,
@@ -26,6 +27,7 @@ import {
 
 const CAPABILITIES = [
   "prompt.message",
+  "prompt.image",
   "session.configure",
   "session.list",
   "session.persistence",
@@ -72,6 +74,8 @@ interface Session {
   asked?: { id: string; keys: Array<{ header: string; questionId: string; options: string[] }> };
   /** The question last answered here: a read that started before the answer never asks it again. */
   answered?: string;
+  /** Each picture a message carries, as the Markdown image shown for it, by its Workfloor file id. */
+  pictures: Map<string, string>;
   /** Workfloor's agent being stopped after a Stop: the next message waits for it, so it is never the one stopped. */
   stopping?: Promise<void>;
 }
@@ -319,7 +323,13 @@ async function openSession(
   state: State,
 ): Promise<void> {
   const card = cardOf(input.persistence);
-  const session: Session = { id: input.sessionId, config: input.config, seen: new Set(), turns: 0 };
+  const session: Session = {
+    id: input.sessionId,
+    config: input.config,
+    seen: new Set(),
+    turns: 0,
+    pictures: new Map(),
+  };
   let history: Message[] = [];
   let busy = false;
   // The card's name in Workfloor: Paseo names an imported agent with it.
@@ -361,9 +371,13 @@ async function openSession(
     sessionId: input.sessionId,
     config: await configState(session, state),
   });
+  const shown =
+    input.history === "replay" && card && wf
+      ? await pictures(session, wf, { ...card, session: session.workfloorSession }, history)
+      : new Map<string, string>();
   if (input.history === "replay")
     for (const m of history) {
-      const item = timelineItem(m, true);
+      const item = timelineItem(m, true, shown);
       if (item) state.emit({ type: "timeline.item", sessionId: input.sessionId, item });
     }
   state.emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
@@ -425,8 +439,19 @@ async function prompt(
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n")
     .trim();
-  if (!text)
+  const images = input.prompt.input.content.flatMap((part) =>
+    part.type === "image" ? [part] : [],
+  );
+  if (!text && !images.length)
     return answer({ type: "failed", error: { message: "Write a message for Workfloor's agent" } });
+  if (images.length && !session.card)
+    return answer({
+      type: "failed",
+      error: {
+        message:
+          "Workfloor takes pictures once the conversation has started: send your words first, then the pictures",
+      },
+    });
 
   const wf = await state.workfloor();
   await session.stopping;
@@ -436,7 +461,18 @@ async function prompt(
     await track(session, await wf.detail(session.card), state);
     if (!session.workfloorSession)
       throw new WorkfloorError("This card's agent has not started yet: try again in a moment");
-    await wf.send({ ...session.card, session: session.workfloorSession }, text);
+    const scope = { ...session.card, session: session.workfloorSession };
+    // Each picture goes up to the card's current session first, as Workfloor's composer sends them.
+    const attachments = await Promise.all(
+      images.map((image, i) =>
+        wf.upload(scope, {
+          name: `picture-${i + 1}.${image.mimeType.split("/")[1] ?? "png"}`,
+          mimeType: image.mimeType,
+          bytes: Buffer.from(image.data, "base64"),
+        }),
+      ),
+    );
+    await wf.send(scope, text, attachments);
   } else {
     const picked = parseModel(session.model);
     if (!picked) throw new WorkfloorError("Pick a Workfloor agent first");
@@ -521,7 +557,13 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
           wf.question(card.project, card.card),
         ]);
         await track(session, detail, state);
-        const outcome = step(session, turn, detail, waiting, wf, state);
+        const shown = await pictures(
+          session,
+          wf,
+          { ...card, session: detail.sessionId },
+          detail.messages.filter((m) => !session.seen.has(m.id)),
+        );
+        const outcome = step(session, turn, detail, waiting, wf, state, shown);
         if (outcome) return end(outcome.state, outcome.error);
       } while (again && !turn.abort.signal.aborted);
     } catch (error) {
@@ -575,6 +617,7 @@ function step(
   waiting: WaitingQuestion | undefined,
   wf: Workfloor,
   state: State,
+  shown: ReadonlyMap<string, string>,
 ): { state: "completed" | "failed"; error?: string } | undefined {
   const current = detail.sessions?.find((s) => s.id === detail.sessionId);
   const working = !current || WORKING.has(current.state);
@@ -585,7 +628,7 @@ function step(
   const hold = working && !detail.pendingAction && !waiting;
   for (const m of hold ? fresh.slice(0, -1) : fresh) {
     session.seen.add(m.id);
-    const item = timelineItem(m, false);
+    const item = timelineItem(m, false, shown);
     if (!item) continue;
     if (m.role === "agent") turn.replied = true;
     state.emit({ type: "timeline.item", sessionId: session.id, item });
@@ -629,10 +672,17 @@ function step(
   return !working && (turn.replied || turn.worked) ? { state: "completed" } : undefined;
 }
 
-/** A Workfloor message as a timeline item; a person's own words are left out while live (Paseo drew them already). */
-function timelineItem(m: Message, replay: boolean): ProviderTimelineItem | undefined {
-  if (m.role === "user")
-    return replay ? { type: "user_message", id: m.id, text: m.body } : undefined;
+/**
+ * A Workfloor message as a timeline item, its pictures shown under its words; a person's own message
+ * is left out while live (Paseo drew it already).
+ */
+function timelineItem(
+  m: Message,
+  replay: boolean,
+  shown: ReadonlyMap<string, string>,
+): ProviderTimelineItem | undefined {
+  const text = [m.body.trim(), shown.get(m.id)].filter(Boolean).join("\n\n");
+  if (m.role === "user") return replay ? { type: "user_message", id: m.id, text } : undefined;
   if (m.tool) {
     const detail = { type: "plain_text" as const, label: m.tool.name, text: m.tool.input };
     return m.tool.status === "failed"
@@ -655,7 +705,78 @@ function timelineItem(m: Message, replay: boolean): ProviderTimelineItem | undef
           error: null,
         };
   }
-  return m.body.trim() ? { type: "assistant_message", id: m.id, text: m.body } : undefined;
+  return text ? { type: "assistant_message", id: m.id, text } : undefined;
+}
+
+/** How many pictures are read from Workfloor at once. */
+const PICTURE_READS = 4;
+/** The picture types Workfloor's thumbnail route serves; any other is a link to the card. */
+const SERVED_PICTURES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+/** Workfloor's answers to a picture too large (413) or of a type it never serves (415). */
+const FINAL_STATUSES = new Set([413, 415]);
+
+/**
+ * What shows for the pictures these messages carry, by message id. An agent's are read from
+ * Workfloor and shown inline (a `data:` image, which Paseo renders on every client); one Workfloor
+ * cannot give back is a link to the card, read again next time unless it never can be. A person's
+ * message is plain text in Paseo, so its pictures are a note with the card's link, never read.
+ */
+async function pictures(
+  session: Session,
+  wf: Workfloor,
+  scope: CardRef & { session?: string },
+  messages: readonly Message[],
+): Promise<Map<string, string>> {
+  const shown = new Map<string, string>();
+  const add = (id: string, text: string) =>
+    shown.set(id, [shown.get(id), text].filter(Boolean).join("\n\n"));
+  const wanted: Array<{ messageId: string; file: Attachment }> = [];
+  for (const m of messages) {
+    const files = (m.attachments ?? []).filter((a) => a.mimeType.startsWith("image/"));
+    if (!files.length) continue;
+    if (m.role === "user")
+      add(
+        m.id,
+        `${files.length} picture${files.length === 1 ? "" : "s"}, open in Workfloor: ${wf.link(scope)}`,
+      );
+    else if (!m.tool) wanted.push(...files.map((file) => ({ messageId: m.id, file })));
+  }
+  const failed = new Map<string, string>();
+  // ponytail: whole-picture data: URLs in the timeline (Workfloor caps a file at 10 MiB); a cached file served to Paseo if timelines grow too heavy.
+  for (let at = 0; at < wanted.length; at += PICTURE_READS)
+    await Promise.all(
+      wanted.slice(at, at + PICTURE_READS).map(async ({ messageId, file }) => {
+        if (session.pictures.has(file.id)) return;
+        const link = `[${markdownText(file.name)}: open it in Workfloor](${wf.link(scope)})`;
+        if (!SERVED_PICTURES.has(file.mimeType)) {
+          failed.set(file.id, link);
+          return;
+        }
+        try {
+          if (!scope.session) throw new WorkfloorError("the card has no agent session yet");
+          const { bytes, type } = await wf.picture(
+            { ...scope, session: scope.session, message: messageId },
+            file.id,
+          );
+          session.pictures.set(
+            file.id,
+            `![${markdownText(file.name)}](data:${type};base64,${Buffer.from(bytes).toString("base64")})`,
+          );
+        } catch (error) {
+          console.error(`[workfloor-provider] picture ${file.id}: ${message(error)}`);
+          const final = error instanceof WorkfloorError && FINAL_STATUSES.has(error.status ?? 0);
+          (final ? session.pictures : failed).set(file.id, link);
+        }
+      }),
+    );
+  for (const { messageId, file } of wanted)
+    add(messageId, session.pictures.get(file.id) ?? failed.get(file.id) ?? "");
+  return shown;
+}
+
+/** A name as Markdown link text: on one line, its brackets and backslashes taken literally. */
+function markdownText(name: string): string {
+  return name.replace(/\s*[\r\n]+\s*/g, " ").replace(/[\\[\]]/g, "\\$&");
 }
 
 /** Raises the agent's `card_ask` as a Paseo question: its context in the chat, each question with its options. */
