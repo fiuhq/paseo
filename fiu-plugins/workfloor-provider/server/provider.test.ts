@@ -18,6 +18,10 @@ class FakeWorkfloor {
       state: string;
       messages: Array<Record<string, unknown>>;
       agent: string;
+      /** The card's lane: a conversation's when unset. */
+      lane?: string;
+      /** The card's current agent session, once its lane moved it on to another stage's agent. */
+      session?: string;
       pending?: string;
       /** The agent's `card_ask` waiting on the person, as Workfloor's questions route reads it. */
       asks?: Record<string, unknown>;
@@ -100,10 +104,13 @@ class FakeWorkfloor {
     if (url.pathname === "/api/connection" && q.get("view") === "detail") {
       await Bun.sleep(this.detailDelay);
       const c = this.cards.get(q.get("task")!);
-      if (!c) return json({ error: "Not found" }, 404);
+      if (!c || q.get("workflow") !== (c.lane ?? `conversations:${P}`))
+        return json({ error: "Not found" }, 404);
+      const session = c.session ?? `s-${q.get("task")}`;
       return json({
-        sessionId: `s-${q.get("task")}`,
-        sessions: [{ id: `s-${q.get("task")}`, state: c.state, agentProfileId: c.agent }],
+        title: c.title,
+        sessionId: session,
+        sessions: [{ id: session, state: c.state, agentProfileId: c.agent }],
         ...(c.pending ? { pendingAction: c.pending } : {}),
         messages: c.messages,
       });
@@ -147,6 +154,8 @@ class FakeWorkfloor {
       );
     if (url.pathname === "/api/conversation") {
       const c = this.cards.get(body.task)!;
+      if (body.workflow !== (c.lane ?? `conversations:${P}`))
+        return json({ error: "Not found" }, 404);
       if (body.command.kind === "send") {
         c.messages.push({ id: `m${c.messages.length + 1}`, role: "user", body: body.command.body });
         c.state = "RUNNING";
@@ -261,7 +270,7 @@ describe("the Workfloor provider", () => {
     expect(events).toContainEqual({
       type: "session.persistence",
       sessionId: "s1",
-      persistence: { version: 1, data: { project: P, card: "card-1" } },
+      persistence: { version: 1, data: { project: P, card: "card-1", lane: `conversations:${P}` } },
     });
   });
 
@@ -809,5 +818,70 @@ describe("the Workfloor provider", () => {
     });
     await until(events, turnEnded, 5000);
     expect(events.filter((e) => e.type === "session.permission")).toHaveLength(1);
+  });
+  test("a card's link pasted into the search lists that card, on any lane, to open", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "IDLE",
+      agent: "build-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await connection.send({
+      type: "sessions",
+      requestId: "l1",
+      cwd: "/work",
+      query: `https://wf.test/?page=lanes&view=all&project=${P}&workflow=normal-lane&task=lane-card&panel=workspace`,
+    });
+    expect(await until(events, (e) => e.type === "sessions")).toMatchObject({
+      sessions: [
+        {
+          persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+          cwd: "/work",
+          title: "Server heap crashes",
+          description: "Workfloor · codev",
+        },
+      ],
+    });
+  });
+
+  test("an opened lane card is driven on its own lane, and a message after it moved stage goes to the new stage's agent", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [{ id: "m1", role: "agent", body: "Plan is ready." }],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    expect(
+      events.flatMap((e) => (e.type === "timeline.item" ? [e.item] : [])).map((i) => i.type),
+    ).toEqual(["assistant_message"]);
+    await say(connection, "s1", "one");
+    await until(events, turnEnded);
+    // The lane moves the card on: its Build stage's agent now holds it, in a new session.
+    const card = wf.cards.get("lane-card")!;
+    card.session = "s-build";
+    card.agent = "build-agent";
+    events.length = 0;
+    await say(connection, "s1", "two");
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    expect(
+      wf.requests.filter((r) => r.path === "/api/conversation").map((r) => r.body),
+    ).toMatchObject([
+      { workflow: "normal-lane", task: "lane-card", session: "s-lane-card" },
+      { workflow: "normal-lane", task: "lane-card", session: "s-build" },
+    ]);
+    expect(
+      wf.requests
+        .filter((r) => r.path.startsWith("/api/events") || r.path.includes("view=detail"))
+        .every((r) => r.path.includes("workflow=normal-lane")),
+    ).toBe(true);
   });
 });
