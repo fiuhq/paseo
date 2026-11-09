@@ -1059,6 +1059,37 @@ describe("the Workfloor provider", () => {
     expect(texts).toEqual(["Here it is.\n\n![late.png](data:image/png;base64,iVBORw==)"]);
   });
 
+  test("a picture of a type Workfloor never serves is a link to the card, and is never requested", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "IDLE",
+      agent: "test-agent",
+      lane: "normal-lane",
+      messages: [
+        {
+          id: "m1",
+          role: "agent",
+          body: "The diagram.",
+          attachments: [{ id: "wfap_svg", name: "flow.svg", mimeType: "image/svg+xml", size: 9 }],
+        },
+      ],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    const texts = events.flatMap((e) =>
+      e.type === "timeline.item" && e.item.type === "assistant_message" ? [e.item.text] : [],
+    );
+    expect(texts).toEqual([
+      expect.stringMatching(
+        /^The diagram\.\n\n\[flow\.svg: open it in Workfloor\]\(https:\/\/wf\.test\/\?.*task=lane-card/,
+      ),
+    ]);
+    expect(wf.requests.some((r) => r.path.startsWith("/api/attachments/content"))).toBe(false);
+  });
+
   test("a picture sent from Paseo goes up to the card's current session and with the message", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", {

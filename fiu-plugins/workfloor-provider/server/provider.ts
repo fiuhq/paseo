@@ -707,12 +707,16 @@ function timelineItem(
 
 /** How many pictures are read from Workfloor at once. */
 const PICTURE_READS = 4;
+/** The picture types Workfloor's thumbnail route serves; any other is a link to the card. */
+const SERVED_PICTURES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+/** Workfloor's answers to a picture too large (413) or of a type it never serves (415). */
+const FINAL_STATUSES = new Set([413, 415]);
 
 /**
  * What shows for the pictures these messages carry, by message id. An agent's are read from
  * Workfloor and shown inline (a `data:` image, which Paseo renders on every client); one Workfloor
- * cannot give back is a link to the card, read again next time. A person's message is plain text in
- * Paseo, so its pictures are a note with the card's link, never read.
+ * cannot give back is a link to the card, read again next time unless it never can be. A person's
+ * message is plain text in Paseo, so its pictures are a note with the card's link, never read.
  */
 async function pictures(
   session: Session,
@@ -740,6 +744,11 @@ async function pictures(
     await Promise.all(
       wanted.slice(at, at + PICTURE_READS).map(async ({ messageId, file }) => {
         if (session.pictures.has(file.id)) return;
+        const link = `[${markdownText(file.name)}: open it in Workfloor](${wf.link(scope)})`;
+        if (!SERVED_PICTURES.has(file.mimeType)) {
+          failed.set(file.id, link);
+          return;
+        }
         try {
           if (!scope.session) throw new WorkfloorError("the card has no agent session yet");
           const { bytes, type } = await wf.picture(
@@ -752,10 +761,8 @@ async function pictures(
           );
         } catch (error) {
           console.error(`[workfloor-provider] picture ${file.id}: ${message(error)}`);
-          failed.set(
-            file.id,
-            `[${markdownText(file.name)}: open it in Workfloor](${wf.link(scope)})`,
-          );
+          const final = error instanceof WorkfloorError && FINAL_STATUSES.has(error.status ?? 0);
+          (final ? session.pictures : failed).set(file.id, link);
         }
       }),
     );
