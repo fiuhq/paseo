@@ -78,6 +78,16 @@ export interface IdleStage {
 export type QuestionReply =
   | { answers: Array<{ questionId: string; optionId?: string; text?: string }> }
   | { reject: string };
+/** What a card's own view says about its code: its repository and the issues and pull requests linked to it. */
+export interface CardCode {
+  repository?: string;
+  externalItems?: Array<{
+    kind: string;
+    repository?: string;
+    number?: number;
+    state?: string | null;
+  }>;
+}
 /** A card by the IDs Workfloor's routes take: a conversation is a card on its project's Conversations lane. */
 export interface CardRef {
   project: string;
@@ -210,6 +220,17 @@ export class Workfloor {
         ...(words ? { context: words } : {}),
       }),
     });
+  }
+
+  /** The card's repository and linked items, as its card view reads them. */
+  async code(ref: CardRef): Promise<CardCode> {
+    const query = new URLSearchParams({
+      view: "card",
+      workspace: ref.project,
+      workflow: ref.lane,
+      task: ref.card,
+    });
+    return (await this.request<{ task?: CardCode }>(`connection?${query}`)).task ?? {};
   }
 
   /** What waits on the person on this card, as Workfloor's card panel reads it. */

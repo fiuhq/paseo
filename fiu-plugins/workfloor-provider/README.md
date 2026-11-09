@@ -22,6 +22,11 @@ one an agent's message carries in Workfloor shows under its words in Paseo, or a
 when Workfloor can't give it back. A person's message replays with a note and a link to the card
 in place of its pictures.
 
+An imported card is named after its Workfloor title and lands in a worktree of its repository's
+Paseo project, checked out on the card's open pull request (made once, then reused; a worktree
+already on that pull request is used as is). A card with no open pull request works in the
+project's own checkout, and one whose repository has no Paseo project stays where you imported it.
+
 Connect it in Paseo's Settings, Workfloor: Workfloor's address and a personal token that can read
 and write (Workfloor: Settings, Personal tokens). The token stays on this host, in the plugin's
 settings.
