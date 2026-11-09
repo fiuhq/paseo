@@ -144,6 +144,8 @@ describe("useAgentInputDraft live contract", () => {
       drafts: {},
       createModalDraft: null,
       attachmentFocusRequestByDraftKey: {},
+      textReplacementRequestByDraftKey: {},
+      metadataByDraftKey: {},
     });
   });
 
@@ -565,6 +567,27 @@ describe("useAgentInputDraft live contract", () => {
     expect(draft().attachments).toEqual([typed, first]);
   });
 
+  it("restores a failed message's metadata, keeping what was set since", async () => {
+    const draft = await mountDraft("draft:host-1:draft-1");
+    const draftKey = "draft:host-1:draft-1";
+
+    await act(async () => {
+      useDraftStore.getState().patchDraftMetadata({ draftKey, patch: { issue: 42, label: "bug" } });
+      draft().clear("sent");
+      useDraftStore.getState().patchDraftMetadata({ draftKey, patch: { label: "feature" } });
+      draft().restoreUnsent({
+        text: "First message",
+        attachments: [],
+        metadata: { issue: 42, label: "bug" },
+      });
+    });
+
+    expect(useDraftStore.getState().metadataByDraftKey[draftKey]).toEqual({
+      issue: 42,
+      label: "feature",
+    });
+  });
+
   it("restores a failed message unchanged when nothing was typed since", async () => {
     const draft = await mountDraft("draft:host-1:draft-1");
 
@@ -574,6 +597,37 @@ describe("useAgentInputDraft live contract", () => {
 
     expect(draft().textSource.getSnapshot()).toBe("First message");
     expect(draft().textReplacement.text).toBe("First message");
+  });
+
+  it("shows text another module put in the draft while the input is retained off screen", async () => {
+    let latest: ReturnType<typeof useAgentInputDraft> | null = null;
+    function getLatest(): ReturnType<typeof useAgentInputDraft> {
+      if (!latest) throw new Error("Expected hook result");
+      return latest;
+    }
+    function Probe() {
+      latest = useAgentInputDraft({ draftKey: "draft:replaced" });
+      return null;
+    }
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing root container");
+    const root = createTestRoot(container);
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <Probe />
+        </QueryClientProvider>,
+      );
+    });
+    const before = getLatest().textReplacement.key;
+
+    await act(async () => {
+      useDraftStore.getState().replaceDraftText({ draftKey: "draft:replaced", text: "from away" });
+    });
+
+    expect(getLatest().textReplacement).toMatchObject({ kind: "replace", text: "from away" });
+    expect(getLatest().textReplacement.key).not.toBe(before);
+    expect(getLatest().textSource.getSnapshot()).toBe("from away");
   });
 
   it("clear resets text and attachments", async () => {

@@ -1,3 +1,4 @@
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type { PluginLifecycle } from "../../plugins/lifecycle/index.js";
 import { describeHookWorkspace } from "../../plugins/lifecycle/index.js";
 import { buildAgentBranchNameSeed } from "../../agent/prompt-attachments.js";
@@ -55,6 +56,7 @@ export interface CreateWorktreeWorkspaceInput {
   title: string | null;
   /** Set when the title is only this prompt's first line: a plugin's judge may hold it back. */
   promptTitleContext?: FirstAgentContext;
+  metadata?: Record<string, JsonValue>;
   expectsInitialAgent?: boolean;
   untrustedSource?: UntrustedWorkspaceSource;
   background?: boolean;
@@ -76,6 +78,7 @@ export interface WorkspaceProvisioningService {
       promptTitleContext?: FirstAgentContext;
       expectsInitialAgent?: boolean;
       workspaceId?: string;
+      metadata?: Record<string, JsonValue>;
       background?: boolean;
       callerWorkspaceId?: string;
     },
@@ -264,6 +267,7 @@ export function createWorkspaceProvisioningService(deps: {
       promptTitleContext?: FirstAgentContext;
       expectsInitialAgent?: boolean;
       workspaceId?: string;
+      metadata?: Record<string, JsonValue>;
       background?: boolean;
       callerWorkspaceId?: string;
     },
@@ -286,6 +290,7 @@ export function createWorkspaceProvisioningService(deps: {
         ...initialWorkspacePlacement({ source: "checkout", cwd: normalizedCwd, checkout }),
         baseBranch: baseMetadata?.baseRef ?? baseMetadata?.baseRefName ?? null,
         ...titleFields(title?.trim() || null, context?.promptTitleContext),
+        metadata: context?.metadata,
         createdAt: timestamp,
         updatedAt: timestamp,
         ...(await resolveCreationMetadata(context)),
@@ -326,6 +331,7 @@ export function createWorkspaceProvisioningService(deps: {
         mainRepoRoot: repoRoot,
       }),
       ...titleFields(input.title, input.untrustedSource ? undefined : input.promptTitleContext),
+      metadata: input.metadata,
       createdAt: timestamp,
       updatedAt: timestamp,
       ...(input.untrustedSource ? { untrustedSource: input.untrustedSource } : {}),
