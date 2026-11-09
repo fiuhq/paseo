@@ -1721,7 +1721,7 @@ describe("the Workfloor provider", () => {
     const { connection, events } = await connect(wf, undefined, paseo);
     const listed = await listLink(connection, events, "l1");
     expect(listed.sessions.map((s) => [s.cwd, s.description])).toEqual([
-      ["/repos/sfp-pro", "Workfloor · codev · worktree not made: gh: not logged in"],
+      ["/repos/sfp-pro", `Workfloor · codev · worktree not made: gh: not logged in · ${LINK}`],
     ]);
   });
 
