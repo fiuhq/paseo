@@ -555,12 +555,13 @@ async function track(session: Session, detail: Detail, state: State): Promise<vo
   if (!agent || !session.card) return;
   const model = modelId(session.card.project, agent);
   if (model === session.model) return;
-  session.model = model;
-  state.emit({
-    type: "session.config",
-    sessionId: session.id,
-    config: await configState(session, state),
-  });
+  try {
+    const config = await configState({ ...session, model }, state);
+    session.model = model;
+    state.emit({ type: "session.config", sessionId: session.id, config });
+  } catch (error) {
+    console.error(`[workfloor-provider] showing ${session.card.card}'s agent: ${message(error)}`);
+  }
 }
 
 /** One read of the card: hands over settled messages, and says how the turn ended, if it has. */
