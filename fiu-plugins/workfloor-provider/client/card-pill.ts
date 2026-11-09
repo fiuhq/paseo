@@ -12,8 +12,6 @@ type Agent = CardAgent & { id: string; workspaceId?: string | null; archivedAt?:
 export function contributeCardPills(client: PluginClientContext): () => void {
   const pills = new Map<string, { registration: PluginButtonRegistration; card: string }>();
   const lifetime = new AbortController();
-  let address: Promise<string> | undefined;
-  const url = () => (address ??= client.rpc(readAddress, {}).then((r) => r.url));
 
   const button = (card: string): PluginButton => ({
     title: `Open Workfloor card ${reference(card)}`,
@@ -22,12 +20,8 @@ export function contributeCardPills(client: PluginClientContext): () => void {
     behavior: {
       kind: "action",
       onPress: async () => {
-        try {
-          await openExternalUrl(cardUrl(await url(), card));
-        } catch (error) {
-          address = undefined;
-          throw error;
-        }
+        const { url } = await client.rpc(readAddress, {});
+        await openExternalUrl(cardUrl(url, card));
       },
     },
   });
@@ -43,7 +37,6 @@ export function contributeCardPills(client: PluginClientContext): () => void {
     if (existing?.card === card) return;
     drop(agent.id);
     if (!card || !agent.workspaceId) return;
-    void url();
     pills.set(agent.id, {
       card,
       registration: client.addComposerPill({
