@@ -343,8 +343,8 @@ async function listSessions(
         persistence: persistenceOf(linked),
         cwd: input.cwd ?? homedir(),
         title: detail.title || linked.card,
-        // Paseo's Import matches the search against a row's words again, so the row carries the
-        // link it was found by; without it the card is dropped after Workfloor found it.
+        // `exact` marks this row as the card the link names, so Import keeps it without matching
+        // the search against its words and imports it at once; the description shows the link.
         description: `Workfloor · ${project?.name ?? linked.project} · ${input.query?.trim()}`,
         exact: true,
       },

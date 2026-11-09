@@ -6,12 +6,12 @@ Workfloor, and every later message goes to that conversation's agent. Paseo's se
 your conversations, so you can open one you started in Workfloor.
 
 A card on an assembly lane opens the same way: paste its Workfloor link (the long one, or the
-short `/c/<card>` one Copy link gives) into Import's search, and the card is listed to open. The
-agent takes the card's name, its history replays, your messages go to the agent of the stage it is
-on now (the next stage's agent, once the lane moves it on), and the agent's questions are asked in
-Paseo. A card whose stage has no agent yet starts one with your message, as Workfloor's Start agent
-does, if you are its assignee or a project admin; send words first, pictures after. The lane still
-moves the card; a stage's go and an approval stay Workfloor's.
+short `/c/<card>` one Copy link gives) into Import's search, and the card is imported and opened
+at once. The agent takes the card's name, its history replays, your messages go to the agent of
+the stage it is on now (the next stage's agent, once the lane moves it on), and the agent's
+questions are asked in Paseo. A card whose stage has no agent yet starts one with your message, as
+Workfloor's Start agent does, if you are its assignee or a project admin; send words first,
+pictures after. The lane still moves the card; a stage's go and an approval stay Workfloor's.
 While the card is open in Paseo, its lane is followed between your messages too: when the card
 moves to another stage, Paseo shows that stage's agent, says the card moved on, and follows what it
 writes. A message you write on Workfloor's page shows in Paseo too.
