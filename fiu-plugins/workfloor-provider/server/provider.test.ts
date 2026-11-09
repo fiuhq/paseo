@@ -404,9 +404,41 @@ describe("the Workfloor provider", () => {
     await until(events, (e) => e.type === "session.turn" && e.state === "started");
     await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
     expect(await until(events, turnEnded)).toMatchObject({ state: "canceled" });
+    await until(events, (e) => e.type === "request.completed" && e.requestId === "i1");
     expect(wf.requests.find((r) => r.path === "/api/conversation")?.body).toMatchObject({
       session: "s-card-1",
       command: { kind: "stop" },
     });
+  });
+
+  test("a Stop Workfloor fails still cancels the turn at once, and says the agent may still work", async () => {
+    const wf = new FakeWorkfloor();
+    const real = wf.fetch;
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
+      String(input).endsWith("/api/conversation") && String(init?.body).includes('"stop"')
+        ? new Response(JSON.stringify({ error: "Workfloor is restarting" }), { status: 503 })
+        : real(input, init)) as typeof fetch;
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "one");
+    await until(events, turnEnded);
+    wf.reply = () => {};
+    events.length = 0;
+    await say(connection, "s1", "two");
+    await until(events, (e) => e.type === "session.turn" && e.state === "started");
+    await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
+    expect(await until(events, turnEnded)).toMatchObject({ state: "canceled", turnId: "turn-2" });
+    expect(await until(events, (e) => e.type === "request.completed")).toMatchObject({
+      requestId: "i1",
+    });
+    expect(
+      await until(events, (e) => e.type === "timeline.item" && e.item.type === "notification"),
+    ).toMatchObject({
+      item: {
+        message:
+          "Workfloor's agent may still be working: stopping it failed (Workfloor is restarting). Stop it in Workfloor.",
+      },
+    });
+    expect(events.filter(turnEnded)).toHaveLength(1);
   });
 });

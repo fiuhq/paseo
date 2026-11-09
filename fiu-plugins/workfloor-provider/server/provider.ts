@@ -65,6 +65,8 @@ interface Session {
   seen: Set<string>;
   turns: number;
   turn?: Turn;
+  /** Workfloor's agent being stopped after a Stop: the next message waits for it, so it is never the one stopped. */
+  stopping?: Promise<void>;
 }
 
 export function createWorkfloorProvider(options: WorkfloorProviderOptions): ProviderRegistration {
@@ -368,6 +370,7 @@ async function prompt(
     return answer({ type: "failed", error: { message: "Write a message for Workfloor's agent" } });
 
   const wf = await state.workfloor();
+  await session.stopping;
   if (session.card) {
     if (!session.workfloorSession)
       throw new WorkfloorError(
@@ -546,22 +549,40 @@ function timelineItem(m: Message, replay: boolean): ProviderTimelineItem | undef
   return m.body.trim() ? { type: "assistant_message", id: m.id, text: m.body } : undefined;
 }
 
+/**
+ * Stop cancels the turn in Paseo at once, then stops Workfloor's agent as a best effort: a Workfloor
+ * that fails or is slow never keeps the turn open, and a failure says the agent may still be working.
+ */
 async function interrupt(sessionId: string, state: State): Promise<void> {
   const session = state.sessions.get(sessionId)!;
   const turn = session.turn;
-  if (!turn) return;
-  if (session.card) {
-    const wf = await state.workfloor();
-    // Stopped before the first read named the agent's session: read it, so Workfloor's agent stops too.
-    session.workfloorSession ??= (
-      await wf.detail(session.card.project, session.card.card)
-    ).sessionId;
-    if (session.workfloorSession)
-      await wf.stop({ ...session.card, session: session.workfloorSession });
-  }
+  if (!turn || turn.abort.signal.aborted) return;
   turn.abort.abort();
   session.turn = undefined;
   state.emit({ type: "session.turn", sessionId, turnId: turn.id, state: "canceled" });
+  const card = session.card;
+  if (!card) return;
+  session.stopping = (async () => {
+    try {
+      const wf = await state.workfloor();
+      // Stopped before the first read named the agent's session: read it, so Workfloor's agent stops too.
+      session.workfloorSession ??= (await wf.detail(card.project, card.card)).sessionId;
+      if (session.workfloorSession) await wf.stop({ ...card, session: session.workfloorSession });
+    } catch (error) {
+      console.error(`[workfloor-provider] stopping ${card.card}: ${message(error)}`);
+      state.emit({
+        type: "timeline.item",
+        sessionId,
+        item: {
+          type: "notification",
+          id: `${turn.id}-stop-failed`,
+          level: "warning",
+          message: `Workfloor's agent may still be working: stopping it failed (${message(error)}). Stop it in Workfloor.`,
+        },
+      });
+    }
+  })();
+  await session.stopping;
 }
 
 /** Workfloor no longer takes the token, or the conversation is gone: retrying cannot help. */
