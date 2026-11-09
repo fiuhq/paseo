@@ -70,6 +70,10 @@ interface Session {
   seen: Set<string>;
   turns: number;
   turn?: Turn;
+  /** The agent's question the person stopped on: the watch leaves it for their next message. */
+  stoppedOn?: string;
+  /** Between turns, the watch on the card that follows its lane: stage moves, a new agent's work. */
+  watch?: AbortController;
   /** The agent's question raised in Paseo: its Workfloor id, and each question by the header Paseo answers it under. */
   asked?: { id: string; keys: Array<{ header: string; questionId: string; options: string[] }> };
   /** The question last answered here: a read that started before the answer never asks it again. */
@@ -242,7 +246,9 @@ async function dispatch(input: ProviderInput, state: State): Promise<void> {
       state.emit({ type: "request.completed", requestId: input.requestId });
       return;
     case "session.close": {
-      state.sessions.get(input.sessionId)?.turn?.abort.abort();
+      const closing = state.sessions.get(input.sessionId);
+      closing?.turn?.abort.abort();
+      if (closing) unwatch(closing);
       state.sessions.delete(input.sessionId);
       state.emit({ type: "session.closed", sessionId: input.sessionId });
       state.emit({ type: "request.completed", requestId: input.requestId });
@@ -382,6 +388,7 @@ async function openSession(
     }
   state.emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
   if (busy && wf) startTurn(session, newTurn(session), wf, state);
+  else watch(session, state);
 }
 
 async function configState(session: Session, state: State): Promise<ProviderConfigState> {
@@ -504,6 +511,7 @@ async function prompt(
 }
 
 function newTurn(session: Session): Turn {
+  unwatch(session);
   session.turns += 1;
   const turn: Turn = {
     id: `turn-${session.turns}`,
@@ -542,6 +550,7 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
       state: outcome,
       ...(error ? { error: { message: error } } : {}),
     });
+    watch(session, state);
   };
   const read = async () => {
     if (reading) {
@@ -593,6 +602,76 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
   }
 }
 
+/**
+ * Between turns, keeps following the card's lane, as Workfloor's page does: each event of its live
+ * stream wakes one read, which shows the agent that has the card now, and starts a turn to follow
+ * it when that agent works, asks, or has written since Paseo last read the card.
+ */
+function watch(session: Session, state: State): void {
+  if (!session.card || session.turn || session.watch || state.sessions.get(session.id) !== session)
+    return;
+  const abort = new AbortController();
+  session.watch = abort;
+  const card = session.card;
+  void (async () => {
+    const wf = await state.workfloor();
+    let reading = false;
+    let again = false;
+    const read = async () => {
+      if (reading) {
+        again = true;
+        return;
+      }
+      reading = true;
+      try {
+        do {
+          again = false;
+          const [detail, waiting] = await Promise.all([
+            wf.detail(card),
+            wf.question(card.project, card.card),
+          ]);
+          if (abort.signal.aborted) return;
+          await track(session, detail, state);
+          const current = detail.sessions?.find((s) => s.id === detail.sessionId);
+          const fresh = detail.messages.some((m) => !session.seen.has(m.id));
+          // While Workfloor waits on the person for what only its page takes, a turn would just end
+          // with the same link again: follow only what the agent writes then.
+          const held = !!detail.pendingAction || (!!waiting && !answerable(waiting));
+          const working = !!current && WORKING.has(current.state);
+          const asks = answerable(waiting) && waiting.id !== session.stoppedOn;
+          if (asks || fresh || (working && !held)) {
+            if (!session.turn) startTurn(session, newTurn(session), wf, state);
+            return;
+          }
+        } while (again && !abort.signal.aborted);
+      } catch (error) {
+        console.error(`[workfloor-provider] watching ${card.card}: ${message(error)}`);
+      } finally {
+        reading = false;
+      }
+    };
+    while (!abort.signal.aborted) {
+      void read();
+      try {
+        await wf.events(card, abort.signal, () => void read());
+      } catch (error) {
+        if (abort.signal.aborted) return;
+        // A token Workfloor no longer takes, or a card that is gone: nothing left to follow.
+        if (gone(error)) return unwatch(session);
+        console.error(`[workfloor-provider] live stream for ${card.card}: ${message(error)}`);
+      }
+      if (!abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  })().catch((error: unknown) =>
+    console.error(`[workfloor-provider] watching ${card.card}: ${message(error)}`),
+  );
+}
+
+function unwatch(session: Session): void {
+  session.watch?.abort();
+  session.watch = undefined;
+}
+
 /** The card's agent now, which the lane moves on stage by stage, shown as the session's model. */
 async function track(session: Session, detail: Detail, state: State): Promise<void> {
   session.workfloorSession = detail.sessionId ?? session.workfloorSession;
@@ -602,8 +681,23 @@ async function track(session: Session, detail: Detail, state: State): Promise<vo
   if (model === session.model) return;
   try {
     const config = await configState({ ...session, model }, state);
+    const moved = session.model !== undefined;
     session.model = model;
     state.emit({ type: "session.config", sessionId: session.id, config });
+    // The lane moved the card on to another stage's agent: say so where the person reads.
+    if (moved && detail.sessionId) {
+      const label = config.models.find((m) => m.id === model)?.label ?? agent;
+      state.emit({
+        type: "timeline.item",
+        sessionId: session.id,
+        item: {
+          type: "notification",
+          id: `moved-${detail.sessionId}`,
+          level: "info",
+          message: `The card moved on: ${label} has it now`,
+        },
+      });
+    }
   } catch (error) {
     console.error(`[workfloor-provider] showing ${session.card.card}'s agent: ${message(error)}`);
   }
@@ -876,8 +970,10 @@ async function interrupt(sessionId: string, state: State): Promise<void> {
   if (!turn || turn.abort.signal.aborted) return;
   turn.abort.abort();
   session.turn = undefined;
+  session.stoppedOn = session.asked?.id;
   forget(session, state);
   state.emit({ type: "session.turn", sessionId, turnId: turn.id, state: "canceled" });
+  watch(session, state);
   const card = session.card;
   if (!card) return;
   session.stopping = (async () => {
