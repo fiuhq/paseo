@@ -303,7 +303,7 @@ async function placeShortLink(
   const refs = (
     await Promise.all(
       projects.map(async (p) =>
-        [...(await wf.lanes(p.id).catch(() => [])), lane(p.id)].map((l) => ({
+        [...(await wf.lanes(p.id)), lane(p.id)].map((l) => ({
           project: p.id,
           card,
           lane: l,
@@ -315,7 +315,11 @@ async function placeShortLink(
     refs.map((ref) =>
       wf.detail(ref).then(
         () => ref,
-        () => undefined,
+        (error: unknown) => {
+          if (error instanceof WorkfloorError && [403, 404].includes(error.status ?? 0))
+            return undefined;
+          throw error;
+        },
       ),
     ),
   );
@@ -524,7 +528,7 @@ async function prompt(
           throw new WorkfloorError(
             idle
               ? `No agent is on this card in ${idle.stage}, and only its assignee or a project admin may start it: ${wf.link(session.card)}`
-              : `No agent is on this card, and Workfloor has none to start here: ${wf.link(session.card)}`,
+              : `The card's agent isn't on it yet (it may be starting): try again in a moment, or open the card: ${wf.link(session.card)}`,
           );
         if (images.length)
           throw new WorkfloorError(

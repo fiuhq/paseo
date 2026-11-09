@@ -24,6 +24,8 @@ class FakeWorkfloor {
       session?: string;
       /** Its stage's agent never started: no session yet, and Start agent can start it (yours or not). */
       idle?: { stage: string; yours: boolean };
+      /** Its agent is starting: no session yet, and nothing idle for Start agent to start. */
+      starting?: boolean;
       pending?: string;
       /** The agent's `card_ask` waiting on the person, as Workfloor's questions route reads it. */
       asks?: Record<string, unknown>;
@@ -114,7 +116,7 @@ class FakeWorkfloor {
       if (!c || q.get("workflow") !== (c.lane ?? `conversations:${P}`))
         return json({ error: "Not found" }, 404);
       const session = c.session ?? `s-${q.get("task")}`;
-      if (c.idle)
+      if (c.idle || c.starting)
         return json({ title: c.title, sessionId: null, sessions: [], messages: c.messages });
       return json({
         title: c.title,
@@ -1465,6 +1467,35 @@ describe("the Workfloor provider", () => {
     expect(none.sessions).toEqual([]);
   });
 
+  test("a short link whose lane read fails lists the failure, not an empty result", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const answer = wf.fetch;
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const q = new URL(String(input)).searchParams;
+      return q.get("view") === "detail" && q.get("workflow") === "other-lane"
+        ? new Response(JSON.stringify({ error: "Internal error" }), { status: 500 })
+        : answer(input, init);
+    }) as typeof fetch;
+    const { connection, events } = await connect(wf);
+    await connection.send({
+      type: "sessions",
+      requestId: "l1",
+      cwd: "/work",
+      query: "https://wf.test/c/lane-card",
+    });
+    await until(events, (e) => e.type === "request.failed" || e.type === "sessions");
+    expect(events.filter((e) => e.type === "request.failed" || e.type === "sessions")).toEqual([
+      expect.objectContaining({ type: "request.failed", requestId: "l1" }),
+    ]);
+  });
+
   test("a message to an imported card whose stage's agent never started starts it, with the message", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("plan-card", {
@@ -1516,6 +1547,32 @@ describe("the Workfloor provider", () => {
           message: expect.stringMatching(
             /^No agent is on this card in Plan, and only its assignee.*task=plan-card/,
           ),
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/lane-flows/agent-start")).toBe(false);
+  });
+
+  test("a card whose agent is still starting asks to try again in a moment, with its link", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("plan-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "planny",
+      lane: "normal-lane",
+      starting: true,
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "plan-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "plan it");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message: expect.stringMatching(/try again in a moment.*task=plan-card/),
         },
       },
     });
