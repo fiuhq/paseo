@@ -1,5 +1,4 @@
 import { type ChildProcess, execFile } from "node:child_process";
-import { signalProcessTree } from "./tree-kill.js";
 
 /**
  * SIGKILL a child and every process it started.
@@ -11,15 +10,16 @@ import { signalProcessTree } from "./tree-kill.js";
  * On POSIX the child is stopped first. A stopped process cannot start anything while its
  * descendants are listed (a git whose `ssh -G` variant probe dies goes straight on to the
  * transport), and it does not reap them, so their pids stay theirs until they are killed. One `ps`
- * snapshot lists them; if `ps` fails, the child itself is still killed. Windows has no SIGSTOP, so
- * there tree-kill runs `taskkill /T`.
+ * snapshot lists them; if `ps` fails, the child itself is still killed. On Windows the child is
+ * killed at once: an asynchronous `taskkill /T` holds the git slot until it returns, and callers
+ * such as the diff patch reader kill git on purpose when output overflows and retry at once.
  */
 export function killProcessTree(child: ChildProcess): void {
   // An exited child's pid may already belong to an unrelated process.
   if (child.exitCode !== null || child.signalCode !== null) return;
   const pid = child.pid;
   if (pid === undefined || process.platform === "win32") {
-    void signalProcessTree(child, "SIGKILL");
+    child.kill("SIGKILL");
     return;
   }
 

@@ -86,3 +86,21 @@ describe.skipIf(process.platform === "win32")("killProcessTree", () => {
     expect(childKill).not.toHaveBeenCalled();
   });
 });
+
+describe("killProcessTree on Windows", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("kills the child at once, so a caller that kills git to retry is not held up", () => {
+    vi.stubGlobal("process", { ...process, platform: "win32" });
+    const kill = vi.fn();
+    killProcessTree({
+      pid: 4242,
+      exitCode: null,
+      signalCode: null,
+      kill,
+    } as unknown as ChildProcess);
+    expect(kill).toHaveBeenCalledWith("SIGKILL");
+  });
+});
