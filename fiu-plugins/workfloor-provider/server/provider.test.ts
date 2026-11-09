@@ -870,6 +870,24 @@ describe("the Workfloor provider", () => {
     });
   });
 
+  test("an opened card is opened with its Workfloor title, so Paseo names the agent after it", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "IDLE",
+      agent: "build-agent",
+      lane: "normal-lane",
+      messages: [{ id: "m1", role: "user", body: "## Workfloor tools" }],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    expect(await until(events, (e) => e.type === "session.opened")).toMatchObject({
+      title: "Server heap crashes",
+    });
+  });
+
   test("an opened lane card is driven on its own lane, and a message after it moved stage goes to the new stage's agent", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", {

@@ -612,6 +612,7 @@ export type ProviderEvent =
       capabilities: readonly string[];
       restoration: "core" | "parent";
       persistence?: ProviderPersistence;
+      /** Names a child session, and an imported session when the import names none. */
       title?: string;
       description?: string;
       cwd: string;
