@@ -86,27 +86,25 @@ export function aggregateSessionEntries(
 }
 
 /**
- * The one session a pasted link names, to import without a click: the search is a single link,
- * every provider has answered it (none still loading, failed, or showing a previous search's
- * results), and exactly one session matched across all of them. While any provider is still
- * answering, nothing is named; its row still shows and can be clicked.
+ * The one session a pasted link names, to import without a click: the search is a single link, and
+ * among the answers fetched since the sheet opened (not cached ones from before, nor a previous
+ * search's results still on screen) exactly one row is `exact`, found by the provider that knows
+ * the link. A row that only mentions the link in its words never counts, so slower providers aren't
+ * waited for.
  */
 export function pastedLinkSession(
   query: string,
-  queries: ReadonlyArray<SessionsQueryResult & { isPlaceholderData?: boolean }>,
+  queries: ReadonlyArray<
+    SessionsQueryResult & { isPlaceholderData?: boolean; dataUpdatedAt?: number }
+  >,
+  openedAt: number,
 ): FetchRecentProviderSessionEntry | null {
   if (!/^https?:\/\/\S+$/i.test(query.trim())) return null;
-  const answered = queries.every(
-    (q) =>
-      !q.isLoading &&
-      !q.isPending &&
-      !q.isPlaceholderData &&
-      !q.isError &&
-      !q.data?.providerErrors?.length,
+  const answered = queries.filter(
+    (q) => !q.isPlaceholderData && (q.dataUpdatedAt ?? 0) >= openedAt,
   );
-  if (!answered) return null;
-  const entries = aggregateSessionEntries(queries);
-  return entries.length === 1 ? entries[0]! : null;
+  const exact = aggregateSessionEntries(answered).filter((entry) => entry.exact);
+  return exact.length === 1 ? exact[0]! : null;
 }
 
 export function sumFilteredAlreadyImportedCount(

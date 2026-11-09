@@ -346,6 +346,7 @@ async function listSessions(
         // Paseo's Import matches the search against a row's words again, so the row carries the
         // link it was found by; without it the card is dropped after Workfloor found it.
         description: `Workfloor · ${project?.name ?? linked.project} · ${input.query?.trim()}`,
+        exact: true,
       },
     ];
     state.emit({ type: "sessions", requestId: input.requestId, sessions });

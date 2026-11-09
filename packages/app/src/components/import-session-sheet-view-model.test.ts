@@ -469,43 +469,44 @@ describe("computeEmptyState", () => {
 });
 
 describe("pastedLinkSession", () => {
-  const card = entry({ providerId: "workfloor", providerHandleId: 'plugin:{"card":"c1"}' });
+  const card = entry({
+    providerId: "workfloor",
+    providerHandleId: 'plugin:{"card":"c1"}',
+    exact: true,
+  });
   const link = "https://flxbl.workfloor.cloud/c/c1";
+  const openedAt = 1_000;
+  const fresh = (entries: FetchRecentProviderSessionEntry[]) => ({
+    ...settled({ entries }),
+    dataUpdatedAt: openedAt + 50,
+  });
 
-  it("names nothing while another provider is still answering the link", () => {
+  it("names the one exact row a pasted link found, without waiting for slower providers", () => {
     const slow = { data: undefined, isError: false, isLoading: true, isPending: true };
-    expect(pastedLinkSession(link, [settled({ entries: [card] }), slow])).toBeNull();
+    expect(pastedLinkSession(link, [fresh([card]), slow], openedAt)).toBe(card);
   });
 
-  it("names the one session once every provider has answered the link", () => {
-    expect(pastedLinkSession(link, [settled({ entries: [card] }), settled({ entries: [] })])).toBe(
-      card,
-    );
+  it("names nothing when only a text match mentions the link", () => {
+    const claude = entry({ lastPromptPreview: `see ${link}` });
+    expect(pastedLinkSession(link, [fresh([claude])], openedAt)).toBeNull();
+    expect(pastedLinkSession(link, [fresh([card]), fresh([claude])], openedAt)).toBe(card);
   });
 
-  it("names nothing when another provider also matched the link or failed to answer", () => {
-    const claude = settled({ entries: [entry({ lastPromptPreview: link })] });
-    expect(pastedLinkSession(link, [settled({ entries: [card] }), claude])).toBeNull();
+  it("names nothing when two rows are exact", () => {
+    const other = entry({ providerId: "other", providerHandleId: "o1", exact: true });
+    expect(pastedLinkSession(link, [fresh([card]), fresh([other])], openedAt)).toBeNull();
+  });
+
+  it("names nothing from an answer cached before the sheet opened or a previous search's results", () => {
+    const cached = { ...settled({ entries: [card] }), dataUpdatedAt: openedAt - 1 };
+    expect(pastedLinkSession(link, [cached], openedAt)).toBeNull();
     expect(
-      pastedLinkSession(link, [
-        settled({ entries: [card] }),
-        settled(undefined, { isError: true }),
-      ]),
-    ).toBeNull();
-    expect(
-      pastedLinkSession(link, [
-        settled({ entries: [card] }),
-        settled({ entries: [], providerErrors: [{ provider: "claude", message: "down" }] }),
-      ]),
+      pastedLinkSession(link, [{ ...fresh([card]), isPlaceholderData: true }], openedAt),
     ).toBeNull();
   });
 
-  it("names nothing for words, more than one session, or a previous search's results still shown", () => {
-    expect(pastedLinkSession("heap crash", [settled({ entries: [card] })])).toBeNull();
-    expect(pastedLinkSession(link, [settled({ entries: [card, entry()] })])).toBeNull();
-    expect(
-      pastedLinkSession(link, [{ ...settled({ entries: [card] }), isPlaceholderData: true }]),
-    ).toBeNull();
-    expect(pastedLinkSession(`${link} and more`, [settled({ entries: [card] })])).toBeNull();
+  it("names nothing for words or a link followed by more words", () => {
+    expect(pastedLinkSession("heap crash", [fresh([card])], openedAt)).toBeNull();
+    expect(pastedLinkSession(`${link} and more`, [fresh([card])], openedAt)).toBeNull();
   });
 });

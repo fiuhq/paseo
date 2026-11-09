@@ -1055,6 +1055,7 @@ class PluginAgentClient implements AgentClient {
       firstPromptPreview: null,
       lastPromptPreview: session.description ?? null,
       lastActivityAt: parseProviderDate(session.updatedAt),
+      ...(session.exact ? { exact: true } : {}),
     }));
   }
 

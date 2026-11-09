@@ -1408,6 +1408,7 @@ describe("the Workfloor provider", () => {
       { type: "sessions" }
     >;
     expect(listed.sessions).toHaveLength(1);
+    expect(listed.sessions[0]!.exact).toBe(true);
     expect(keptByImport(listed.sessions[0]!, link)).toBe(true);
   });
 
@@ -1431,6 +1432,7 @@ describe("the Workfloor provider", () => {
       expect.objectContaining({
         persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
         title: "Scratch pools run past 6 hours",
+        exact: true,
       }),
     ]);
     expect(keptByImport(listed.sessions[0]!, link)).toBe(true);

@@ -725,8 +725,19 @@ export function ImportSessionSheet({
   );
 
   // A pasted link that names exactly one session imports it at once, once per link and sheet.
-  const linkedSession = pastedLinkSession(query, queries);
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
+  const namedSession =
+    openedAt !== null && query === searchInput.trim()
+      ? pastedLinkSession(query, queries, openedAt)
+      : null;
+  const linkedSession =
+    selectedProvider === ALL_FILTER_VALUE || namedSession?.providerId === selectedProvider
+      ? namedSession
+      : null;
   const importedLink = useRef<string | null>(null);
+  useEffect(() => {
+    setOpenedAt(visible ? Date.now() : null);
+  }, [visible]);
   useEffect(() => {
     if (!visible) {
       importedLink.current = null;
