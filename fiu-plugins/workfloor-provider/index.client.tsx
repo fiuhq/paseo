@@ -1,4 +1,5 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
+import { contributeCardPills } from "./client/card-pill";
 import { WorkfloorSettings } from "./client/settings";
 
 export default function contribute(client: PluginClientContext) {
@@ -8,5 +9,5 @@ export default function contribute(client: PluginClientContext) {
     icon: "MessagesSquare",
     Component: WorkfloorSettings,
   });
-  return () => {};
+  return contributeCardPills(client);
 }

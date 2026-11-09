@@ -1,9 +1,10 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { createWorkfloorProvider } from "./server/provider.js";
+import { readAddress } from "./shared/card.js";
 import { connection } from "./shared/settings.js";
 
 export default function contribute(
-  server: Pick<PluginServerContext, "registerProvider" | "registerSettings" | "paseo">,
+  server: Pick<PluginServerContext, "registerProvider" | "registerSettings" | "paseo" | "handle">,
 ) {
   const settings = server.registerSettings(connection);
   server.registerProvider(
@@ -21,5 +22,11 @@ export default function contribute(
       },
     }),
   );
+  server.handle(readAddress, async () => {
+    const read = await settings.read();
+    if (read.status !== "ready")
+      throw new Error(`Workfloor's settings are unreadable: ${read.error}`);
+    return { url: read.values.url };
+  });
   return () => {};
 }

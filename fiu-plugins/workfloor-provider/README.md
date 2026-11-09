@@ -16,6 +16,9 @@ While the card is open in Paseo, its lane is followed between your messages too:
 moves to another stage, Paseo shows that stage's agent, says the card moved on, and follows what it
 writes. A message you write on Workfloor's page shows in Paseo too.
 
+Above the chat box, a pill names the agent's card by its Workfloor reference (`Card d9c8d3b6`) and
+opens the card in Workfloor.
+
 Pictures go both ways. One you attach in Paseo is uploaded to the card's current session and sent
 with your message (a new conversation takes pictures from its second message, as Workfloor does);
 one an agent's message carries in Workfloor shows under its words in Paseo, or as a link to the card
