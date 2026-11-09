@@ -631,7 +631,11 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
         workspace: starting,
         draftId: input.draftId,
         draftKey: input.draftKey,
-        draft: { text, attachments: userAttachmentsOnly(attachments) },
+        draft: {
+          text,
+          attachments: userAttachmentsOnly(attachments),
+          metadata: composerState.metadata,
+        },
         returnRoute: buildNewWorkspaceRoute({
           serverId,
           sourceDirectory: cwd,

@@ -72,7 +72,11 @@ export interface AgentInputDraft {
   /** Saves what is unsent to another draft, ahead of this one being cleared. */
   carryTo: (targetDraftKey: string) => void;
   /** Puts a message that failed to send back, ahead of anything typed since. */
-  restoreUnsent: (unsent: { text: string; attachments: UserComposerAttachment[] }) => void;
+  restoreUnsent: (unsent: {
+    text: string;
+    attachments: UserComposerAttachment[];
+    metadata?: Record<string, JsonValue>;
+  }) => void;
   clear: (lifecycle: "sent" | "abandoned") => void;
   isHydrated: boolean;
   attachmentFocusRequestId: number;
@@ -216,7 +220,11 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   );
 
   const restoreUnsent = useCallback(
-    (unsent: { text: string; attachments: UserComposerAttachment[] }) => {
+    (unsent: {
+      text: string;
+      attachments: UserComposerAttachment[];
+      metadata?: Record<string, JsonValue>;
+    }) => {
       textPublication.flush();
       const text = [unsent.text, textSource.getSnapshot()].filter(Boolean).join("\n\n");
       saveDraft((current) => ({
@@ -224,8 +232,13 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         attachments: [...current.attachments, ...unsent.attachments],
       }));
       publishTextReplacement("replace", text);
+      if (unsent.metadata) {
+        const store = useDraftStore.getState();
+        const since = store.metadataByDraftKey[draftKey];
+        store.patchDraftMetadata({ draftKey, patch: { ...unsent.metadata, ...since } });
+      }
     },
-    [publishTextReplacement, saveDraft, textPublication, textSource],
+    [draftKey, publishTextReplacement, saveDraft, textPublication, textSource],
   );
 
   const metadata = useDraftStore((state) => state.metadataByDraftKey[draftKey] ?? NO_METADATA);

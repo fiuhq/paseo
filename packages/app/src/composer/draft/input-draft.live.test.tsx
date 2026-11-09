@@ -145,6 +145,7 @@ describe("useAgentInputDraft live contract", () => {
       createModalDraft: null,
       attachmentFocusRequestByDraftKey: {},
       textReplacementRequestByDraftKey: {},
+      metadataByDraftKey: {},
     });
   });
 
@@ -564,6 +565,27 @@ describe("useAgentInputDraft live contract", () => {
     expect(draft().textReplacement.kind).toBe("replace");
     expect(draft().textReplacement.text).toBe("First message\n\nTyped since");
     expect(draft().attachments).toEqual([typed, first]);
+  });
+
+  it("restores a failed message's metadata, keeping what was set since", async () => {
+    const draft = await mountDraft("draft:host-1:draft-1");
+    const draftKey = "draft:host-1:draft-1";
+
+    await act(async () => {
+      useDraftStore.getState().patchDraftMetadata({ draftKey, patch: { issue: 42, label: "bug" } });
+      draft().clear("sent");
+      useDraftStore.getState().patchDraftMetadata({ draftKey, patch: { label: "feature" } });
+      draft().restoreUnsent({
+        text: "First message",
+        attachments: [],
+        metadata: { issue: 42, label: "bug" },
+      });
+    });
+
+    expect(useDraftStore.getState().metadataByDraftKey[draftKey]).toEqual({
+      issue: 42,
+      label: "feature",
+    });
   });
 
   it("restores a failed message unchanged when nothing was typed since", async () => {
