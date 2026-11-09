@@ -11,6 +11,7 @@ import {
   getSessionTitle,
   hasMoreSessions,
   nextPageLimit,
+  pastedLinkSession,
   PER_PROVIDER_LIMIT,
   resolveDirectoryLabel,
   resolveImportTarget,
@@ -464,5 +465,24 @@ describe("computeEmptyState", () => {
       aggregatedCount: 1,
     });
     expect(result.emptyStateTitle).toBe("No z-ai sessions found.");
+  });
+});
+
+describe("pastedLinkSession", () => {
+  const card = entry({ providerId: "workfloor", providerHandleId: 'plugin:{"card":"c1"}' });
+  const link = "https://flxbl.workfloor.cloud/c/c1";
+
+  it("names the one session a pasted link found, without waiting for slower providers", () => {
+    const slow = { data: undefined, isError: false, isLoading: true, isPending: true };
+    expect(pastedLinkSession(link, [settled({ entries: [card] }), slow])).toBe(card);
+  });
+
+  it("names nothing for words, more than one session, or a previous search's results still shown", () => {
+    expect(pastedLinkSession("heap crash", [settled({ entries: [card] })])).toBeNull();
+    expect(pastedLinkSession(link, [settled({ entries: [card, entry()] })])).toBeNull();
+    expect(
+      pastedLinkSession(link, [{ ...settled({ entries: [card] }), isPlaceholderData: true }]),
+    ).toBeNull();
+    expect(pastedLinkSession(`${link} and more`, [settled({ entries: [card] })])).toBeNull();
   });
 });

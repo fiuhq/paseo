@@ -24,6 +24,7 @@ import { useHosts } from "@/runtime/host-runtime";
 import { i18n } from "@/i18n/i18next";
 import {
   aggregateSessionEntries,
+  pastedLinkSession,
   ALL_FILTER_VALUE,
   buildProviderLabelMap,
   collectProviderErrorRows,
@@ -722,6 +723,21 @@ export function ImportSessionSheet({
     },
     [importMutation],
   );
+
+  // A pasted link that names exactly one session imports it at once, once per link and sheet.
+  const linkedSession = pastedLinkSession(query, queries);
+  const importedLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!visible) {
+      importedLink.current = null;
+      return;
+    }
+    if (!linkedSession || importMutation.isPending) return;
+    const key = `${query}\n${linkedSession.providerId}:${linkedSession.providerHandleId}`;
+    if (importedLink.current === key) return;
+    importedLink.current = key;
+    importMutation.mutate(linkedSession);
+  }, [visible, linkedSession, query, importMutation]);
 
   const providerErrorRows = useMemo(
     () => collectProviderErrorRows(providersToFetch, queries, providerLabelById),
