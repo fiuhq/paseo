@@ -2105,7 +2105,7 @@ export default function contribute(server: PluginServerContext) {
 
 输入和输出在两端都会校验。RPC 名称以小写字母开头，由小写字母、数字、点、连字符或下划线组成。`useRpc()` 返回一个带类型的异步函数。请求状态、缓存和变更请使用 TanStack Query。
 
-后端处理函数以 `{ paseo }` 的形式收到同样的 `PaseoApi`。它们的连接属于子进程，并在插件停止时关闭。在插件代码订阅之前，它不会订阅时间线或目录事件。清理和时间线替换请遵循 [SDK 事件契约](/docs/sdk/events)。后端代码可以使用 Node API 以及安装在插件目录中的依赖。
+后端处理函数以 `{ paseo }` 的形式收到同样的 `PaseoApi`；`contribute` 通过 `server.paseo` 读取它，供处理函数之外的代码（例如 Provider）使用。它的连接属于子进程，并在插件停止时关闭。在插件代码订阅之前，它不会订阅时间线或目录事件。清理和时间线替换请遵循 [SDK 事件契约](/docs/sdk/events)。后端代码可以使用 Node API 以及安装在插件目录中的依赖。
 
 ## 从 daemon 推送事件 {#subscriptions}
 

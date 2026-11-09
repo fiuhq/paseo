@@ -3,11 +3,12 @@ import { createWorkfloorProvider } from "./server/provider.js";
 import { connection } from "./shared/settings.js";
 
 export default function contribute(
-  server: Pick<PluginServerContext, "registerProvider" | "registerSettings">,
+  server: Pick<PluginServerContext, "registerProvider" | "registerSettings" | "paseo">,
 ) {
   const settings = server.registerSettings(connection);
   server.registerProvider(
     createWorkfloorProvider({
+      paseo: server.paseo,
       async auth() {
         const read = await settings.read();
         if (read.status !== "ready")

@@ -22,6 +22,8 @@ class FakeWorkfloor {
       lane?: string;
       /** The card's current agent session, once its lane moved it on to another stage's agent. */
       session?: string;
+      /** The card view's repository and linked items. */
+      code?: Record<string, unknown>;
       /** Its stage's agent never started: no session yet, and Start agent can start it (yours or not). */
       idle?: { stage: string; yours: boolean };
       /** Its agent is starting: no session yet, and nothing idle for Start agent to start. */
@@ -179,6 +181,12 @@ class FakeWorkfloor {
       this.reply(body.card, body.context);
       return json({ started: true });
     }
+    if (url.pathname === "/api/connection" && q.get("view") === "card") {
+      const c = this.cards.get(q.get("task")!);
+      if (!c || q.get("workflow") !== (c.lane ?? `conversations:${P}`))
+        return json({ error: "Not found" }, 404);
+      return json({ task: { id: q.get("task"), title: c.title, ...c.code } });
+    }
     if (url.pathname === "/api/conversations" && init?.method === "POST") {
       const id = `card-${this.cards.size + 1}`;
       this.cards.set(id, {
@@ -232,11 +240,63 @@ class FakeWorkfloor {
   }) as typeof fetch;
 }
 
+/** Paseo's API as the provider uses it: projects by remote, workspaces listed and made. */
+class FakePaseo {
+  projects = [
+    {
+      projectId: "prj_sfp",
+      projectKey: "remote:github.com/flxbl-io/sfp-pro",
+      projectDisplayName: "flxbl-io/sfp-pro",
+      projectRootPath: "/repos/sfp-pro",
+      projectKind: "git",
+    },
+  ];
+  workspaces: Array<Record<string, unknown>> = [];
+  created: Array<Record<string, unknown>> = [];
+  failCreate: string | undefined;
+  api = {
+    projects: { list: async () => ({ requestId: "r", projects: this.projects }) },
+    workspaces: {
+      // Like the daemon: only the filtered project's workspaces, one per page.
+      list: async (options: { filter?: { projectId?: string }; page?: { cursor?: string } }) => {
+        const entries = this.workspaces.filter(
+          (w) => !options.filter?.projectId || w.projectId === options.filter.projectId,
+        );
+        const at = Number(options.page?.cursor ?? 0);
+        const hasMore = at + 1 < entries.length;
+        return {
+          requestId: "r",
+          entries: entries.slice(at, at + 1),
+          pageInfo: { nextCursor: hasMore ? String(at + 1) : null, prevCursor: null, hasMore },
+        };
+      },
+      create: async (options: Record<string, unknown>) => {
+        await Bun.sleep(20);
+        if (this.failCreate) throw new Error(this.failCreate);
+        this.created.push(options);
+        const directory = `/worktrees/sfp-pro-${this.created.length}`;
+        this.workspaces.push({
+          id: `wks_${this.created.length}`,
+          projectId: "prj_sfp",
+          workspaceDirectory: directory,
+          metadata: options.metadata,
+        });
+        return { id: `wks_${this.created.length}`, directory };
+      },
+    },
+  };
+}
+
 async function connect(
   wf: FakeWorkfloor,
   auth: () => Promise<typeof AUTH | { missing: string }> = async () => AUTH,
+  paseo?: FakePaseo,
 ) {
-  const provider = createWorkfloorProvider({ auth, fetch: wf.fetch });
+  const provider = createWorkfloorProvider({
+    auth,
+    fetch: wf.fetch,
+    ...(paseo ? { paseo: paseo.api as never } : {}),
+  });
   const connection = await provider.connect({
     versions: [1],
     capabilities: [
@@ -1579,5 +1639,100 @@ describe("the Workfloor provider", () => {
       },
     });
     expect(wf.requests.some((r) => r.path === "/api/lane-flows/agent-start")).toBe(false);
+  });
+  const LINK = `https://wf.test/?page=lanes&project=${P}&workflow=normal-lane&task=lane-card`;
+  const laneCard = (code: Record<string, unknown>) => ({
+    title: "Server heap crashes",
+    state: "IDLE",
+    agent: "build-agent",
+    lane: "normal-lane",
+    messages: [],
+    code,
+  });
+  const ON_PR = {
+    repository: "flxbl-io/sfp-pro",
+    externalItems: [
+      { kind: "issue", repository: "flxbl-io/sfp-pro", number: 3044, state: null },
+      { kind: "pull_request", repository: "flxbl-io/sfp-pro", number: 3072, state: "open" },
+    ],
+  };
+  const listLink = async (connection: ProviderConnection, events: ProviderEvent[], id: string) => {
+    await connection.send({ type: "sessions", requestId: id, cwd: "/here", query: LINK });
+    return (await until(events, (e) => e.type === "sessions" && e.requestId === id)) as Extract<
+      ProviderEvent,
+      { type: "sessions" }
+    >;
+  };
+
+  test("a linked card is listed in a worktree of its repository on its open pull request, made once", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", laneCard(ON_PR));
+    const paseo = new FakePaseo();
+    const { connection, events } = await connect(wf, undefined, paseo);
+    // Two searches at once (a pasted link searched twice) make one worktree.
+    const [first, second] = await Promise.all([
+      listLink(connection, events, "l1"),
+      listLink(connection, events, "l2"),
+    ]);
+    const third = await listLink(connection, events, "l3");
+    for (const listed of [first, second, third])
+      expect(listed.sessions.map((s) => s.cwd)).toEqual(["/worktrees/sfp-pro-1"]);
+    expect(paseo.created).toEqual([
+      {
+        source: {
+          kind: "worktree",
+          projectId: "prj_sfp",
+          action: "checkout",
+          checkoutSource: { kind: "change_request", number: 3072 },
+        },
+        title: "Server heap crashes",
+        metadata: { workfloorCard: `${P}/lane-card` },
+      },
+    ]);
+  });
+
+  test("a worktree already on the card's pull request is reused", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", laneCard(ON_PR));
+    const paseo = new FakePaseo();
+    paseo.workspaces.push(
+      { id: "wks_other", projectId: "prj_other", workspaceDirectory: "/other", metadata: {} },
+      { id: "wks_main", projectId: "prj_sfp", workspaceDirectory: "/repos/sfp-pro", metadata: {} },
+    );
+    paseo.workspaces.push({
+      id: "wks_mine",
+      projectId: "prj_sfp",
+      workspaceDirectory: "/worktrees/fix-3044",
+      metadata: {},
+      githubRuntime: {
+        pullRequest: { number: 3072, url: "https://github.com/flxbl-io/sfp-pro/pull/3072" },
+      },
+    });
+    const { connection, events } = await connect(wf, undefined, paseo);
+    expect((await listLink(connection, events, "l1")).sessions[0]?.cwd).toBe("/worktrees/fix-3044");
+    expect(paseo.created).toEqual([]);
+  });
+
+  test("a worktree that can't be made still lists the card, in its project's checkout, saying why", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", laneCard(ON_PR));
+    const paseo = new FakePaseo();
+    paseo.failCreate = "gh: not logged in";
+    const { connection, events } = await connect(wf, undefined, paseo);
+    const listed = await listLink(connection, events, "l1");
+    expect(listed.sessions.map((s) => [s.cwd, s.description])).toEqual([
+      ["/repos/sfp-pro", `Workfloor · codev · worktree not made: gh: not logged in · ${LINK}`],
+    ]);
+  });
+
+  test("a card with no open pull request works in its project's checkout; one Paseo has no project for stays where Import is", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", laneCard({ repository: "flxbl-io/sfp-pro", externalItems: [] }));
+    const paseo = new FakePaseo();
+    const { connection, events } = await connect(wf, undefined, paseo);
+    expect((await listLink(connection, events, "l1")).sessions[0]?.cwd).toBe("/repos/sfp-pro");
+    wf.cards.set("lane-card", laneCard({ ...ON_PR, repository: "flxbl-io/other" }));
+    expect((await listLink(connection, events, "l2")).sessions[0]?.cwd).toBe("/here");
+    expect(paseo.created).toEqual([]);
   });
 });

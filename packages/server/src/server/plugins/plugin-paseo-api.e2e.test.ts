@@ -204,6 +204,62 @@ export default function contribute(server: PluginServerContext) {
   }
 }, 60_000);
 
+test("a plugin uses its Paseo API outside a handler, from its server context", async () => {
+  const pluginDirectory = await mkdtemp(path.join(tmpdir(), "paseo-api-context-plugin-"));
+  const workspaceDirectory = await mkdtemp(path.join(tmpdir(), "paseo-api-context-workspace-"));
+  roots.push(pluginDirectory, workspaceDirectory);
+  await writeFile(
+    path.join(pluginDirectory, "paseo-plugin.json"),
+    JSON.stringify({
+      id: "paseo-api-context",
+      requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },
+    }),
+  );
+  await writeFile(
+    path.join(pluginDirectory, "index.server.ts"),
+    `import { defineRpc } from "@getpaseo/plugin";
+import { type PluginServerContext } from "@getpaseo/plugin/server";
+import { z } from "zod";
+
+const create = defineRpc({
+  name: "create",
+  input: z.object({ path: z.string() }),
+  output: z.object({ workspaceId: z.string(), same: z.boolean() }),
+});
+
+export default function contribute(server: PluginServerContext) {
+  // Held from contribution time, as a provider would hold it.
+  const held = server.paseo;
+  server.handle(create, async ({ path }, { paseo }) => {
+    const workspace = await held.workspaces.create({ source: { kind: "directory", path } });
+    return { workspaceId: workspace.id, same: held === paseo };
+  });
+  return () => undefined;
+}`,
+  );
+  const daemon = await createTestPaseoDaemon();
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.4.0" });
+  try {
+    await client.connect();
+    await client.patchDaemonConfig({ pluginsEnabled: true });
+    await expect(client.installDirectoryPlugin(pluginDirectory)).resolves.toMatchObject({
+      id: "paseo-api-context",
+      status: "running",
+    });
+    const created = await client.invokePluginRpc("paseo-api-context", "create", {
+      path: workspaceDirectory,
+    });
+    expect(created).toEqual({ workspaceId: expect.stringMatching(/^wks_/), same: true });
+    const workspaces = await client.fetchWorkspaces();
+    expect(workspaces.entries.map((workspace) => workspace.id)).toContain(
+      Reflect.get(created as object, "workspaceId"),
+    );
+  } finally {
+    await client.close().catch(() => undefined);
+    await daemon.close();
+  }
+}, 60_000);
+
 test("password-protected config reload preserves startup auth and session construction does not read config", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "paseo-protected-config-reload-"));
   roots.push(home);

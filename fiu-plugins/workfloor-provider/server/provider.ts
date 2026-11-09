@@ -11,7 +11,9 @@ import {
   type ProviderSessionConfig,
   type ProviderTimelineItem,
 } from "@getpaseo/plugin/server/provider";
+import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { homedir } from "node:os";
+import { cardWorkspace, type Placement } from "./workspace.js";
 import {
   Workfloor,
   WorkfloorError,
@@ -43,6 +45,8 @@ const FAILED = new Set(["FAILED", "CANCELLED"]);
 export interface WorkfloorProviderOptions {
   auth(): Promise<WorkfloorAuth | { missing: string }>;
   fetch?: typeof fetch;
+  /** Paseo's API, to put an imported card in a worktree of its repository. */
+  paseo?: PluginServerContext["paseo"];
 }
 
 /** A Paseo model is one of a project's agents: `<project id>:<agent profile id>`. */
@@ -98,6 +102,26 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
     if ("missing" in auth) throw new WorkfloorError(auth.missing);
     return new Workfloor(auth, options.fetch);
   };
+  // One placement per card at a time: two searches for the same link never make two worktrees.
+  const placing = new Map<string, Promise<Placement>>();
+  const place: Place = (wf, ref, title) => {
+    const paseo = options.paseo;
+    if (!paseo) return Promise.resolve({});
+    const key = `${ref.project}/${ref.card}`;
+    let found = placing.get(key);
+    if (!found) {
+      found = cardWorkspace(paseo, ref, wf.code(ref), title).then((placed) => {
+        if (placed.failure !== undefined)
+          console.error(
+            `[workfloor-provider] worktree for ${ref.card}: ${message(placed.failure)}`,
+          );
+        return placed;
+      });
+      placing.set(key, found);
+      void found.finally(() => placing.delete(key));
+    }
+    return found;
+  };
   return {
     id: "workfloor",
     label: "Workfloor",
@@ -120,14 +144,19 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
       return createConnection(
         workfloor,
         negotiateProviderCapabilities(request.capabilities, CAPABILITIES),
+        place,
       );
     },
   };
 }
 
+/** Where an imported card works, when Paseo has its repository. */
+type Place = (wf: Workfloor, ref: CardRef, title: string | undefined) => Promise<Placement>;
+
 function createConnection(
   workfloor: () => Promise<Workfloor>,
   capabilities: readonly string[],
+  place: Place,
 ): ProviderConnection {
   const listeners = new Set<(event: ProviderEvent) => void>();
   const sessions = new Map<string, Session>();
@@ -158,7 +187,7 @@ function createConnection(
     models.catch(() => (models = undefined));
     return models;
   };
-  const state: State = { sessions, emit, catalog, workfloor, capabilities };
+  const state: State = { sessions, emit, catalog, workfloor, capabilities, place };
 
   return {
     version: 1,
@@ -191,6 +220,7 @@ interface State {
   catalog(): Promise<ProviderModel[]>;
   workfloor(): Promise<Workfloor>;
   capabilities: readonly string[];
+  place: Place;
 }
 
 function admit(input: ProviderInput, state: State): void {
@@ -338,14 +368,19 @@ async function listSessions(
   if (linked) {
     const detail = await wf.detail(linked);
     const project = projects.find((p) => p.id === linked.project);
+    // The card works in a worktree of its repository, so Import puts its agent there.
+    const placed = await state.place(wf, linked, detail.title);
+    const unplaced =
+      placed.failure === undefined ? "" : ` · worktree not made: ${message(placed.failure)}`;
     const sessions = [
       {
         persistence: persistenceOf(linked),
-        cwd: input.cwd ?? homedir(),
+        cwd: placed.cwd ?? input.cwd ?? homedir(),
         title: detail.title || linked.card,
         // `exact` marks this row as the card the link names, so Import keeps it without matching
-        // the search against its words and imports it at once; the description shows the link.
-        description: `Workfloor · ${project?.name ?? linked.project} · ${input.query?.trim()}`,
+        // the search against its words and imports it at once; the description shows the link,
+        // and why the card has no worktree when making one failed.
+        description: `Workfloor · ${project?.name ?? linked.project}${unplaced} · ${input.query?.trim()}`,
         exact: true,
       },
     ];

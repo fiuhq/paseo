@@ -146,6 +146,9 @@ Read it in catalog and session callbacks, and subscribe when the provider keeps 
 configuration. See [settings](./reference.md#persisted-values) for the `read()` and `subscribe()`
 contract.
 
+To call Paseo from provider code, such as creating a workspace for a session, use `server.paseo`.
+It is the same [Paseo SDK](./reference.md#use-the-paseo-sdk) a handler receives as `{ paseo }`.
+
 Create the native session with the selected catalog values, then publish its effective state:
 
 ```ts
