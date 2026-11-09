@@ -337,9 +337,9 @@ describe("the Workfloor provider", () => {
       ],
     });
     // Paseo knows an imported conversation by its persistence, saved before lanes came: it stays the same.
-    expect((listed as { sessions: Array<{ persistence: unknown }> }).sessions[0]!.persistence).toEqual(
-      { version: 1, data: { project: P, card: "card-1" } },
-    );
+    expect(
+      (listed as { sessions: Array<{ persistence: unknown }> }).sessions[0]!.persistence,
+    ).toEqual({ version: 1, data: { project: P, card: "card-1" } });
   });
 
   test("a link without its lane is no card's: the search lists conversations as before", async () => {
