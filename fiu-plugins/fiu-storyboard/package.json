@@ -1,0 +1,11 @@
+{
+  "name": "@fiuhq/fiu-storyboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paseo plugin: each workspace's newest fiu board, live in a panel beside the chat",
+  "scripts": {
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "verify": "tsgo -p tsconfig.json --noEmit && bun test"
+  }
+}
