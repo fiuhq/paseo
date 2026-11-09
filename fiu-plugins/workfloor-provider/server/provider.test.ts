@@ -1184,4 +1184,170 @@ describe("the Workfloor provider", () => {
     });
     expect(wf.uploads).toEqual([]);
   });
+
+  test("between turns the card's lane is followed: a move to the next stage's agent is shown and its work followed", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      lane: "normal-lane",
+      messages: [{ id: "m1", role: "agent", body: "E2E passed." }],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    events.length = 0;
+    // Workfloor moves the card to Release Readiness: its agent starts, works, writes and waits.
+    const card = wf.cards.get("lane-card")!;
+    card.session = "s-release";
+    card.agent = "shippy";
+    card.state = "RUNNING";
+    wf.changed();
+    await Bun.sleep(30);
+    card.messages.push({ id: "r1", role: "agent", body: "Release checks are next." });
+    card.state = "WAITING_FOR_INPUT";
+    wf.changed();
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session.config",
+        config: expect.objectContaining({ model: `${P}:shippy` }),
+      }),
+    );
+    const items = events.flatMap((e) => (e.type === "timeline.item" ? [e.item] : []));
+    expect(items).toEqual([
+      expect.objectContaining({
+        type: "notification",
+        message: "The card moved on: shippy has it now",
+      }),
+      expect.objectContaining({ type: "assistant_message", text: "Release checks are next." }),
+    ]);
+    // Nothing was sent to Workfloor: Paseo only followed the lane.
+    expect(wf.requests.filter((r) => r.method === "POST")).toEqual([]);
+  });
+
+  test("a closed card is no longer watched", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await Bun.sleep(30);
+    await connection.send({ type: "session.close", requestId: "c1", sessionId: "s1" });
+    await until(events, (e) => e.type === "session.closed");
+    const before = wf.requests.length;
+    wf.cards.get("lane-card")!.messages.push({ id: "x", role: "agent", body: "late" });
+    wf.changed();
+    await Bun.sleep(60);
+    expect(wf.requests.length).toBe(before);
+  });
+
+  test("a closed connection watches no card", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await Bun.sleep(30);
+    await connection.close();
+    const before = wf.requests.length;
+    wf.cards.get("lane-card")!.messages.push({ id: "x", role: "agent", body: "late" });
+    wf.changed();
+    await Bun.sleep(60);
+    expect(wf.requests.length).toBe(before);
+  });
+
+  test("after a Stop, an agent that still reads as working a moment starts no new turn", async () => {
+    const wf = new FakeWorkfloor();
+    // The agent works and writes, and is still at it when the person stops it.
+    wf.reply = (card) =>
+      setTimeout(() => {
+        const c = wf.cards.get(card)!;
+        c.messages.push({ id: `m${c.messages.length + 1}`, role: "agent", body: "Working on" });
+        wf.changed();
+      }, 10);
+    const real = wf.fetch;
+    // Workfloor takes the stop, but its agent reads as running a moment longer.
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const response = await real(input, init);
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      if (body?.command?.kind === "stop") {
+        const c = wf.cards.get(body.task)!;
+        c.state = "RUNNING";
+        wf.changed();
+        setTimeout(() => {
+          c.state = "IDLE";
+          wf.changed();
+        }, 60);
+      }
+      return response;
+    }) as typeof fetch;
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "one");
+    await until(events, (e) => e.type === "session.turn" && e.state === "started");
+    await Bun.sleep(40);
+    await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
+    await until(events, (e) => e.type === "request.completed" && e.requestId === "i1");
+    await Bun.sleep(150);
+    const turns = events.flatMap((e) => (e.type === "session.turn" ? [e.state] : []));
+    expect(turns).toEqual(["started", "canceled"]);
+    wf.reply = () => {};
+    await say(connection, "s1", "two");
+    expect(
+      await until(
+        events,
+        (e) => e.type === "session.prompt_result" && e.clientMessageId === "c-two",
+      ),
+    ).toMatchObject({ result: { type: "turn" } });
+    await connection.close();
+  });
+
+  test("a message the person wrote in Workfloor between turns shows above the agent's reply", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      lane: "normal-lane",
+      messages: [{ id: "m1", role: "agent", body: "Shall I add a test?" }],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await Bun.sleep(30);
+    events.length = 0;
+    const card = wf.cards.get("lane-card")!;
+    card.messages.push({ id: "m2", role: "user", body: "Yes, a regression test." });
+    card.state = "RUNNING";
+    wf.changed();
+    await Bun.sleep(30);
+    card.messages.push({ id: "m3", role: "agent", body: "Added it." });
+    card.state = "WAITING_FOR_INPUT";
+    wf.changed();
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    const items = events.flatMap((e) => (e.type === "timeline.item" ? [e.item] : []));
+    expect(items).toEqual([
+      expect.objectContaining({ type: "user_message", text: "Yes, a regression test." }),
+      expect.objectContaining({ type: "assistant_message", text: "Added it." }),
+    ]);
+    await connection.close();
+  });
 });

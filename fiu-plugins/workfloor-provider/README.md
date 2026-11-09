@@ -10,6 +10,9 @@ the card is listed to open. The agent takes the card's name, its history replays
 to the agent of the stage it is on now (the next stage's agent, once the lane moves it on), and the
 agent's questions are asked in Paseo. The lane still moves the card; a stage's go and an approval
 stay Workfloor's.
+While the card is open in Paseo, its lane is followed between your messages too: when the card
+moves to another stage, Paseo shows that stage's agent, says the card moved on, and follows what it
+writes. A message you write on Workfloor's page shows in Paseo too.
 
 Pictures go both ways. One you attach in Paseo is uploaded to the card's current session and sent
 with your message (a new conversation takes pictures from its second message, as Workfloor does);
