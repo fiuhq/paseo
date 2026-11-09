@@ -13,7 +13,7 @@ import {
 } from "@getpaseo/plugin/server/provider";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { homedir } from "node:os";
-import { cardWorkspace } from "./workspace.js";
+import { cardWorkspace, type Placement } from "./workspace.js";
 import {
   Workfloor,
   WorkfloorError,
@@ -103,16 +103,22 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
     return new Workfloor(auth, options.fetch);
   };
   // One placement per card at a time: two searches for the same link never make two worktrees.
-  const placing = new Map<string, Promise<string | undefined>>();
+  const placing = new Map<string, Promise<Placement>>();
   const place: Place = (wf, ref, title) => {
     const paseo = options.paseo;
-    if (!paseo) return Promise.resolve(undefined);
+    if (!paseo) return Promise.resolve({});
     const key = `${ref.project}/${ref.card}`;
     let found = placing.get(key);
     if (!found) {
-      found = (async () => cardWorkspace(paseo, ref, await wf.code(ref), title))();
+      found = cardWorkspace(paseo, ref, wf.code(ref), title).then((placed) => {
+        if (placed.failure !== undefined)
+          console.error(
+            `[workfloor-provider] worktree for ${ref.card}: ${message(placed.failure)}`,
+          );
+        return placed;
+      });
       placing.set(key, found);
-      void found.finally(() => placing.delete(key)).catch(() => undefined);
+      void found.finally(() => placing.delete(key));
     }
     return found;
   };
@@ -144,12 +150,8 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
   };
 }
 
-/** The directory an imported card works in, when Paseo has its repository. */
-type Place = (
-  wf: Workfloor,
-  ref: CardRef,
-  title: string | undefined,
-) => Promise<string | undefined>;
+/** Where an imported card works, when Paseo has its repository. */
+type Place = (wf: Workfloor, ref: CardRef, title: string | undefined) => Promise<Placement>;
 
 function createConnection(
   workfloor: () => Promise<Workfloor>,
@@ -367,15 +369,18 @@ async function listSessions(
     const detail = await wf.detail(linked);
     const project = projects.find((p) => p.id === linked.project);
     // The card works in a worktree of its repository, so Import puts its agent there.
-    const cwd = (await state.place(wf, linked, detail.title)) ?? input.cwd ?? homedir();
+    const placed = await state.place(wf, linked, detail.title);
+    const unplaced =
+      placed.failure === undefined ? "" : ` · worktree not made: ${message(placed.failure)}`;
     const sessions = [
       {
         persistence: persistenceOf(linked),
-        cwd,
+        cwd: placed.cwd ?? input.cwd ?? homedir(),
         title: detail.title || linked.card,
         // `exact` marks this row as the card the link names, so Import keeps it without matching
-        // the search against its words and imports it at once; the description shows the link.
-        description: `Workfloor · ${project?.name ?? linked.project} · ${input.query?.trim()}`,
+        // the search against its words and imports it at once; the description shows the link,
+        // and why the card has no worktree when making one failed.
+        description: `Workfloor · ${project?.name ?? linked.project}${unplaced} · ${input.query?.trim()}`,
         exact: true,
       },
     ];

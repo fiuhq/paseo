@@ -23,9 +23,12 @@ when Workfloor can't give it back. A person's message replays with a note and a 
 in place of its pictures.
 
 An imported card is named after its Workfloor title and lands in a worktree of its repository's
-Paseo project, checked out on the card's open pull request (made once, then reused; a worktree
-already on that pull request is used as is). A card with no open pull request works in the
-project's own checkout, and one whose repository has no Paseo project stays where you imported it.
+Paseo project, checked out on the card's open pull request. Pasting a card's link into Import's
+search makes that worktree (or finds it) right away, before you click Import; a later paste or
+import reuses it, as it does a worktree already on that pull request. A card with no open pull
+request works in the project's own checkout, and one whose repository has no Paseo project stays
+where you imported it. When the worktree can't be made, the card is still listed, in the project's
+checkout, and its description says why.
 
 Connect it in Paseo's Settings, Workfloor: Workfloor's address and a personal token that can read
 and write (Workfloor: Settings, Personal tokens). The token stays on this host, in the plugin's
