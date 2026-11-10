@@ -32,6 +32,8 @@ class FakeWorkfloor {
       /** The agent's `card_ask` waiting on the person, as Workfloor's questions route reads it. */
       asks?: Record<string, unknown>;
       answered?: Record<string, unknown>;
+      /** Its lane archived it: every read but its read-only page's is refused. */
+      archived?: boolean;
     }
   >();
   requests: Array<{ method: string; path: string; body?: unknown; auth: string | null }> = [];
@@ -117,6 +119,8 @@ class FakeWorkfloor {
       const c = this.cards.get(q.get("task")!);
       if (!c || q.get("workflow") !== (c.lane ?? `conversations:${P}`))
         return json({ error: "Not found" }, 404);
+      if (c.archived && q.get("archived") !== "read")
+        return json({ error: "This task is not available in this project and workflow." }, 403);
       const session = c.session ?? `s-${q.get("task")}`;
       if (c.idle || c.starting)
         return json({ title: c.title, sessionId: null, sessions: [], messages: c.messages });
@@ -1613,6 +1617,57 @@ describe("the Workfloor provider", () => {
       },
     });
     expect(wf.requests.some((r) => r.path === "/api/lane-flows/agent-start")).toBe(false);
+  });
+
+  test("an archived card opens read only with its history, is not watched, and a message says to restore it", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("done-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "COMPLETED",
+      agent: "rr-agent",
+      lane: "normal-lane",
+      archived: true,
+      messages: [{ id: "m1", role: "agent", body: "Released to production." }],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "done-card", lane: "normal-lane" } },
+    });
+    expect(
+      events
+        .flatMap((e) => (e.type === "timeline.item" ? [e.item] : []))
+        .map((i) => [i.type, "text" in i ? i.text : undefined]),
+    ).toEqual([["assistant_message", "Released to production."]]);
+    await say(connection, "s1", "anything left?");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message: expect.stringMatching(/^This card is archived in Workfloor.*task=done-card/),
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/conversation")).toBe(false);
+    expect(wf.requests.some((r) => r.path.startsWith("/api/events"))).toBe(false);
+  });
+
+  test("a card restored to its board after it opened archived takes messages again", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("done-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "WAITING_FOR_INPUT",
+      agent: "rr-agent",
+      lane: "normal-lane",
+      archived: true,
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "done-card", lane: "normal-lane" } },
+    });
+    wf.cards.get("done-card")!.archived = false;
+    await say(connection, "s1", "one more thing");
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
   });
 
   test("a card whose agent is still starting asks to try again in a moment, with its link", async () => {
