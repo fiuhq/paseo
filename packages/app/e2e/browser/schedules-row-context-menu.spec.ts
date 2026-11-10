@@ -88,7 +88,7 @@ test.describe("Schedule row context menu", () => {
 
     await menu.getByTestId(`schedule-menu-copy-id-${id}`).click();
     await expect(menu).toBeHidden();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(id);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(id);
     await expect(page.getByText("Schedule ID copied")).toBeVisible();
     // A right-click never opens the editor the row's own click opens.
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -110,6 +110,6 @@ test.describe("Schedule row context menu", () => {
     await page.goto(buildSchedulesRoute());
     await page.getByTestId(`schedule-kebab-${id}`).click({ timeout: 30_000 });
     await page.getByTestId(`schedule-menu-copy-id-${id}`).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(id);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(id);
   });
 });
