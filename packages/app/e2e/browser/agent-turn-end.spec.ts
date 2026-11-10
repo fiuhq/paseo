@@ -405,15 +405,19 @@ async function expectTimingInsideFooter(page: Page): Promise<void> {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     const lines: boolean[] = [];
     while (walker.nextNode()) {
-      const range = document.createRange();
-      range.selectNodeContents(walker.currentNode);
-      for (const rect of range.getClientRects()) {
-        lines.push(
-          rect.left >= Math.max(rowBounds.left, labelBounds.left) - 0.5 &&
-            rect.right <= Math.min(rowBounds.right, labelBounds.right) + 0.5 &&
-            rect.top >= Math.max(rowBounds.top, labelBounds.top) - 0.5 &&
-            rect.bottom <= Math.min(rowBounds.bottom, labelBounds.bottom) + 0.5,
-        );
+      // Measure glyph runs only: a wrapped line's trailing space hangs past the edge unpainted.
+      for (const word of walker.currentNode.textContent!.matchAll(/\S+/g)) {
+        const range = document.createRange();
+        range.setStart(walker.currentNode, word.index);
+        range.setEnd(walker.currentNode, word.index + word[0].length);
+        for (const rect of range.getClientRects()) {
+          lines.push(
+            rect.left >= Math.max(rowBounds.left, labelBounds.left) - 0.5 &&
+              rect.right <= Math.min(rowBounds.right, labelBounds.right) + 0.5 &&
+              rect.top >= Math.max(rowBounds.top, labelBounds.top) - 0.5 &&
+              rect.bottom <= Math.min(rowBounds.bottom, labelBounds.bottom) + 0.5,
+          );
+        }
       }
     }
     return lines;
