@@ -87,7 +87,7 @@ import { AgentStartupSummary } from "@/workspace-startup/checklist";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import {
   selectAgentTimelineState,
-  selectAgentTurnPresentation,
+  selectAgentTimelineTurnPresentation,
   type Agent,
   useSessionStore,
 } from "@/stores/session-store";
@@ -727,13 +727,11 @@ function ChatAgentContent({
     (listener: () => void) => viewedTimelineSync?.subscribe(listener) ?? (() => {}),
     [viewedTimelineSync],
   );
-  const readTimelineStatus = useCallback(
-    () =>
-      !agentId || !viewedTimelineSync
-        ? ("ready" as const)
-        : viewedTimelineSync.getAgentTimelineStatus(agentId),
-    [agentId, viewedTimelineSync],
-  );
+  const readTimelineStatus = useCallback((): ViewedTimelineStatus => {
+    if (!agentId) return "ready";
+    // Until the owner is published nothing has confirmed this chat, so its check has not begun.
+    return viewedTimelineSync?.getAgentTimelineStatus(agentId) ?? "checking";
+  }, [agentId, viewedTimelineSync]);
   const timelineStatus = useSyncExternalStore(
     subscribeToVisibilityCatchUp,
     readTimelineStatus,
@@ -1419,7 +1417,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
   const turnPresentation = useSessionStore(
     useShallow((state) =>
       agentId
-        ? selectAgentTurnPresentation(state.sessions[serverId], agentId)
+        ? selectAgentTimelineTurnPresentation(state.sessions[serverId], agentId)
         : { isActive: false, isCancelling: false, startedAt: null, turnId: null },
     ),
   );
