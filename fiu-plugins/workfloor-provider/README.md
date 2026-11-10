@@ -14,7 +14,9 @@ Workfloor's Start agent does, if you are its assignee or a project admin; send w
 pictures after. The lane still moves the card; a stage's go and an approval stay Workfloor's.
 While the card is open in Paseo, its lane is followed between your messages too: when the card
 moves to another stage, Paseo shows that stage's agent, says the card moved on, and follows what it
-writes. A message you write on Workfloor's page shows in Paseo too.
+writes. A message you write on Workfloor's page shows in Paseo too. A card its lane archived (its
+work released) still opens, read only, with its history; a message to it says to restore it to its
+board first, with its link.
 
 Above the chat box, a pill names the agent's card by its Workfloor reference (`Card d9c8d3b6`) and
 opens the card in Workfloor.

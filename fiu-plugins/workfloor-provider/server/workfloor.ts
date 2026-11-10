@@ -189,12 +189,14 @@ export class Workfloor {
     return started.conversation.id;
   }
 
-  detail(ref: CardRef): Promise<Detail> {
+  /** `archived`: an archived card, read only, as its Workfloor page opens it; Workfloor refuses it otherwise. */
+  detail(ref: CardRef, options: { archived?: boolean } = {}): Promise<Detail> {
     const query = new URLSearchParams({
       view: "detail",
       workspace: ref.project,
       workflow: ref.lane,
       task: ref.card,
+      ...(options.archived ? { archived: "read" } : {}),
     });
     return this.request(`connection?${query}`);
   }

@@ -94,6 +94,8 @@ interface Session {
   pictures: Map<string, string>;
   /** Workfloor's agent being stopped after a Stop: the next message waits for it, so it is never the one stopped. */
   stopping?: Promise<void>;
+  /** The card is archived in Workfloor: read only, never watched, until it is restored to its board. */
+  archived?: boolean;
 }
 
 export function createWorkfloorProvider(options: WorkfloorProviderOptions): ProviderRegistration {
@@ -310,6 +312,19 @@ const persistenceOf = (card: Card): ProviderPersistence => ({
   },
 });
 
+/**
+ * The card as Workfloor shows it. A card its lane archived (its work released) is refused to every
+ * plain read, so a refused card is read again as its archived page reads it, read only.
+ */
+async function readCard(wf: Workfloor, card: Card): Promise<{ detail: Detail; archived: boolean }> {
+  try {
+    return { detail: await wf.detail(card), archived: false };
+  } catch (error) {
+    if (!(error instanceof WorkfloorError && error.status === 403)) throw error;
+    return { detail: await wf.detail(card, { archived: true }), archived: true };
+  }
+}
+
 /** A saved card; one saved before lanes came is a conversation. */
 function cardOf(persistence: ProviderPersistence | undefined): Card | undefined {
   const data = persistence?.data;
@@ -429,13 +444,14 @@ async function openSession(
   let title = input.config.title;
   const wf = card ? await state.workfloor() : undefined;
   if (card && wf) {
-    const [detail, waiting] = await Promise.all([
-      wf.detail(card),
+    const [{ detail, archived }, waiting] = await Promise.all([
+      readCard(wf, card),
       wf.question(card.project, card.card),
     ]);
     const current = detail.sessions?.find((s) => s.id === detail.sessionId);
     // Opened while its agent still works or waits on a question: the turn is picked up and followed.
-    busy = (!!current && WORKING.has(current.state)) || answerable(waiting);
+    busy = !archived && ((!!current && WORKING.has(current.state)) || answerable(waiting));
+    session.archived = archived;
     session.card = card;
     session.workfloorSession = detail.sessionId;
     const agent = detail.sessions?.find((s) => s.id === detail.sessionId)?.agentProfileId;
@@ -555,7 +571,13 @@ async function prompt(
     if (session.card) {
       // The card's agent now: its session may have started, or the card moved on to its next
       // stage's agent, since this Paseo session last read it.
-      await track(session, await wf.detail(session.card), state);
+      const { detail, archived } = await readCard(wf, session.card);
+      session.archived = archived;
+      if (archived)
+        throw new WorkfloorError(
+          `This card is archived in Workfloor, so it is read only here: restore it to its board to talk to its agent again: ${wf.link(session.card)}`,
+        );
+      await track(session, detail, state);
       if (!session.workfloorSession) {
         // No agent on the card: its stage's agent never started (a card made without one). The
         // person's message starts it, as Workfloor's Start agent does, their words in its handoff.
@@ -722,6 +744,7 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
 function watch(session: Session, state: State): void {
   if (
     !session.card ||
+    session.archived ||
     session.turn ||
     session.watch ||
     session.sending ||
