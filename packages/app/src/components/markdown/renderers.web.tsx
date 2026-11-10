@@ -144,8 +144,10 @@ const styles = StyleSheet.create((theme) => ({
   },
 }));
 
-export const WEB_RENDERERS: MarkdownRenderers = {
+export const WEB_RENDERERS: MarkdownRenderers = { codeBlock: WebCodeBlock, link: WebLink };
+
+/** Assistant replies hand over drafts as quotes, so their quotes carry the copy button too. */
+export const WEB_QUOTE_COPY_RENDERERS: MarkdownRenderers = {
+  ...WEB_RENDERERS,
   blockquote: WebBlockquote,
-  codeBlock: WebCodeBlock,
-  link: WebLink,
 };
