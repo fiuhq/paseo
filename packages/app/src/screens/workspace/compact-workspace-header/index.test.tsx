@@ -62,6 +62,7 @@ vi.mock("@/screens/workspace/workspace-header-project-row", () => ({
 vi.mock("./tab-switcher", () => ({ MobileWorkspaceTabSwitcher: () => null }));
 vi.mock("@/window-layout", () => ({
   useWindowLayout: () => ({}),
+  useTopBand: () => null,
   resolveWorkspaceActionPlacement: () => "header",
   resolveWorkspaceBarActions: () => [],
   WindowLayoutActions: () => null,
