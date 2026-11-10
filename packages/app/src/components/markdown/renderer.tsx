@@ -135,6 +135,7 @@ const MarkdownPart = memo(function MarkdownPart({
       isWeb ? [{ kind: "markdown", id: "0", source: markdown }] : splitMermaidFences(markdown),
     [markdown],
   );
+  const webRenderers = quoteCopy ? WEB_QUOTE_COPY_RENDERERS : WEB_RENDERERS;
   return (
     <MermaidStreamingContext.Provider value={streaming}>
       <MarkdownBlockStack imageSources={imageSources}>
@@ -157,7 +158,7 @@ const MarkdownPart = memo(function MarkdownPart({
               streamingAnimation={false}
               onLinkPress={pressLink}
               onImagePress={pressImage}
-              renderers={isWeb ? (quoteCopy ? WEB_QUOTE_COPY_RENDERERS : WEB_RENDERERS) : undefined}
+              renderers={isWeb ? webRenderers : undefined}
             />
           ),
         )}
