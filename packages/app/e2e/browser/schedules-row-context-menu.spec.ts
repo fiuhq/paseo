@@ -1,4 +1,4 @@
-import { expect, test } from "../support/fixtures";
+import { expect, test, type Page } from "../support/fixtures";
 import { seedWorkspace, type SeededWorkspace } from "../support/helpers/seed-client";
 import { buildSchedulesRoute } from "../../src/utils/host-routes";
 
@@ -20,6 +20,10 @@ interface ScheduleSeedClient {
     runOnCreate: boolean;
   }): Promise<{ schedule: { id: string } | null; error: string | null }>;
   scheduleDelete(input: { id: string }): Promise<{ error: string | null }>;
+}
+
+async function readClipboard(page: Page): Promise<string> {
+  return page.evaluate(() => navigator.clipboard.readText());
 }
 
 async function seedSchedule(workspace: SeededWorkspace, name: string): Promise<string> {
@@ -89,7 +93,7 @@ test.describe("Schedule row context menu", () => {
     await menu.getByTestId(`schedule-menu-copy-id-${id}`).click();
     await expect(menu).toBeHidden();
     await expect(page.getByText("Copied Schedule ID", { exact: true })).toBeVisible();
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(id);
+    await expect.poll(() => readClipboard(page)).toBe(id);
     // A right-click never opens the editor the row's own click opens.
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
@@ -110,6 +114,6 @@ test.describe("Schedule row context menu", () => {
     await page.goto(buildSchedulesRoute());
     await page.getByTestId(`schedule-kebab-${id}`).click({ timeout: 30_000 });
     await page.getByTestId(`schedule-menu-copy-id-${id}`).click();
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(id);
+    await expect.poll(() => readClipboard(page)).toBe(id);
   });
 });
