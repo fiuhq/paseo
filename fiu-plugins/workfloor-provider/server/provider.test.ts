@@ -1507,6 +1507,72 @@ describe("the Workfloor provider", () => {
     expect(keptByImport(listed.sessions[0]!, link)).toBe(true);
   });
 
+  test("a pasted link lists its card from the card's own view, and a second paste asks no lane again", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    const listing = async (requestId: string, query: string) => {
+      const from = wf.requests.length;
+      await connection.send({ type: "sessions", requestId, cwd: "/work", query });
+      const listed = (await until(
+        events,
+        (e) => e.type === "sessions" && e.requestId === requestId,
+      )) as Extract<ProviderEvent, { type: "sessions" }>;
+      return { titles: listed.sessions.map((s) => s.title), asked: wf.requests.slice(from) };
+    };
+    const short = await listing("l1", "https://wf.test/c/lane-card");
+    expect(short.titles).toEqual(["Scratch pools run past 6 hours"]);
+    // A card's full read carries every message it ever had; its card view is all a listing shows.
+    expect(short.asked.filter((r) => r.path.includes("view=detail"))).toEqual([]);
+    const again = await listing("l2", "https://wf.test/c/lane-card");
+    expect(again.titles).toEqual(["Scratch pools run past 6 hours"]);
+    expect(again.asked.filter((r) => r.path.includes("view=workflows"))).toEqual([]);
+    expect(again.asked.filter((r) => r.path.includes("view=card"))).toHaveLength(1);
+    const long = await listing(
+      "l3",
+      `https://wf.test/?page=lanes&project=${P}&workflow=normal-lane&task=lane-card`,
+    );
+    expect(long.titles).toEqual(["Scratch pools run past 6 hours"]);
+    expect(long.asked.filter((r) => r.path.includes("view=detail"))).toEqual([]);
+  });
+
+  test("a remembered short link whose card left that lane is looked for again", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Scratch pools run past 6 hours",
+      state: "IDLE",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    const list = async (requestId: string) => {
+      await connection.send({
+        type: "sessions",
+        requestId,
+        cwd: "/work",
+        query: "https://wf.test/c/lane-card",
+      });
+      return (await until(
+        events,
+        (e) => e.type === "sessions" && e.requestId === requestId,
+      )) as Extract<ProviderEvent, { type: "sessions" }>;
+    };
+    await list("l1");
+    wf.cards.get("lane-card")!.lane = "other-lane";
+    const moved = await list("l2");
+    expect(moved.sessions[0]?.persistence).toEqual({
+      version: 1,
+      data: { project: P, card: "lane-card", lane: "other-lane" },
+    });
+  });
+
   test("a short link to a conversation is found on the Conversations lane; an unknown card lists nothing", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("conv-card", { title: "hello world", state: "IDLE", agent: A, messages: [] });
@@ -1550,7 +1616,7 @@ describe("the Workfloor provider", () => {
     const answer = wf.fetch;
     wf.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const q = new URL(String(input)).searchParams;
-      return q.get("view") === "detail" && q.get("workflow") === "other-lane"
+      return q.get("view") === "card" && q.get("workflow") === "other-lane"
         ? new Response(JSON.stringify({ error: "Internal error" }), { status: 500 })
         : answer(input, init);
     }) as typeof fetch;

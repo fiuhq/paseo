@@ -78,8 +78,12 @@ export interface IdleStage {
 export type QuestionReply =
   | { answers: Array<{ questionId: string; optionId?: string; text?: string }> }
   | { reject: string };
-/** What a card's own view says about its code: its repository and the issues and pull requests linked to it. */
-export interface CardCode {
+/**
+ * A card as its own view reads it: its title, its repository and the issues and pull requests
+ * linked to it. A few kilobytes, where the card's full read carries every message it ever had.
+ */
+export interface CardView {
+  title?: string;
   repository?: string;
   externalItems?: Array<{
     kind: string;
@@ -224,15 +228,15 @@ export class Workfloor {
     });
   }
 
-  /** The card's repository and linked items, as its card view reads them. */
-  async code(ref: CardRef): Promise<CardCode> {
+  /** The card as its card view reads it; refused, as its full read is, on any lane but its own. */
+  async card(ref: CardRef): Promise<CardView> {
     const query = new URLSearchParams({
       view: "card",
       workspace: ref.project,
       workflow: ref.lane,
       task: ref.card,
     });
-    return (await this.request<{ task?: CardCode }>(`connection?${query}`)).task ?? {};
+    return (await this.request<{ task?: CardView }>(`connection?${query}`)).task ?? {};
   }
 
   /** What waits on the person on this card, as Workfloor's card panel reads it. */
