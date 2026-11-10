@@ -473,10 +473,15 @@ describe("the Workfloor provider", () => {
 
   test("a link without its lane is no card's: the search lists conversations as before", async () => {
     const wf = new FakeWorkfloor();
+    // A conversation the link names, seeded rather than opened: an open session's watch would read
+    // the card in the background and race the reads counted below.
+    wf.cards.set("card-1", {
+      title: "hello",
+      state: "WAITING_FOR_INPUT",
+      agent: A,
+      messages: [{ id: "m1", role: "user", body: "hello" }],
+    });
     const { connection, events } = await connect(wf);
-    await open(connection, events, "s1");
-    await say(connection, "s1", "hello");
-    await until(events, turnEnded);
     const reads = wf.requests.length;
     await connection.send({
       type: "sessions",
