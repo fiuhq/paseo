@@ -408,10 +408,10 @@ function ScheduleMenuItems({
   const productNameLower = scheduleProductName(schedule).toLowerCase();
   const copyId = useCallback(() => {
     void Clipboard.setStringAsync(schedule.id).then(
-      () => toast.copied(`${scheduleProductName(schedule)} ID copied`),
-      () => toast.error(`Couldn't copy ${scheduleProductName(schedule).toLowerCase()} ID`),
+      () => toast.copied(`${scheduleProductName(schedule)} ID`),
+      () => toast.error(`Couldn't copy ${productNameLower} ID`),
     );
-  }, [schedule, toast]);
+  }, [schedule, productNameLower, toast]);
   const copyTrailing = useMemo(
     () => <Text style={styles.menuHeaderId}>{schedule.id}</Text>,
     [schedule.id],

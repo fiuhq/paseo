@@ -88,8 +88,8 @@ test.describe("Schedule row context menu", () => {
 
     await menu.getByTestId(`schedule-menu-copy-id-${id}`).click();
     await expect(menu).toBeHidden();
+    await expect(page.getByText("Copied Schedule ID", { exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(id);
-    await expect(page.getByText("Schedule ID copied")).toBeVisible();
     // A right-click never opens the editor the row's own click opens.
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
