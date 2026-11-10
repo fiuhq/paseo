@@ -11,8 +11,14 @@ export function usageReportsQueryKey(serverId: string, kind: UsageFeedKind) {
   return [...hostUsageQueryKey(serverId), kind, "reports"] as const;
 }
 
-export function agentUsageQueryKey(serverId: string, kind: UsageFeedKind, agentId: string) {
-  return [...hostUsageQueryKey(serverId), kind, "agent", agentId] as const;
+/** An agent's reports, kept per usage scope: an agent resumed under another login keeps its ID. */
+export function agentUsageQueryKey(
+  serverId: string,
+  kind: UsageFeedKind,
+  agentId: string,
+  usageScopeKey: string | undefined,
+) {
+  return [...hostUsageQueryKey(serverId), kind, "agent", agentId, usageScopeKey ?? null] as const;
 }
 
 interface RefreshReportInput {
@@ -21,6 +27,7 @@ interface RefreshReportInput {
   serverId: string;
   reportId: string;
   agentId?: string;
+  usageScopeKey?: string;
 }
 
 export async function refreshReport({
@@ -29,6 +36,7 @@ export async function refreshReport({
   serverId,
   reportId,
   agentId,
+  usageScopeKey,
 }: RefreshReportInput): Promise<void> {
   const options =
     agentId === undefined
@@ -36,7 +44,9 @@ export async function refreshReport({
       : { agentId, forceRefresh: true };
   const hostKey = usageReportsQueryKey(serverId, feed.kind);
   const queryKey =
-    agentId === undefined ? hostKey : agentUsageQueryKey(serverId, feed.kind, agentId);
+    agentId === undefined
+      ? hostKey
+      : agentUsageQueryKey(serverId, feed.kind, agentId, usageScopeKey);
   // An agent list still streaming was scoped to the login before the refresh; drop it.
   if (agentId !== undefined) await queryClient.cancelQueries({ queryKey, exact: true });
   const refreshed = await feed.list(options);
