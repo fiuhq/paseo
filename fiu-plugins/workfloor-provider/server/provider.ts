@@ -22,6 +22,7 @@ import {
   lane,
   type Attachment,
   type CardRef,
+  type CardView,
   type Detail,
   type Message,
   type WaitingQuestion,
@@ -106,13 +107,13 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
   };
   // One placement per card at a time: two searches for the same link never make two worktrees.
   const placing = new Map<string, Promise<Placement>>();
-  const place: Place = (wf, ref, title) => {
+  const place: Place = (ref, card) => {
     const paseo = options.paseo;
     if (!paseo) return Promise.resolve({});
     const key = `${ref.project}/${ref.card}`;
     let found = placing.get(key);
     if (!found) {
-      found = cardWorkspace(paseo, ref, wf.code(ref), title).then((placed) => {
+      found = cardWorkspace(paseo, ref, card).then((placed) => {
         if (placed.failure !== undefined)
           console.error(
             `[workfloor-provider] worktree for ${ref.card}: ${message(placed.failure)}`,
@@ -153,7 +154,7 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
 }
 
 /** Where an imported card works, when Paseo has its repository. */
-type Place = (wf: Workfloor, ref: CardRef, title: string | undefined) => Promise<Placement>;
+type Place = (ref: CardRef, card: CardView) => Promise<Placement>;
 
 function createConnection(
   workfloor: () => Promise<Workfloor>,
@@ -189,7 +190,15 @@ function createConnection(
     models.catch(() => (models = undefined));
     return models;
   };
-  const state: State = { sessions, emit, catalog, workfloor, capabilities, place };
+  const state: State = {
+    sessions,
+    emit,
+    catalog,
+    workfloor,
+    capabilities,
+    place,
+    shortLinks: new Map(),
+  };
 
   return {
     version: 1,
@@ -223,6 +232,8 @@ interface State {
   workfloor(): Promise<Workfloor>;
   capabilities: readonly string[];
   place: Place;
+  /** The lane each short link's card was found on, so a second paste asks that lane only. */
+  shortLinks: Map<string, Card>;
 }
 
 function admit(input: ProviderInput, state: State): void {
@@ -334,41 +345,56 @@ function cardOf(persistence: ProviderPersistence | undefined): Card | undefined 
   return { project, card, lane: typeof saved === "string" ? saved : lane(project) };
 }
 
+/** Workfloor refused the card on that lane, or has no such card: the same answer, as Workfloor gives it. */
+const refused = (error: unknown) =>
+  error instanceof WorkfloorError && [403, 404].includes(error.status ?? 0);
+
 /**
- * Where a short link's card is: the lane of a project the token reaches that shows it, its
- * Conversations lane included. Workfloor answers a card only on the lane it is on, so each lane is
- * asked once, all at once.
+ * The card a pasted Workfloor link names, as its card view reads it: a few kilobytes, all a listing
+ * shows. A short link (`/c/<card>`) names no lane, and Workfloor answers a card only on the lane it
+ * is on, so each lane of each project the token reaches is asked once, all at once, Conversations
+ * lanes included; the lane found is remembered, and asked first the next time.
  */
-async function placeShortLink(
+async function linkedCard(
   wf: Workfloor,
   projects: ReadonlyArray<{ id: string }>,
-  card: string | undefined,
-): Promise<Card | undefined> {
-  if (!card) return undefined;
+  query: string | undefined,
+  shortLinks: Map<string, Card>,
+): Promise<{ ref: Card; card: CardView } | undefined> {
+  const long = cardOfLink(query);
+  if (long) return { ref: long, card: await wf.card(long) };
+  const id = cardIdOfShortLink(query);
+  if (!id) return undefined;
+  const known = shortLinks.get(id);
+  if (known) {
+    const card = await wf.card(known).catch((error: unknown) => {
+      if (refused(error)) return undefined;
+      throw error;
+    });
+    if (card) return { ref: known, card };
+    shortLinks.delete(id);
+  }
   const refs = (
     await Promise.all(
       projects.map(async (p) =>
-        [...(await wf.lanes(p.id)), lane(p.id)].map((l) => ({
-          project: p.id,
-          card,
-          lane: l,
-        })),
+        [...(await wf.lanes(p.id)), lane(p.id)].map((l) => ({ project: p.id, card: id, lane: l })),
       ),
     )
   ).flat();
   const found = await Promise.all(
     refs.map((ref) =>
-      wf.detail(ref).then(
-        () => ref,
+      wf.card(ref).then(
+        (card) => ({ ref, card }),
         (error: unknown) => {
-          if (error instanceof WorkfloorError && [403, 404].includes(error.status ?? 0))
-            return undefined;
+          if (refused(error)) return undefined;
           throw error;
         },
       ),
     ),
   );
-  return found.find((ref) => ref !== undefined);
+  const hit = found.find((f) => f !== undefined);
+  if (hit) shortLinks.set(id, hit.ref);
+  return hit;
 }
 
 async function listSessions(
@@ -378,20 +404,19 @@ async function listSessions(
   const wf = await state.workfloor();
   const projects = await wf.projects();
   // A Workfloor card's link, pasted into the search, lists that card: any lane's, to open and drive here.
-  const linked =
-    cardOfLink(input.query) ?? (await placeShortLink(wf, projects, cardIdOfShortLink(input.query)));
-  if (linked) {
-    const detail = await wf.detail(linked);
+  const found = await linkedCard(wf, projects, input.query, state.shortLinks);
+  if (found) {
+    const { ref: linked, card } = found;
     const project = projects.find((p) => p.id === linked.project);
     // The card works in a worktree of its repository, so Import puts its agent there.
-    const placed = await state.place(wf, linked, detail.title);
+    const placed = await state.place(linked, card);
     const unplaced =
       placed.failure === undefined ? "" : ` · worktree not made: ${message(placed.failure)}`;
     const sessions = [
       {
         persistence: persistenceOf(linked),
         cwd: placed.cwd ?? input.cwd ?? homedir(),
-        title: detail.title || linked.card,
+        title: card.title || linked.card,
         // `exact` marks this row as the card the link names, so Import keeps it without matching
         // the search against its words and imports it at once; the description shows the link,
         // and why the card has no worktree when making one failed.

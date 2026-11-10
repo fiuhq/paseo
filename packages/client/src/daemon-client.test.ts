@@ -6573,6 +6573,48 @@ test("imports an agent by provider handle id", async () => {
   });
 });
 
+test("an import waits past the session RPC default for the daemon to finish it", async () => {
+  useHeartbeatClock();
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const imported = client.importAgent({
+    providerId: "workfloor",
+    providerHandleId: "card-1",
+    cwd: "/tmp/repo",
+  });
+  let settled = false;
+  void imported.then(
+    () => {
+      settled = true;
+      return undefined;
+    },
+    () => {
+      settled = true;
+      return undefined;
+    },
+  );
+
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(settled).toBe(false);
+
+  await vi.advanceTimersByTimeAsync(9 * 60_000);
+  await expect(imported).rejects.toThrow("Timeout waiting for message (600000ms)");
+});
+
 test("uses server-provided dictation finish timeout budget", async () => {
   useHeartbeatClock();
   const logger = createMockLogger();

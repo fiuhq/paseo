@@ -1,5 +1,5 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import type { CardCode, CardRef } from "./workfloor.js";
+import type { CardRef, CardView } from "./workfloor.js";
 
 type Paseo = PluginServerContext["paseo"];
 
@@ -22,13 +22,11 @@ export interface Placement {
 export async function cardWorkspace(
   paseo: Paseo,
   ref: CardRef,
-  card: Promise<CardCode>,
-  title: string | undefined,
+  card: CardView,
 ): Promise<Placement> {
   let checkout: string | undefined;
   try {
-    const code = await card;
-    const repo = code.repository?.toLowerCase();
+    const repo = card.repository?.toLowerCase();
     if (!repo) return {};
     const { projects } = await paseo.projects.list();
     const project = projects.find(
@@ -36,7 +34,7 @@ export async function cardWorkspace(
     );
     if (!project) return {};
     checkout = project.projectRootPath;
-    const pr = code.externalItems?.find(
+    const pr = card.externalItems?.find(
       (item) =>
         item.kind === "pull_request" &&
         item.state === "open" &&
@@ -66,7 +64,7 @@ export async function cardWorkspace(
         action: "checkout",
         checkoutSource: { kind: "change_request", number: pr },
       },
-      ...(title ? { title } : {}),
+      ...(card.title ? { title: card.title } : {}),
       metadata: { [CARD_KEY]: key },
     });
     return created.directory ? { cwd: created.directory } : {};
