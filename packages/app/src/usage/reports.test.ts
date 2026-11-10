@@ -34,7 +34,7 @@ const team = entry("claude:team");
 const codex = entry("codex:account");
 const updated = { ...personal, fetchedAt: "2026-01-01T00:01:00.000Z" };
 const hostKey = usageReportsQueryKey("host", "daemon");
-const agentKey = agentUsageQueryKey("host", "daemon", "agent");
+const agentKey = agentUsageQueryKey("host", "daemon", "agent", "scope-1");
 
 test.each([
   {
@@ -69,8 +69,9 @@ test.each([
   async ({ agentId, key, refreshed, expected, request, invalidateHost }) => {
     const queryClient = new QueryClient();
     const otherHostKey = usageReportsQueryKey("other-host", "daemon");
-    const otherAgentKey = agentUsageQueryKey("host", "daemon", "other-agent");
-    for (const queryKey of [hostKey, agentKey, otherHostKey, otherAgentKey]) {
+    const otherAgentKey = agentUsageQueryKey("host", "daemon", "other-agent", "scope-1");
+    const otherScopeKey = agentUsageQueryKey("host", "daemon", "agent", "scope-0");
+    for (const queryKey of [hostKey, agentKey, otherHostKey, otherAgentKey, otherScopeKey]) {
       queryClient.setQueryData(queryKey, [personal, codex]);
     }
     const client = new UsageClient(Promise.resolve({ requestId: "refresh", reports: refreshed }));
@@ -81,13 +82,14 @@ test.each([
         serverId: "host",
         reportId: personal.id,
         agentId,
+        usageScopeKey: "scope-1",
       });
 
       expect(client.requests).toEqual([request]);
       expect(queryClient.getQueryData(key)).toEqual(expected);
       expect(queryClient.getQueryState(hostKey)?.isInvalidated).toBe(invalidateHost);
       expect(queryClient.getQueryState(agentKey)?.isInvalidated).toBe(false);
-      for (const untouched of [otherHostKey, otherAgentKey]) {
+      for (const untouched of [otherHostKey, otherAgentKey, otherScopeKey]) {
         expect(queryClient.getQueryData(untouched)).toEqual([personal, codex]);
         expect(queryClient.getQueryState(untouched)?.isInvalidated).toBe(false);
       }
@@ -118,6 +120,7 @@ test("an agent refresh drops the agent list still loading under the previous log
       serverId: "host",
       reportId: personal.id,
       agentId: "agent",
+      usageScopeKey: "scope-1",
     });
     finishOlder();
     await older;
