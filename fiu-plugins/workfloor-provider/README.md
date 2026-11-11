@@ -12,7 +12,8 @@ the stage it is on now (the next stage's agent, once the lane moves it on), the 
 in the card's workspace lists the lane's stages, each with its agent (`Plan Stage · Planny`,
 `Build Stage · Flux`), the card's own stage checked, with the agent that has it now as Workfloor
 names it (a new agent started there lists them too, but refuses them: a new conversation needs
-one of the project's agents, such as Flux), and the agent's questions
+one of the project's agents, such as Flux, which the card's workspace does not list), and the
+agent's questions
 are asked in Paseo. A card whose stage has no agent yet starts one with your message, as
 Workfloor's Start agent does, if you are its assignee or a project admin; send words first,
 pictures after. The lane still moves the card; a stage's go and an approval stay Workfloor's.
