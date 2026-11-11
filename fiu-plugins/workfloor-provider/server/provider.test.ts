@@ -1851,14 +1851,38 @@ describe("the Workfloor provider", () => {
     ]);
   });
 
-  test("a card with no open pull request works in its project's checkout; one Paseo has no project for stays where Import is", async () => {
+  test("a card with no open pull request gets its own worktree off the default branch, made once", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", laneCard({ repository: "flxbl-io/sfp-pro", externalItems: [] }));
     const paseo = new FakePaseo();
+    paseo.workspaces.push({
+      id: "wks_main",
+      projectId: "prj_sfp",
+      workspaceDirectory: "/repos/sfp-pro",
+      metadata: {},
+    });
     const { connection, events } = await connect(wf, undefined, paseo);
-    expect((await listLink(connection, events, "l1")).sessions[0]?.cwd).toBe("/repos/sfp-pro");
+    expect((await listLink(connection, events, "l1")).sessions[0]?.cwd).toBe(
+      "/worktrees/sfp-pro-1",
+    );
+    expect((await listLink(connection, events, "l2")).sessions[0]?.cwd).toBe(
+      "/worktrees/sfp-pro-1",
+    );
+    expect(paseo.created).toEqual([
+      {
+        source: { kind: "worktree", projectId: "prj_sfp" },
+        title: "Server heap crashes",
+        metadata: { workfloorCard: `${P}/lane-card` },
+      },
+    ]);
+  });
+
+  test("a card whose repository Paseo has no project for stays where Import is", async () => {
+    const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", laneCard({ ...ON_PR, repository: "flxbl-io/other" }));
-    expect((await listLink(connection, events, "l2")).sessions[0]?.cwd).toBe("/here");
+    const paseo = new FakePaseo();
+    const { connection, events } = await connect(wf, undefined, paseo);
+    expect((await listLink(connection, events, "l1")).sessions[0]?.cwd).toBe("/here");
     expect(paseo.created).toEqual([]);
   });
 });
