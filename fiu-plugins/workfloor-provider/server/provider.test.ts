@@ -1350,6 +1350,46 @@ describe("the Workfloor provider", () => {
     expect(wf.requests.filter((r) => r.method === "POST")).toEqual([]);
   });
 
+  test("a new conversation in a card's workspace refuses the card's stage agent", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      agentName: "Testy",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await open(connection, events, "s2", {
+      config: {
+        cwd: "/tmp",
+        env: {},
+        mcpServers: {},
+        settings: {},
+        persist: true,
+        model: `${P}:test-agent`,
+      },
+    });
+    events.length = 0;
+    await say(connection, "s2", "hello");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message:
+            "Testy is a lane card's stage agent: a new conversation needs one of the project's agents, such as Flux",
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/conversations" && r.method === "POST")).toBe(
+      false,
+    );
+  });
+
   test("a closed card is no longer watched", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", {

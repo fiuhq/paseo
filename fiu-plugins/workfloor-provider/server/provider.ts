@@ -655,6 +655,14 @@ async function prompt(
     } else {
       const picked = parseModel(session.model);
       if (!picked) throw new WorkfloorError("Pick a Workfloor agent first");
+      if (!(await state.catalog()).some((m) => m.id === session.model)) {
+        const name =
+          (await state.catalog(session.config.cwd)).find((m) => m.id === session.model)?.label ??
+          picked.agent;
+        throw new WorkfloorError(
+          `${name} is a lane card's stage agent: a new conversation needs one of the project's agents, such as Flux`,
+        );
+      }
       session.card = {
         project: picked.project,
         card: await wf.start(picked.project, picked.agent, text),
