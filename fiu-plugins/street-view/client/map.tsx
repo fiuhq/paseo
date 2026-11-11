@@ -73,7 +73,7 @@ function Walker({ theme, yaw }: { theme: Theme; yaw: number }) {
   return (
     <View
       testID="street-view-walker"
-      style={{ alignSelf: "center", transform: [{ rotate: `${yaw}deg` }] }}
+      style={{ alignSelf: "center", transform: [{ rotate: `${180 - yaw}deg` }] }}
     >
       <Text style={{ color: theme.colors.accent, fontSize: 14, lineHeight: 16 }}>▲</Text>
     </View>

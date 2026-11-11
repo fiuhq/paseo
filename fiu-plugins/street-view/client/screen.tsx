@@ -172,7 +172,13 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
     },
     [setWalker],
   );
-  const exit = useCallback(() => setInsideId(null), []);
+  const exit = useCallback(() => {
+    const at = cameraOf(latest.current, city.current).street;
+    const index =
+      city.current[at]?.stores.findIndex((candidate) => candidate.id === insideId) ?? -1;
+    if (index >= 0) setWalker(cameraAt(at, index));
+    setInsideId(null);
+  }, [insideId, setWalker]);
   const move = useCallback(
     (direction: Move) => {
       if (inside !== null) {
@@ -211,7 +217,8 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
     },
     [enter, exit, faced, in3d, inside, move],
   );
-  useEffect(() => onKeys(onKey), [onKey]);
+  const root = useRef<View>(null);
+  useEffect(() => onKeys(root, onKey), [onKey]);
 
   // Drag to look around, as in a street view: pulling the scene left turns the eye right.
   const look = useMemo(
@@ -235,12 +242,13 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
   const surface = { flex: 1, backgroundColor: theme.colors.surface0 };
   if (!street) {
     const message = error
-      ? `Could not read the workspaces: ${error}`
+      ? `Could not load everything: ${error}`
       : loading
         ? "Building the city…"
         : "No workspaces yet: the city is empty.";
     return (
       <View
+        ref={root}
         testID="street-view-empty"
         style={[surface, { alignItems: "center", justifyContent: "center" }]}
       >
@@ -252,7 +260,7 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
   }
   const problem = error && (
     <Text testID="street-view-error" style={{ color: theme.colors.statusDanger, fontSize: 12 }}>
-      Live updates failed: {error}
+      Could not load everything: {error}
     </Text>
   );
 
@@ -277,7 +285,7 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
 
   if (!in3d) {
     return (
-      <View testID="street-view" style={surface}>
+      <View ref={root} testID="street-view" style={surface}>
         <CityMap
           streets={streets}
           theme={theme}
@@ -312,7 +320,7 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
   }
 
   return (
-    <View testID="street-view" style={surface} {...look.panHandlers}>
+    <View ref={root} testID="street-view" style={surface} {...look.panHandlers}>
       {store ? (
         <Interior3D
           store={store}

@@ -30,11 +30,25 @@ function typing(target: unknown): boolean {
   );
 }
 
+function shown(node: unknown): boolean {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    "getClientRects" in node &&
+    typeof node.getClientRects === "function" &&
+    (node.getClientRects() as { length: number }).length > 0
+  );
+}
+
 /** Walk keys while the street is on screen. The handler returns true for a key it used. */
-export function onKeys(handler: (key: string) => boolean): () => void {
+export function onKeys(
+  root: { readonly current: unknown },
+  handler: (key: string) => boolean,
+): () => void {
   if (Platform.OS !== "web") return () => {};
   const listener = (event: KeyEvent) => {
     if (event.altKey || event.ctrlKey || event.metaKey || typing(event.target)) return;
+    if (!shown(root.current)) return;
     if (handler(event.key)) event.preventDefault();
   };
   window.addEventListener("keydown", listener);
