@@ -13,6 +13,7 @@ import {
 } from "@getpaseo/plugin/server/provider";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { homedir } from "node:os";
+import { RequestBudget } from "./budget.js";
 import { cardWorkspace, type Placement } from "./workspace.js";
 import {
   Workfloor,
@@ -46,6 +47,8 @@ const FAILED = new Set(["FAILED", "CANCELLED"]);
 export interface WorkfloorProviderOptions {
   auth(): Promise<WorkfloorAuth | { missing: string }>;
   fetch?: typeof fetch;
+  /** The token's request budget; one per provider by default, shared by all its connections. */
+  budget?: RequestBudget;
   /** Paseo's API, to put an imported card in a worktree of its repository. */
   paseo?: PluginServerContext["paseo"];
 }
@@ -112,10 +115,11 @@ interface Session {
 }
 
 export function createWorkfloorProvider(options: WorkfloorProviderOptions): ProviderRegistration {
+  const budget = options.budget ?? new RequestBudget();
   const workfloor = async () => {
     const auth = await options.auth();
     if ("missing" in auth) throw new WorkfloorError(auth.missing);
-    return new Workfloor(auth, options.fetch);
+    return new Workfloor(auth, options.fetch, budget);
   };
   // One placement per card at a time: two searches for the same link never make two worktrees.
   const placing = new Map<string, Promise<Placement>>();
@@ -146,7 +150,7 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
       const auth = await options.auth();
       if ("missing" in auth) return { available: false, diagnostic: auth.missing };
       try {
-        const projects = await new Workfloor(auth, options.fetch).projects();
+        const projects = await new Workfloor(auth, options.fetch, budget).projects();
         return projects.length
           ? { available: true }
           : { available: false, diagnostic: "Your Workfloor token reaches no project" };
@@ -749,8 +753,9 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
       } while (again && !turn.abort.signal.aborted);
     } catch (error) {
       if (gone(error)) return end("failed", `Workfloor: ${message(error)}`);
-      // Any other failed read is retried on the next event; the stream reconnects below.
+      // The event that woke a failed read is spent: read again soon, not on the card's next change.
       console.error(`[workfloor-provider] reading ${card.card}: ${message(error)}`);
+      readAgainLater(turn.abort.signal, read);
     } finally {
       reading = false;
     }
@@ -835,6 +840,7 @@ function watch(session: Session, state: State): void {
         } while (again && !abort.signal.aborted);
       } catch (error) {
         console.error(`[workfloor-provider] watching ${card.card}: ${message(error)}`);
+        readAgainLater(abort.signal, read);
       } finally {
         reading = false;
       }
@@ -855,6 +861,15 @@ function watch(session: Session, state: State): void {
     console.error(`[workfloor-provider] watching ${card.card}: ${message(error)}`);
     end();
   });
+}
+
+/** How long after a failed read of a card it is read again. */
+const READ_RETRY_MS = 5_000;
+
+function readAgainLater(signal: AbortSignal, read: () => Promise<void>): void {
+  setTimeout(() => {
+    if (!signal.aborted) void read();
+  }, READ_RETRY_MS);
 }
 
 function unwatch(session: Session): void {
