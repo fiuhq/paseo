@@ -70,6 +70,26 @@ function cardAgent(card: Card, detail: Detail): ProviderModel | undefined {
 
 /** A conversation, or a card on one of the project's assembly lanes. */
 type Card = CardRef;
+
+/** A card's rows in its workspace's model picker; a lane card's stages replace the project agents. */
+interface Shown {
+  cwd: string;
+  models: ProviderModel[];
+  lane: boolean;
+}
+
+/** The picker rows a workspace shows: its cards' own, and the project agents unless a lane card has it. */
+function pickerRows(
+  shown: ReadonlyMap<string, Shown>,
+  cwd: string | undefined,
+  base: readonly ProviderModel[],
+): ProviderModel[] {
+  const here = [...shown.values()].filter((s) => cwd !== undefined && s.cwd === cwd);
+  const rows = new Map<string, ProviderModel>();
+  if (!here.some((s) => s.lane)) for (const m of base) rows.set(m.id, m);
+  for (const s of here) for (const m of s.models) if (!rows.has(m.id)) rows.set(m.id, m);
+  return [...rows.values()];
+}
 interface Turn {
   id: string;
   abort: AbortController;
@@ -84,8 +104,8 @@ interface Session {
   config: ProviderSessionConfig;
   model?: string;
   card?: Card;
-  /** The card's current stage agent, offered in its workspace's catalog. */
-  agent?: ProviderModel;
+  /** The Workfloor agent session the picker was last shown for. */
+  shownFor?: string;
   /** Workfloor's agent session on the card, once it has one. */
   workfloorSession?: string;
   seen: Set<string>;
@@ -114,6 +134,7 @@ interface Session {
 
 export function createWorkfloorProvider(options: WorkfloorProviderOptions): ProviderRegistration {
   const budget = new RequestBudget();
+  const shown = new Map<string, Shown>();
   const workfloor = async () => {
     const auth = await options.auth();
     if ("missing" in auth) throw new WorkfloorError(auth.missing);
@@ -144,6 +165,14 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
     label: "Workfloor",
     description: "Your private Workfloor conversations with a project's agents",
     icon: "icon.svg",
+    // A card's stage move changes its rows, so Paseo reads the catalogue again instead of its cache.
+    async getCatalogCacheKey(options) {
+      if (options.scope !== "workspace") return undefined;
+      const rows = pickerRows(shown, options.cwd, []);
+      return rows.length
+        ? `${options.cwd}\n${rows.map((m) => `${m.id}=${m.label}`).join("\n")}`
+        : undefined;
+    },
     async status() {
       const auth = await options.auth();
       if ("missing" in auth) return { available: false, diagnostic: auth.missing };
@@ -162,6 +191,7 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
         workfloor,
         negotiateProviderCapabilities(request.capabilities, CAPABILITIES),
         place,
+        shown,
       );
     },
   };
@@ -174,18 +204,20 @@ function createConnection(
   workfloor: () => Promise<Workfloor>,
   capabilities: readonly string[],
   place: Place,
+  shown: Map<string, Shown>,
 ): ProviderConnection {
   const listeners = new Set<(event: ProviderEvent) => void>();
   const sessions = new Map<string, Session>();
   let closed = false;
   let models: Promise<ProviderModel[]> | undefined;
+  const names = new Map<string, Promise<ReadonlyMap<string, string>>>();
   const emit = (event: ProviderEvent) => {
     if (closed) return;
     for (const listener of listeners) listener(event);
   };
   /**
-   * Every agent of every project the token reaches, read once per connection, and in a card's
-   * workspace its stage agent, which Workfloor names only on the card.
+   * Every agent of every project the token reaches, read once per connection; in a card's
+   * workspace, the card's own rows (see `pickerRows`).
    */
   const catalog = async (cwd?: string) => {
     models ??= (async () => {
@@ -205,16 +237,26 @@ function createConnection(
       return perProject.flat();
     })();
     models.catch(() => (models = undefined));
-    const all = new Map((await models).map((m) => [m.id, m]));
-    for (const s of sessions.values())
-      if (cwd && s.agent && s.config.cwd === cwd && !all.has(s.agent.id))
-        all.set(s.agent.id, s.agent);
-    return [...all.values()];
+    return pickerRows(shown, cwd, await models);
+  };
+  /** A project's agents by profile id, read once per connection. */
+  const agentNames = (project: string) => {
+    let read = names.get(project);
+    if (!read) {
+      read = workfloor()
+        .then((wf) => wf.projectAgents(project))
+        .then((agents) => new Map(agents.map((a) => [a.id, a.name])));
+      read.catch(() => names.delete(project));
+      names.set(project, read);
+    }
+    return read;
   };
   const state: State = {
     sessions,
+    shown,
     emit,
     catalog,
+    agentNames,
     workfloor,
     capabilities,
     place,
@@ -239,6 +281,7 @@ function createConnection(
       for (const session of sessions.values()) {
         session.turn?.abort.abort();
         unwatch(session);
+        shown.delete(session.id);
       }
       sessions.clear();
       listeners.clear();
@@ -248,8 +291,10 @@ function createConnection(
 
 interface State {
   sessions: Map<string, Session>;
+  shown: Map<string, Shown>;
   emit(event: ProviderEvent): void;
   catalog(cwd?: string): Promise<ProviderModel[]>;
+  agentNames(project: string): Promise<ReadonlyMap<string, string>>;
   workfloor(): Promise<Workfloor>;
   capabilities: readonly string[];
   place: Place;
@@ -325,6 +370,7 @@ async function dispatch(input: ProviderInput, state: State): Promise<void> {
       closing?.turn?.abort.abort();
       if (closing) unwatch(closing);
       state.sessions.delete(input.sessionId);
+      state.shown.delete(input.sessionId);
       state.emit({ type: "session.closed", sessionId: input.sessionId });
       state.emit({ type: "request.completed", requestId: input.requestId });
       return;
@@ -500,8 +546,7 @@ async function openSession(
     session.archived = archived;
     session.card = card;
     session.workfloorSession = detail.sessionId;
-    session.agent = cardAgent(card, detail);
-    if (session.agent) session.model = session.agent.id;
+    await show(session, card, detail, state);
     history = detail.messages;
     for (const m of history) session.seen.add(m.id);
     title ||= detail.title;
@@ -896,20 +941,78 @@ function unwatch(session: Session): void {
   session.watch = undefined;
 }
 
+/**
+ * Shows the card's agents in its workspace's picker and its agent now as the session's model: a
+ * lane card lists its lane's stages, each with the agent that runs it; a conversation, its agent.
+ */
+async function show(
+  session: Session,
+  card: Card,
+  detail: Detail,
+  state: State,
+): Promise<ProviderModel | undefined> {
+  session.shownFor = detail.sessionId;
+  const live = cardAgent(card, detail);
+  const stages =
+    card.lane === lane(card.project)
+      ? undefined
+      : await stageRows(card, detail, state).catch((error: unknown) => {
+          console.error(`[workfloor-provider] stages of ${card.card}: ${message(error)}`);
+          return undefined;
+        });
+  const current = stages?.current ?? live;
+  state.shown.set(session.id, {
+    cwd: session.config.cwd,
+    // A card on a stage the lane no longer lists still shows the agent that has it.
+    models: [...(stages?.models ?? []), ...(live && !stages?.current ? [live] : [])],
+    lane: !!stages,
+  });
+  if (current) session.model = current.id;
+  return current;
+}
+
+/** A lane card's stages in lane order, each with its agent; the card's own, with the agent that has it now. */
+async function stageRows(
+  card: Card,
+  detail: Detail,
+  state: State,
+): Promise<{ models: ProviderModel[]; current?: ProviderModel }> {
+  const wf = await state.workfloor();
+  const [stages, names, view] = await Promise.all([
+    wf.laneStages(card.project, card.lane),
+    state.agentNames(card.project),
+    wf.card(card),
+  ]);
+  const live = detail.sessions?.find((s) => s.id === detail.sessionId);
+  let current: ProviderModel | undefined;
+  const models = stages.flatMap((stage) => {
+    const here = stage.id === view.stageId;
+    const agent = (here && live?.agentProfileId) || stage.agentProfileId;
+    if (!agent) return [];
+    const name = (here && (view.agent || live?.agentName)) || names.get(agent) || agent;
+    const row = {
+      id: `${modelId(card.project, agent)}@${stage.id}`,
+      label: `${stage.name} Stage · ${name}`,
+    };
+    if (here) current = row;
+    return [row];
+  });
+  return { models, ...(current ? { current } : {}) };
+}
+
 /** The card's agent now, which the lane moves on stage by stage, shown as the session's model. */
 async function track(session: Session, detail: Detail, state: State): Promise<void> {
   session.workfloorSession = detail.sessionId ?? session.workfloorSession;
   const card = session.card;
-  const agent = card && cardAgent(card, detail);
-  if (!card || !agent || agent.id === session.model) return;
+  if (!card || !detail.sessionId || detail.sessionId === session.shownFor) return;
   try {
-    const moved = session.model !== undefined;
-    session.model = agent.id;
-    session.agent = agent;
+    const before = session.model;
+    const agent = await show(session, card, detail, state);
+    if (!agent || agent.id === before) return;
     const config = await configState(session, state);
     state.emit({ type: "session.config", sessionId: session.id, config });
     // The lane moved the card on to another stage's agent: say so where the person reads.
-    if (moved && detail.sessionId) {
+    if (before !== undefined) {
       const label = agent.label;
       state.emit({
         type: "timeline.item",
