@@ -447,7 +447,10 @@ describe("the Workfloor provider", () => {
       ["assistant_message", "Hello! You said: hello"],
     ]);
     expect(await until(events, (e) => e.type === "session.config")).toMatchObject({
-      config: { model: `${P}:${A}` },
+      config: {
+        model: `${P}:${A}`,
+        models: [{ id: `${P}:${A}`, label: "Buildy · codev", description: "claude-opus-5-5" }],
+      },
     });
   });
 

@@ -532,9 +532,10 @@ async function openSession(
 }
 
 async function configState(session: Session, state: State): Promise<ProviderConfigState> {
+  const staged = session.card && session.card.lane !== lane(session.card.project);
   return {
     ...(session.model ? { model: session.model } : {}),
-    models: session.card ? (session.agent ? [session.agent] : []) : await state.catalog(),
+    models: staged ? (session.agent ? [session.agent] : []) : await state.catalog(),
     modes: [],
     thinkingOptions: [],
     settings: [],
