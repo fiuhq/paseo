@@ -84,7 +84,7 @@ interface Session {
   config: ProviderSessionConfig;
   model?: string;
   card?: Card;
-  /** The card's current stage agent, the only model its picker offers. */
+  /** The card's current stage agent, offered in its workspace's catalog. */
   agent?: ProviderModel;
   /** Workfloor's agent session on the card, once it has one. */
   workfloorSession?: string;
@@ -183,8 +183,11 @@ function createConnection(
     if (closed) return;
     for (const listener of listeners) listener(event);
   };
-  /** Every agent of every project the token reaches, read once per connection. */
-  const catalog = () => {
+  /**
+   * Every agent of every project the token reaches, read once per connection, and in a card's
+   * workspace its stage agent, which Workfloor names only on the card.
+   */
+  const catalog = async (cwd?: string) => {
     models ??= (async () => {
       const wf = await workfloor();
       const projects = await wf.projects();
@@ -202,7 +205,11 @@ function createConnection(
       return perProject.flat();
     })();
     models.catch(() => (models = undefined));
-    return models;
+    const all = new Map((await models).map((m) => [m.id, m]));
+    for (const s of sessions.values())
+      if (cwd && s.agent && s.config.cwd === cwd && !all.has(s.agent.id))
+        all.set(s.agent.id, s.agent);
+    return [...all.values()];
   };
   const state: State = {
     sessions,
@@ -242,7 +249,7 @@ function createConnection(
 interface State {
   sessions: Map<string, Session>;
   emit(event: ProviderEvent): void;
-  catalog(): Promise<ProviderModel[]>;
+  catalog(cwd?: string): Promise<ProviderModel[]>;
   workfloor(): Promise<Workfloor>;
   capabilities: readonly string[];
   place: Place;
@@ -286,7 +293,7 @@ function fail(input: ProviderInput, error: unknown, state: State): void {
 async function dispatch(input: ProviderInput, state: State): Promise<void> {
   switch (input.type) {
     case "catalog": {
-      const models = await state.catalog();
+      const models = await state.catalog(input.cwd);
       state.emit({
         type: "catalog",
         requestId: input.requestId,
@@ -534,10 +541,9 @@ async function openSession(
 }
 
 async function configState(session: Session, state: State): Promise<ProviderConfigState> {
-  const staged = session.card && session.card.lane !== lane(session.card.project);
   return {
     ...(session.model ? { model: session.model } : {}),
-    models: staged ? (session.agent ? [session.agent] : []) : await state.catalog(),
+    models: await state.catalog(session.config.cwd),
     modes: [],
     thinkingOptions: [],
     settings: [],
@@ -651,6 +657,14 @@ async function prompt(
     } else {
       const picked = parseModel(session.model);
       if (!picked) throw new WorkfloorError("Pick a Workfloor agent first");
+      if (!(await state.catalog()).some((m) => m.id === session.model)) {
+        const stage = (await state.catalog(session.config.cwd)).find((m) => m.id === session.model);
+        throw new WorkfloorError(
+          stage
+            ? `${stage.label} is a lane card's stage agent: a new conversation needs one of the project's agents, such as Flux`
+            : `${session.model} isn't one of the Workfloor agents your token reaches: pick another agent`,
+        );
+      }
       session.card = {
         project: picked.project,
         card: await wf.start(picked.project, picked.agent, text),
@@ -889,10 +903,10 @@ async function track(session: Session, detail: Detail, state: State): Promise<vo
   const agent = card && cardAgent(card, detail);
   if (!card || !agent || agent.id === session.model) return;
   try {
-    const config = await configState({ ...session, model: agent.id, agent }, state);
     const moved = session.model !== undefined;
     session.model = agent.id;
     session.agent = agent;
+    const config = await configState(session, state);
     state.emit({ type: "session.config", sessionId: session.id, config });
     // The lane moved the card on to another stage's agent: say so where the person reads.
     if (moved && detail.sessionId) {

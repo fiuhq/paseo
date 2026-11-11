@@ -1385,10 +1385,17 @@ describe("the Workfloor provider", () => {
     await open(connection, events, "s1", {
       persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
     });
-    // The picker names the card's own stage agent, never the project's conversation agents.
-    expect(await until(events, (e) => e.type === "session.config")).toMatchObject({
-      config: { model: `${P}:test-agent`, models: [{ id: `${P}:test-agent`, label: "Testy" }] },
-    });
+    // Paseo labels the model from the provider's catalog: the card's workspace offers its stage
+    // agent by name; the global catalog, where new conversations start, does not.
+    const catalogFor = async (cwd?: string) => {
+      events.length = 0;
+      await connection.send({ type: "catalog", requestId: `c-${cwd}`, ...(cwd ? { cwd } : {}) });
+      const e = await until(events, (e) => e.type === "catalog");
+      return e.type === "catalog" ? e.catalog.models.map((m) => m.label) : [];
+    };
+    expect(await catalogFor("/tmp")).toEqual(["Buildy · codev", "Testy"]);
+    expect(await catalogFor("/elsewhere")).toEqual(["Buildy · codev"]);
+    expect(await catalogFor()).toEqual(["Buildy · codev"]);
     events.length = 0;
     // Workfloor moves the card to Release Readiness: its agent starts, works, writes and waits.
     const card = wf.cards.get("lane-card")!;
@@ -1407,7 +1414,7 @@ describe("the Workfloor provider", () => {
         type: "session.config",
         config: expect.objectContaining({
           model: `${P}:shippy`,
-          models: [{ id: `${P}:shippy`, label: "Shippy" }],
+          models: expect.arrayContaining([{ id: `${P}:shippy`, label: "Shippy" }]),
         }),
       }),
     );
@@ -1421,6 +1428,74 @@ describe("the Workfloor provider", () => {
     ]);
     // Nothing was sent to Workfloor: Paseo only followed the lane.
     expect(wf.requests.filter((r) => r.method === "POST")).toEqual([]);
+  });
+
+  test("a new conversation in a card's workspace refuses the card's stage agent", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      agentName: "Testy",
+      lane: "normal-lane",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await open(connection, events, "s2", {
+      config: {
+        cwd: "/tmp",
+        env: {},
+        mcpServers: {},
+        settings: {},
+        persist: true,
+        model: `${P}:test-agent`,
+      },
+    });
+    events.length = 0;
+    await say(connection, "s2", "hello");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message:
+            "Testy is a lane card's stage agent: a new conversation needs one of the project's agents, such as Flux",
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/conversations" && r.method === "POST")).toBe(
+      false,
+    );
+  });
+
+  test("a new conversation refuses an agent the token no longer reaches", async () => {
+    const wf = new FakeWorkfloor();
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      config: {
+        cwd: "/tmp",
+        env: {},
+        mcpServers: {},
+        settings: {},
+        persist: true,
+        model: `${P}:removed-agent`,
+      },
+    });
+    events.length = 0;
+    await say(connection, "s1", "hello");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message: `${P}:removed-agent isn't one of the Workfloor agents your token reaches: pick another agent`,
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/conversations" && r.method === "POST")).toBe(
+      false,
+    );
   });
 
   test("a closed card is no longer watched", async () => {
