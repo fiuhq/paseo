@@ -178,9 +178,9 @@ export type Facing = "ahead" | "right" | "back" | "left";
 
 export function facing(yaw: number): Facing {
   const a = ((yaw % 360) + 360) % 360;
-  if (a < 45 || a >= 315) return "ahead";
+  if (a <= 45 || a >= 315) return "ahead";
   if (a < 135) return "right";
-  if (a < 225) return "back";
+  if (a <= 225) return "back";
   return "left";
 }
 

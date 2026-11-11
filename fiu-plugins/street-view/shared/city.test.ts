@@ -136,7 +136,7 @@ describe("walking", () => {
     });
   });
 
-  test("facing a store, forward goes in; facing an empty lot it stays", () => {
+  test("facing a store, forward goes in; facing an empty lot it stays; a diagonal walks on", () => {
     expect(step({ street: 0, slot: 1, yaw: -90 }, "forward", streets)).toEqual({
       kind: "enter",
       store: 2,
@@ -147,6 +147,11 @@ describe("walking", () => {
     });
     const empty = { street: 0, slot: 1, yaw: 90 };
     expect(step(empty, "forward", streets)).toEqual({ kind: "walk", camera: empty });
+    for (const yaw of [45, -45])
+      expect(step({ street: 0, slot: 0, yaw }, "forward", streets)).toEqual({
+        kind: "walk",
+        camera: { street: 0, slot: 1, yaw },
+      });
   });
 
   test("turns never wrap yaw, and facing reads it modulo a full turn", () => {
@@ -159,6 +164,13 @@ describe("walking", () => {
       "left",
       "left",
       "ahead",
+    ]);
+    expect([45, 315, -45, 135, 225].map(facing)).toEqual([
+      "ahead",
+      "ahead",
+      "ahead",
+      "back",
+      "back",
     ]);
   });
 
