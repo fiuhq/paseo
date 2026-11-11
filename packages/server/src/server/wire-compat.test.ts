@@ -70,6 +70,11 @@ class InMemoryAgentManager {
     });
   }
 
+  /** The agent is loaded, so a read never comes from a closed agent's held timeline. */
+  async peekTimeline() {
+    return null;
+  }
+
   getAgent() {
     return {
       id: "agent-1",
