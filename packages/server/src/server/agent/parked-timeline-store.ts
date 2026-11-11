@@ -103,16 +103,26 @@ export class ParkedTimelineStore extends InMemoryAgentTimelineStore {
     agentId: string,
     options?: AgentTimelineFetchOptions,
   ): Promise<AgentTimelineFetchResult | null> {
+    const reader = await this.reader(agentId);
+    return reader ? reader.fetch(agentId, options) : null;
+  }
+
+  /** This store when the timeline is in memory, else one built from its file for a single read. */
+  private async reader(agentId: string): Promise<InMemoryAgentTimelineStore | null> {
     await this.fileOps.get(agentId);
-    if (this.resident(agentId)) return this.fetch(agentId, options);
+    if (this.resident(agentId)) return this;
     const files = this.files(agentId);
     if (!files) return null;
     const parkedTimeline = await this.readJson(agentId, files.rows);
     if (!isParkedTimeline(parkedTimeline)) return null;
-    // Built for this one read and dropped with it.
     const reader = new InMemoryAgentTimelineStore();
     reader.initialize(agentId, seedOf(parkedTimeline));
-    return reader.fetch(agentId, options);
+    return reader;
+  }
+
+  override async peekLastAssistantMessage(agentId: string): Promise<string | null> {
+    const reader = await this.reader(agentId);
+    return reader ? reader.getLastAssistantMessage(agentId) : null;
   }
 
   protected override isReleased(agentId: string): boolean {

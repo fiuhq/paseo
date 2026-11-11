@@ -10,8 +10,15 @@ then replaces the previous tool state or merges into the current text item. Inte
 are never retained for history or catch-up. Provider history is the durable transcript authority
 and rebuilds the projection when an agent resumes.
 
-Pagination bounds each read, not total resident history. Active and idle agents retain their
-projected transcript; archive releases it and later history reads rebuild it from the provider.
+Pagination bounds each read, not total resident history. A loaded agent keeps its projected
+transcript in memory. When its runtime closes (idle cleanup, shutdown), the timeline store writes
+it once to `$PASEO_HOME/parked-timelines/<agentId>.json` and drops it from memory: nothing is
+written while the agent runs, so there is no per-event rewrite (the write amplification behind
+#3647). Reads of that closed agent (timeline pages, the freshness check, the last message, the
+subagent list) are answered from the file without resuming its runtime. A resume reads it back
+with the same epoch and sequence and removes the file. Archive releases it, and a resume after a
+daemon restart still rebuilds from the provider, though the previous run's file keeps answering
+reads until then.
 Streaming overhead must remain proportional to the retained transcript. Cumulative text snapshots
 must be released after their deltas have been consumed.
 
@@ -114,7 +121,9 @@ counts as behind. `current` means the agent is loaded, the epoch matches, and th
 head; it completes catch-up with no fetch. The response carries the agent row for each `current`
 chat, because the timeline fetch is also what refreshes that row and the replica cache stores only
 part of it. `behind`, or no entry, runs the bounded catch-up. The subscribe handler never loads an
-agent, so an agent the daemon has not loaded answers `behind` and resumes in that fetch. Hosts without `features.timelineFreshnessCheck` get no cursors and always fetch.
+agent. An agent that is not loaded answers from its held or parked timeline head (`current` comes
+with its stored row), and its catch-up fetch reads the same timeline without resuming it. Only an
+agent with no held timeline answers `behind` and resumes in that fetch. Hosts without `features.timelineFreshnessCheck` get no cursors and always fetch.
 
 Cached history remains readable during recovery. The chat shows Reconnecting to host while the host
 is offline and until a reconnected chat's check answers, so an unchanged chat never shows a second

@@ -56,6 +56,11 @@ export class InMemoryAgentTimelineStore {
     return this.has(agentId) ? this.fetch(agentId, options) : null;
   }
 
+  /** The last assistant message, read without loading its agent; null when there is none. */
+  async peekLastAssistantMessage(agentId: string): Promise<string | null> {
+    return this.has(agentId) ? this.getLastAssistantMessage(agentId) : null;
+  }
+
   /** Whether a released timeline is held outside memory until `load`. */
   protected isReleased(_agentId: string): boolean {
     return false;

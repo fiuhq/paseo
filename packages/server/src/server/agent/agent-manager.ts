@@ -1402,6 +1402,28 @@ export class AgentManager {
     return this.timelineStore.getRows(id);
   }
 
+  /** The timeline head of an agent that is not loaded, read without loading it; null when none is held. */
+  async peekTimelineHead(id: string): Promise<{ epoch: string; seq: number } | null> {
+    return this.getAgent(id) ? null : await this.timelineStore.peekHead(id);
+  }
+
+  /** A timeline page of an agent that is not loaded, read without loading it; null when none is held. */
+  async peekTimeline(
+    id: string,
+    options?: AgentTimelineFetchOptions,
+  ): Promise<AgentTimelineFetchResult | null> {
+    return this.getAgent(id) ? null : await this.timelineStore.peekFetch(id, options);
+  }
+
+  /**
+   * The provider subagents of a parent that is not loaded but whose history this daemon run already
+   * holds, read without loading it; null when it must be loaded to answer.
+   */
+  peekProviderSubagents(parentAgentId: string): ProviderSubagentDescriptor[] | null {
+    if (this.getAgent(parentAgentId) || !this.timelineStore.has(parentAgentId)) return null;
+    return this.providerSubagents.list(parentAgentId);
+  }
+
   /** The timeline head of a loaded agent, or null when this agent is not loaded. Never loads. */
   getLoadedTimelineHead(id: string): { epoch: string; seq: number } | null {
     return this.getAgent(id) ? this.timelineStore.getHead(id) : null;
@@ -2170,6 +2192,8 @@ export class AgentManager {
     }
     this.detachPluginTools(agentId);
     this.emitClosedAgent(closedAgent, { persist: false });
+    // The timeline store may move a closed agent's timeline out of memory until it is read or resumed.
+    await this.timelineStore.release(agentId);
     this.logger.trace(
       {
         agentId,
@@ -3987,6 +4011,9 @@ export class AgentManager {
     if (!this.timelineStore.has(agentId)) {
       return (await this.durableTimelineStore?.getLastAssistantMessage(agentId)) ?? null;
     }
+    if (!this.getAgent(agentId) && !this.durableTimelineStore) {
+      return await this.timelineStore.peekLastAssistantMessage(agentId);
+    }
     return await this.getLastAssistantMessageFromStores(agentId);
   }
 
@@ -4398,6 +4425,7 @@ export class AgentManager {
       | undefined;
   }): Promise<{ durableTimelineHasRows: boolean }> {
     const { agentId, now, options } = params;
+    await this.timelineStore.load(agentId);
     const timelineAlreadyPrimed = this.timelineStore.has(agentId);
     const explicitTimelineSeed = buildExplicitTimelineSeedForRegister(now, options);
     const shouldSeedFromDurable =
