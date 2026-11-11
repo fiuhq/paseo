@@ -965,7 +965,7 @@ async function show(
     cwd: session.config.cwd,
     // A card on a stage the lane no longer lists still shows the agent that has it.
     models: [...(stages?.models ?? []), ...(live && !stages?.current ? [live] : [])],
-    lane: !!stages,
+    lane: card.lane !== lane(card.project),
   });
   if (current) session.model = current.id;
   return current;

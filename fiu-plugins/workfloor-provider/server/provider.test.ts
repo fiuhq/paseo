@@ -1470,6 +1470,33 @@ describe("the Workfloor provider", () => {
     expect(wf.requests.filter((r) => r.method === "POST")).toEqual([]);
   });
 
+  test("a lane card whose stages can't be read shows only the agent that has it, never the project's agents", async () => {
+    const wf = new FakeWorkfloor();
+    const real = wf.fetch;
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
+      String(input).includes("view=lane-stages")
+        ? new Response(JSON.stringify({ error: "Internal error" }), { status: 500 })
+        : real(input, init)) as typeof fetch;
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      agentName: "Testy",
+      lane: "normal-lane",
+      stage: "plan",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    events.length = 0;
+    await connection.send({ type: "catalog", requestId: "c-tmp", cwd: "/tmp" });
+    const e = await until(events, (e) => e.type === "catalog");
+    const labels = e.type === "catalog" ? e.catalog.models.map((m) => m.label) : [];
+    expect(labels).toEqual(["Testy"]);
+  });
+
   test("a new conversation in a card's workspace refuses the card's stage agent", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", {
