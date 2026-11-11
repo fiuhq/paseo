@@ -32,7 +32,9 @@ fiuhq/core (`packages/fiu-cli/paseo-plugin/server/board-registry.ts`) owns the f
 by fiu's own Paseo plugin (`fiu-cli`), whose bridge hears the board's frame wherever it runs.
 
 The client re-reads every 4 seconds while the page is visible (the SDK has no daemon-pushed subscription), one read
-for every open workspace. The plugin keeps no state.
+for every open workspace. The server holds the agents' workspaces and the workspace list in memory for a minute, and
+reads both again early when a board names an agent it has not seen; a new workspace with no board gets its header
+button within that minute. Nothing is kept on disk.
 
 ## Checking it
 
