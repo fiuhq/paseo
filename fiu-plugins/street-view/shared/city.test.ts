@@ -1,17 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  ENTRANCE,
-  ago,
-  cameraAt,
-  facing,
-  lotOf,
-  rows,
-  buildCity,
-  step,
-  storeFaced,
-  type AgentIn,
-  type WorkspaceIn,
-} from "./city";
+import { ago, lotOf, rows, buildCity, type AgentIn, type WorkspaceIn } from "./city";
 
 describe("street layout", () => {
   test("stores alternate sides, two per slot", () => {
@@ -108,85 +96,6 @@ describe("building the city", () => {
       ["done", "closed"],
     ]);
     expect(sessions[0]).toMatchObject({ name: "claude", model: "claude" });
-  });
-});
-
-describe("walking", () => {
-  const streets = [3, 0, 2];
-
-  test("forward walks down the street and stops at its last slot", () => {
-    let camera = ENTRANCE;
-    for (let i = 0; i < 5; i++) {
-      const next = step(camera, "forward", streets);
-      if (next.kind !== "walk") throw new Error("expected a walk");
-      camera = next.camera;
-    }
-    expect(camera.slot).toBe(1);
-    const back = step(camera, "back", streets);
-    expect(back).toEqual({ kind: "walk", camera: { ...camera, slot: 0 } });
-    const behind = step(ENTRANCE, "back", streets);
-    expect(behind).toEqual({ kind: "walk", camera: ENTRANCE });
-  });
-
-  test("facing back, forward walks toward the entrance", () => {
-    const camera = { street: 0, slot: 1, yaw: 180 };
-    expect(step(camera, "forward", streets)).toEqual({
-      kind: "walk",
-      camera: { ...camera, slot: 0 },
-    });
-  });
-
-  test("facing a store, forward goes in; facing an empty lot it stays; a diagonal walks on", () => {
-    expect(step({ street: 0, slot: 1, yaw: -90 }, "forward", streets)).toEqual({
-      kind: "enter",
-      store: 2,
-    });
-    expect(step({ street: 0, slot: 0, yaw: 90 }, "forward", streets)).toEqual({
-      kind: "enter",
-      store: 1,
-    });
-    const empty = { street: 0, slot: 1, yaw: 90 };
-    expect(step(empty, "forward", streets)).toEqual({ kind: "walk", camera: empty });
-    for (const yaw of [45, -45])
-      expect(step({ street: 0, slot: 0, yaw }, "forward", streets)).toEqual({
-        kind: "walk",
-        camera: { street: 0, slot: 1, yaw },
-      });
-  });
-
-  test("turns never wrap yaw, and facing reads it modulo a full turn", () => {
-    const turned = step({ ...ENTRANCE, yaw: 315 }, "turnRight", streets);
-    expect(turned).toEqual({ kind: "walk", camera: { ...ENTRANCE, yaw: 360 } });
-    expect([0, 90, 180, 270, -90, 400].map(facing)).toEqual([
-      "ahead",
-      "right",
-      "back",
-      "left",
-      "left",
-      "ahead",
-    ]);
-    expect([45, 315, -45, 135, 225].map(facing)).toEqual([
-      "ahead",
-      "ahead",
-      "ahead",
-      "back",
-      "back",
-    ]);
-  });
-
-  test("changing street lands at its entrance and stops at the ends", () => {
-    const camera = { street: 0, slot: 1, yaw: 90 };
-    expect(step(camera, "nextStreet", streets)).toEqual({
-      kind: "walk",
-      camera: { street: 1, slot: -1, yaw: 0 },
-    });
-    expect(step(camera, "prevStreet", streets)).toEqual({ kind: "walk", camera });
-  });
-
-  test("standing at a store faces it", () => {
-    const camera = cameraAt(2, 1);
-    expect(camera).toEqual({ street: 2, slot: 0, yaw: 90 });
-    expect(storeFaced(camera, streets[2] ?? 0)).toBe(1);
   });
 });
 

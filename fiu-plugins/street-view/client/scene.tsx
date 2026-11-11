@@ -1,23 +1,21 @@
-import { memo, type ReactNode } from "react";
+import { memo, type ReactNode, type Ref } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
   ago,
   lotOf,
   sessionCount,
   slotCount,
-  type Camera,
   type Session,
   type Store,
   type Street,
 } from "../shared/city";
 import { toneColor, type Theme } from "./city-data";
-import { plane, space, viewport } from "./web";
+import { BUG_HP, LOT, ROAD, ROOM, type Pos } from "../shared/walk";
+import { plane, space, sprite, viewport } from "./web";
 
 // World units are CSS pixels. Forward along a street is -z; up is -y.
 const PERSPECTIVE = 700;
 const EYE = 170;
-const LOT = 560;
-const ROAD = 720;
 const FACADE_W = 500;
 const FACADE_H = 380;
 const WINDOWS = 9;
@@ -27,9 +25,38 @@ function at(x: number, y: number, z: number, turn = 0, tilt = 0): string {
 }
 
 /** Puts the eye at a point looking along `yaw`: the world moves the opposite way. */
-function eye(z: number, yaw: number): string {
-  return `translateZ(${PERSPECTIVE}px) rotateY(${yaw}deg) translate3d(0px, ${EYE}px, ${-z}px)`;
+export function eyeTransform(pos: Pos): string {
+  return `translateZ(${PERSPECTIVE}px) rotateY(${pos.yaw}deg) translate3d(${-pos.x}px, ${EYE}px, ${pos.d}px)`;
 }
+
+const BUG = 150;
+
+/** Where a bug hovers, at eye level so the crosshair finds it (Doom aims up and down for you), turned to face the eye. */
+export function bugTransform(bug: { readonly x: number; readonly d: number }, yaw: number): string {
+  return `translate3d(${bug.x}px, ${-EYE}px, ${-bug.d}px) rotateY(${-yaw}deg)`;
+}
+
+/** A bug to shoot: the loop places it every frame, so its own style carries no position. */
+const BugSprite = memo(function BugSprite({
+  id,
+  hp,
+  register,
+}: {
+  id: string;
+  hp: number;
+  register(id: string, node: unknown): void;
+}) {
+  return (
+    <View
+      ref={(node) => register(id, node)}
+      testID={`street-view-bug-${id}`}
+      accessibilityLabel={hp > 0 ? `Bug, ${hp} of ${BUG_HP} health` : "Squashed bug"}
+      style={[sprite(BUG, BUG), { opacity: hp > 0 ? 0.55 + (0.45 * hp) / BUG_HP : 0.9 }]}
+    >
+      <Text style={{ fontSize: hp > 0 ? 110 : 90, lineHeight: 130 }}>{hp > 0 ? "👾" : "💥"}</Text>
+    </View>
+  );
+});
 
 function Viewport({ theme, children }: { theme: Theme; children: ReactNode }) {
   const style = viewport(PERSPECTIVE);
@@ -39,10 +66,12 @@ function Viewport({ theme, children }: { theme: Theme; children: ReactNode }) {
 function Window({
   session,
   theme,
+  cracked,
   onOpen,
 }: {
   session: Session;
   theme: Theme;
+  cracked: boolean;
   onOpen(session: Session): void;
 }) {
   const tone = session.tone;
@@ -76,6 +105,24 @@ function Window({
       >
         {session.name}
       </Text>
+      {cracked && (
+        <Text
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            textAlign: "center",
+            fontSize: 44,
+            lineHeight: 58,
+            color: theme.colors.foreground,
+            opacity: 0.7,
+          }}
+        >
+          ✳
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -87,6 +134,7 @@ const Facade = memo(function Facade({
   theme,
   faced,
   fog,
+  cracked,
   onEnter,
   onOpen,
 }: {
@@ -95,6 +143,7 @@ const Facade = memo(function Facade({
   theme: Theme;
   faced: boolean;
   fog: number;
+  cracked: ReadonlySet<string>;
   onEnter(index: number): void;
   onOpen(session: Session): void;
 }) {
@@ -154,7 +203,13 @@ const Facade = memo(function Facade({
         }}
       >
         {shown.map((session) => (
-          <Window key={session.id} session={session} theme={theme} onOpen={onOpen} />
+          <Window
+            key={session.id}
+            session={session}
+            theme={theme}
+            cracked={cracked.has(session.id)}
+            onOpen={onOpen}
+          />
         ))}
         {sessions.length > shown.length && (
           <View style={{ width: 146, height: 62, alignItems: "center", justifyContent: "center" }}>
@@ -212,20 +267,28 @@ function Road({ length, theme }: { length: number; theme: Theme }) {
 /** Standing on a street, looking along it. */
 export function Street3D({
   street,
-  camera,
+  world,
+  slot,
   faced,
   theme,
-  animate,
+  cracked,
+  bugs,
+  register,
   hasNext,
   onEnter,
   onOpen,
   onNextStreet,
 }: {
   street: Street;
-  camera: Camera;
+  /** The moving world: the frame loop sets its transform to put the eye where the walker is. */
+  world: Ref<View>;
+  /** The slot the walker is level with, for the haze on far stores. */
+  slot: number;
   faced: number | null;
   theme: Theme;
-  animate: boolean;
+  cracked: ReadonlySet<string>;
+  bugs: readonly { readonly id: string; readonly hp: number }[];
+  register(id: string, node: unknown): void;
   hasNext: boolean;
   onEnter(index: number): void;
   onOpen(session: Session): void;
@@ -236,10 +299,7 @@ export function Street3D({
   const end = -(slots * LOT + 120);
   return (
     <Viewport theme={theme}>
-      <View
-        testID="street-view-3d"
-        style={space(eye(-(camera.slot + 0.5) * LOT, camera.yaw), animate)}
-      >
+      <View ref={world} testID="street-view-3d" style={space()}>
         <View
           style={[
             plane(ROAD, length, at(0, 0, -(slots * LOT) / 2, 0, 90)),
@@ -273,10 +333,8 @@ export function Street3D({
             index={index}
             theme={theme}
             faced={faced === index}
-            fog={Math.max(
-              0.15,
-              Math.min(1, 1 - (Math.abs(lotOf(index).slot - camera.slot) - 3) * 0.2),
-            )}
+            fog={Math.max(0.15, Math.min(1, 1 - (Math.abs(lotOf(index).slot - slot) - 3) * 0.2))}
+            cracked={cracked}
             onEnter={onEnter}
             onOpen={onOpen}
           />
@@ -317,15 +375,15 @@ export function Street3D({
             </Pressable>
           )}
         </View>
+        {bugs.map((bug) => (
+          <BugSprite key={bug.id} id={bug.id} hp={bug.hp} register={register} />
+        ))}
       </View>
     </Viewport>
   );
 }
 
 // The room inside a store.
-const ROOM = 1200;
-/** The eye stands nearer the door so the far wall fits the view. */
-const ROOM_EYE = 150;
 const ROOM_H = 440;
 const CARDS_PER_WALL = 6;
 
@@ -405,16 +463,15 @@ function Wall({
 /** Inside a store: its sessions hang on the walls; the way out is behind you. */
 export function Interior3D({
   store,
-  yaw,
+  world,
   theme,
-  animate,
   onOpen,
   onExit,
 }: {
   store: Store;
-  yaw: number;
+  /** The moving world: the frame loop sets its transform to put the eye where the walker is. */
+  world: Ref<View>;
   theme: Theme;
-  animate: boolean;
   onOpen(session: Session): void;
   onExit(): void;
 }) {
@@ -424,7 +481,7 @@ export function Interior3D({
   const walls = [at(0, y, -half), at(half, y, 0, -90), at(-half, y, 0, 90)];
   return (
     <Viewport theme={theme}>
-      <View testID="street-view-interior" style={space(eye(ROOM_EYE, yaw), animate)}>
+      <View ref={world} testID="street-view-interior" style={space()}>
         <View
           style={[plane(ROOM, ROOM, at(0, 0, 0, 0, 90)), { backgroundColor: theme.colors.border }]}
         />
