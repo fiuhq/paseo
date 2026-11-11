@@ -161,86 +161,11 @@ export function rows<T>(stores: readonly T[]): readonly (readonly [T, T | undefi
   return out;
 }
 
-/**
- * Where the walker stands: a street, a slot along it (-1 is the entrance), and a yaw in degrees
- * (0 looks down the street, 90 looks at the right-hand stores). Yaw is never wrapped, so a turn
- * always animates the short way.
- */
+/** Where the walker is, as the map draws it: a street, the slot it is level with, where it looks. */
 export interface Camera {
   readonly street: number;
   readonly slot: number;
   readonly yaw: number;
-}
-
-export const ENTRANCE: Camera = { street: 0, slot: -1, yaw: 0 };
-
-export type Facing = "ahead" | "right" | "back" | "left";
-
-export function facing(yaw: number): Facing {
-  const a = ((yaw % 360) + 360) % 360;
-  if (a <= 45 || a >= 315) return "ahead";
-  if (a < 135) return "right";
-  if (a <= 225) return "back";
-  return "left";
-}
-
-/** The store index the walker is looking straight at, if any. */
-export function storeFaced(camera: Camera, stores: number): number | null {
-  const side = facing(camera.yaw);
-  if ((side !== "left" && side !== "right") || camera.slot < 0) return null;
-  const index = camera.slot * 2 + (side === "left" ? 0 : 1);
-  return index < stores ? index : null;
-}
-
-/** Stand in front of a store, facing it. */
-export function cameraAt(street: number, index: number): Camera {
-  const lot = lotOf(index);
-  return { street, slot: lot.slot, yaw: lot.side === "left" ? -90 : 90 };
-}
-
-export type Move = "forward" | "back" | "turnLeft" | "turnRight" | "nextStreet" | "prevStreet";
-
-export type Step =
-  | { readonly kind: "walk"; readonly camera: Camera }
-  | { readonly kind: "enter"; readonly store: number };
-
-const TURN = 45;
-
-/**
- * One key press. Forward walks the way the walker faces along the street; facing a store,
- * forward goes in. `streets` holds each street's store count.
- */
-export function step(camera: Camera, move: Move, streets: readonly number[]): Step {
-  const stores = streets[camera.street] ?? 0;
-  switch (move) {
-    case "turnLeft":
-      return { kind: "walk", camera: { ...camera, yaw: camera.yaw - TURN } };
-    case "turnRight":
-      return { kind: "walk", camera: { ...camera, yaw: camera.yaw + TURN } };
-    case "nextStreet":
-    case "prevStreet": {
-      const street = clamp(camera.street + (move === "nextStreet" ? 1 : -1), 0, streets.length - 1);
-      return {
-        kind: "walk",
-        camera: street === camera.street ? camera : { street, slot: -1, yaw: 0 },
-      };
-    }
-    case "forward":
-    case "back": {
-      const side = facing(camera.yaw);
-      if (move === "forward" && (side === "left" || side === "right")) {
-        const store = storeFaced(camera, stores);
-        return store === null ? { kind: "walk", camera } : { kind: "enter", store };
-      }
-      const along = (side === "back" ? -1 : 1) * (move === "back" ? -1 : 1);
-      const slot = clamp(camera.slot + along, -1, Math.max(slotCount(stores) - 1, -1));
-      return { kind: "walk", camera: { ...camera, slot } };
-    }
-  }
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
 export function sessionCount(count: number): string {
