@@ -2193,7 +2193,7 @@ export class AgentManager {
     this.detachPluginTools(agentId);
     this.emitClosedAgent(closedAgent, { persist: false });
     // The timeline store may move a closed agent's timeline out of memory until it is read or resumed.
-    await this.timelineStore.release(agentId);
+    if (!closedAgent.internal) await this.timelineStore.release(agentId);
     this.logger.trace(
       {
         agentId,

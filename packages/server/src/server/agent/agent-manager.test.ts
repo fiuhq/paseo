@@ -6,7 +6,7 @@ import {
 } from "./agent-messages/index.js";
 import { expect, test, vi, onTestFinished } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -21,6 +21,7 @@ import {
 } from "./agent-manager.js";
 import { AgentStorage, parseStoredAgentRecord } from "./agent-storage.js";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
+import { ParkedTimelineStore } from "./parked-timeline-store.js";
 import { limitAgentTimelineItemContent } from "./agent-timeline-content.js";
 import { buildStoredAgentPayload, toAgentPayload } from "./agent-projections.js";
 import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
@@ -8640,6 +8641,37 @@ test("workspace ownership does not turn an ordinary agent into a disposable help
   expect(await storage.get(agentId)).not.toBeNull();
   // Workspace ownership preserves ordinary agent lifecycle hooks.
   expect(beforeHookCalls).toContain("agent.create.before");
+});
+
+test("closing agents parks only public timelines on disk", async () => {
+  const publicId = "00000000-0000-4000-8000-000000000117";
+  const internalId = "00000000-0000-4000-8000-000000000118";
+  const ids = [publicId, internalId];
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const directory = join(workdir, "parked-timelines");
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: new AgentStorage(join(workdir, "agents"), logger),
+    timelineStore: new ParkedTimelineStore({ directory, logger }),
+    logger,
+    idFactory: () => ids.shift()!,
+  });
+  await manager.createAgent({ provider: "codex", cwd: workdir, title: "Public" }, undefined, {
+    workspaceId: "workspace",
+  });
+  await manager.createAgent(
+    { provider: "codex", cwd: workdir, title: "Internal", internal: true },
+    undefined,
+    { workspaceId: undefined },
+  );
+  await manager.appendTimelineItem(publicId, { type: "assistant_message", text: "public" });
+  await manager.appendTimelineItem(internalId, { type: "assistant_message", text: "internal" });
+
+  await manager.closeAgent(publicId);
+  await manager.closeAgent(internalId);
+
+  expect(readdirSync(directory).sort()).toEqual([`${publicId}.head.json`, `${publicId}.json`]);
 });
 
 test("global subscribers receive internal agent events only when they opt in", async () => {
