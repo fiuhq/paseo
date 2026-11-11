@@ -18,6 +18,7 @@ class FakeWorkfloor {
       state: string;
       messages: Array<Record<string, unknown>>;
       agent: string;
+      agentName?: string;
       /** The card's lane: a conversation's when unset. */
       lane?: string;
       /** The card's current agent session, once its lane moved it on to another stage's agent. */
@@ -127,7 +128,9 @@ class FakeWorkfloor {
       return json({
         title: c.title,
         sessionId: session,
-        sessions: [{ id: session, state: c.state, agentProfileId: c.agent }],
+        sessions: [
+          { id: session, state: c.state, agentProfileId: c.agent, agentName: c.agentName },
+        ],
         ...(c.pending ? { pendingAction: c.pending } : {}),
         messages: c.messages,
       });
@@ -444,7 +447,10 @@ describe("the Workfloor provider", () => {
       ["assistant_message", "Hello! You said: hello"],
     ]);
     expect(await until(events, (e) => e.type === "session.config")).toMatchObject({
-      config: { model: `${P}:${A}` },
+      config: {
+        model: `${P}:${A}`,
+        models: [{ id: `${P}:${A}`, label: "Buildy · codev", description: "claude-opus-5-5" }],
+      },
     });
   });
 
@@ -1291,6 +1297,7 @@ describe("the Workfloor provider", () => {
       title: "Server heap crashes",
       state: "WAITING_FOR_INPUT",
       agent: "test-agent",
+      agentName: "Testy",
       lane: "normal-lane",
       messages: [{ id: "m1", role: "agent", body: "E2E passed." }],
     });
@@ -1298,11 +1305,16 @@ describe("the Workfloor provider", () => {
     await open(connection, events, "s1", {
       persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
     });
+    // The picker names the card's own stage agent, never the project's conversation agents.
+    expect(await until(events, (e) => e.type === "session.config")).toMatchObject({
+      config: { model: `${P}:test-agent`, models: [{ id: `${P}:test-agent`, label: "Testy" }] },
+    });
     events.length = 0;
     // Workfloor moves the card to Release Readiness: its agent starts, works, writes and waits.
     const card = wf.cards.get("lane-card")!;
     card.session = "s-release";
     card.agent = "shippy";
+    card.agentName = "Shippy";
     card.state = "RUNNING";
     wf.changed();
     await Bun.sleep(30);
@@ -1313,14 +1325,17 @@ describe("the Workfloor provider", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "session.config",
-        config: expect.objectContaining({ model: `${P}:shippy` }),
+        config: expect.objectContaining({
+          model: `${P}:shippy`,
+          models: [{ id: `${P}:shippy`, label: "Shippy" }],
+        }),
       }),
     );
     const items = events.flatMap((e) => (e.type === "timeline.item" ? [e.item] : []));
     expect(items).toEqual([
       expect.objectContaining({
         type: "notification",
-        message: "The card moved on: shippy has it now",
+        message: "The card moved on: Shippy has it now",
       }),
       expect.objectContaining({ type: "assistant_message", text: "Release checks are next." }),
     ]);
