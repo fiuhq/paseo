@@ -6,7 +6,9 @@ import { addQuoteRpc } from "./shared/contracts";
 
 export default function contribute(client: PluginClientContext) {
   if (typeof client.addNewWorkspaceTitle !== "function") {
-    throw new Error("Daily quotes needs a Paseo build with New workspace titles");
+    throw new Error(
+      "Daily quotes needs a Paseo build with client.addNewWorkspaceTitle (New workspace titles)",
+    );
   }
   const removers = [
     client.addNewWorkspaceTitle({ id: "quote", Component: QuoteTitle }),

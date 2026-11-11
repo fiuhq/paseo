@@ -17,4 +17,5 @@ starts with the three quotes in `shared/quotes.ts`. A file that does not parse i
 overwritten.
 
 The title needs a Paseo build with `client.addNewWorkspaceTitle`; on an older build the plugin
-fails to load with a message saying so. `bun run verify` typechecks and runs the tests.
+fails to load with a message naming `client.addNewWorkspaceTitle`. `bun run verify` typechecks and
+runs the tests.
