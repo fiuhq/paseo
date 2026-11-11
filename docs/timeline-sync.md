@@ -14,11 +14,11 @@ Pagination bounds each read, not total resident history. A loaded agent keeps it
 transcript in memory. When its runtime closes (idle cleanup, shutdown), the timeline store writes
 it once to `$PASEO_HOME/parked-timelines/<agentId>.json` and drops it from memory: nothing is
 written while the agent runs, so there is no per-event rewrite (the write amplification behind
-#3647). Reads of that closed agent (timeline pages, the freshness check, the last message, the
-subagent list) are answered from the file without resuming its runtime. A resume reads it back
-with the same epoch and sequence and removes the file. Archive releases it, and a resume after a
-daemon restart still rebuilds from the provider, though the previous run's file keeps answering
-reads until then.
+#3647). The file also holds the agent's provider subagent list. Reads of that closed agent
+(timeline pages, the freshness check, the last message, the subagent list) are answered from the
+file without resuming its runtime. A resume reads it back with the same epoch and sequence and
+removes the file. Archiving removes it without writing one. A resume after a daemon restart still
+rebuilds from the provider, though the previous run's file keeps answering reads until then.
 Streaming overhead must remain proportional to the retained transcript. Cumulative text snapshots
 must be released after their deltas have been consumed.
 

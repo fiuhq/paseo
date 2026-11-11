@@ -8675,9 +8675,9 @@ export class Session {
     msg: Extract<SessionInboundMessage, { type: "agent.provider_subagents.list.request" }>,
   ): Promise<void> {
     try {
-      // A parent that is not loaded but whose history this run holds answers without resuming.
+      // A parent that is not loaded but whose history is held or parked answers without resuming.
       const held = (await this.readableStoredAgent(msg.parentAgentId))
-        ? this.agentManager.peekProviderSubagents(msg.parentAgentId)
+        ? await this.agentManager.peekProviderSubagents(msg.parentAgentId)
         : null;
       if (!held) {
         await ensureUnarchivedAgentLoaded(msg.parentAgentId, {

@@ -4,6 +4,7 @@ import type { Logger } from "pino";
 import { writeFileAtomic } from "../atomic-file.js";
 import {
   InMemoryAgentTimelineStore,
+  type ReleaseTimelineOptions,
   type SeedAgentTimelineOptions,
 } from "./agent-timeline-store.js";
 import type {
@@ -11,6 +12,7 @@ import type {
   AgentTimelineFetchResult,
   AgentTimelineRow,
 } from "./agent-timeline-store-types.js";
+import type { ProviderSubagentDescriptor } from "./provider-subagents/store.js";
 
 /**
  * Keeps the timeline of an agent whose runtime closed on disk instead of in daemon memory.
@@ -51,10 +53,11 @@ export class ParkedTimelineStore extends InMemoryAgentTimelineStore {
 
   override delete(agentId: string): void {
     super.delete(agentId);
+    this.loadedDuringRelease.delete(agentId);
     this.forget(agentId);
   }
 
-  override async release(agentId: string): Promise<void> {
+  override async release(agentId: string, options?: ReleaseTimelineOptions): Promise<void> {
     const state = this.resident(agentId);
     const files = this.files(agentId);
     if (!state || !files) return;
@@ -65,6 +68,7 @@ export class ParkedTimelineStore extends InMemoryAgentTimelineStore {
       epoch: head.epoch,
       nextSeq: head.seq + 1,
       rows: this.getRows(agentId),
+      providerSubagents: [...(options?.providerSubagents ?? [])],
     };
     await this.enqueue(agentId, async () => {
       try {
@@ -107,14 +111,21 @@ export class ParkedTimelineStore extends InMemoryAgentTimelineStore {
     return reader ? reader.fetch(agentId, options) : null;
   }
 
+  override async peekProviderSubagents(
+    agentId: string,
+  ): Promise<ProviderSubagentDescriptor[] | null> {
+    await this.fileOps.get(agentId);
+    if (this.resident(agentId)) return null;
+    const parkedTimeline = await this.readParked(agentId);
+    return parkedTimeline ? (parkedTimeline.providerSubagents ?? []) : null;
+  }
+
   /** This store when the timeline is in memory, else one built from its file for a single read. */
   private async reader(agentId: string): Promise<InMemoryAgentTimelineStore | null> {
     await this.fileOps.get(agentId);
     if (this.resident(agentId)) return this;
-    const files = this.files(agentId);
-    if (!files) return null;
-    const parkedTimeline = await this.readJson(agentId, files.rows);
-    if (!isParkedTimeline(parkedTimeline)) return null;
+    const parkedTimeline = await this.readParked(agentId);
+    if (!parkedTimeline) return null;
     const reader = new InMemoryAgentTimelineStore();
     reader.initialize(agentId, seedOf(parkedTimeline));
     return reader;
@@ -130,13 +141,12 @@ export class ParkedTimelineStore extends InMemoryAgentTimelineStore {
   }
 
   override async load(agentId: string): Promise<void> {
-    this.loadedDuringRelease.add(agentId);
+    if (this.fileOps.has(agentId)) this.loadedDuringRelease.add(agentId);
     await this.fileOps.get(agentId);
     if (!this.parked.has(agentId)) return;
-    const files = this.files(agentId);
-    const parkedTimeline = files ? await this.readJson(agentId, files.rows) : null;
+    const parkedTimeline = await this.readParked(agentId);
     if (!this.parked.has(agentId)) return;
-    if (isParkedTimeline(parkedTimeline)) {
+    if (parkedTimeline) {
       this.initialize(agentId, seedOf(parkedTimeline));
       return;
     }
@@ -144,6 +154,13 @@ export class ParkedTimelineStore extends InMemoryAgentTimelineStore {
     this.logger.error({ agentId }, "Failed to restore a parked agent timeline");
     this.forget(agentId);
     await this.fileOps.get(agentId);
+  }
+
+  /** The parked file of an agent; null when there is none or it is not a parked timeline. */
+  private async readParked(agentId: string): Promise<ParkedTimeline | null> {
+    const files = this.files(agentId);
+    const parkedTimeline = files ? await this.readJson(agentId, files.rows) : null;
+    return isParkedTimeline(parkedTimeline) ? parkedTimeline : null;
   }
 
   /** A parked file's JSON; null when there is none. A file that cannot be parsed is reported. */
@@ -213,6 +230,8 @@ interface ParkedTimeline {
   epoch: string;
   nextSeq: number;
   rows: AgentTimelineRow[];
+  /** Absent in a file written before subagents were parked; read as none. */
+  providerSubagents?: ProviderSubagentDescriptor[];
 }
 
 function seedOf(parkedTimeline: ParkedTimeline): SeedAgentTimelineOptions {
@@ -231,9 +250,15 @@ function isHead(value: unknown): value is { epoch: string; seq: number } {
 
 function isParkedTimeline(value: unknown): value is ParkedTimeline {
   if (typeof value !== "object" || value === null) return false;
-  const { version, epoch, nextSeq, rows } = value as Partial<Record<keyof ParkedTimeline, unknown>>;
+  const { version, epoch, nextSeq, rows, providerSubagents } = value as Partial<
+    Record<keyof ParkedTimeline, unknown>
+  >;
   return (
-    version === 1 && typeof epoch === "string" && typeof nextSeq === "number" && Array.isArray(rows)
+    version === 1 &&
+    typeof epoch === "string" &&
+    typeof nextSeq === "number" &&
+    Array.isArray(rows) &&
+    (providerSubagents === undefined || Array.isArray(providerSubagents))
   );
 }
 

@@ -425,12 +425,12 @@ export type AttentionState =
       attentionTimestamp: Date;
     };
 
-/** Private helpers and background agents report to their creator, never to the user. */
 interface CloseAgentRuntimeOptions {
   canClose?: () => boolean;
   releaseTimeline?: boolean;
 }
 
+/** Private helpers and background agents report to their creator, never to the user. */
 function raisesAttention(agent: Pick<ManagedAgent, "internal" | "background">): boolean {
   return !agent.internal && !agent.background;
 }
@@ -1421,12 +1421,13 @@ export class AgentManager {
   }
 
   /**
-   * The provider subagents of a parent that is not loaded but whose history this daemon run already
-   * holds, read without loading it; null when it must be loaded to answer.
+   * The provider subagents of a parent that is not loaded, from this run's memory or its parked
+   * timeline, read without loading it; null when it must be loaded to answer.
    */
-  peekProviderSubagents(parentAgentId: string): ProviderSubagentDescriptor[] | null {
-    if (this.getAgent(parentAgentId) || !this.timelineStore.has(parentAgentId)) return null;
-    return this.providerSubagents.list(parentAgentId);
+  async peekProviderSubagents(parentAgentId: string): Promise<ProviderSubagentDescriptor[] | null> {
+    if (this.getAgent(parentAgentId)) return null;
+    if (this.timelineStore.has(parentAgentId)) return this.providerSubagents.list(parentAgentId);
+    return await this.timelineStore.peekProviderSubagents(parentAgentId);
   }
 
   /** The timeline head of a loaded agent, or null when this agent is not loaded. Never loads. */
@@ -2202,7 +2203,11 @@ export class AgentManager {
     this.detachPluginTools(agentId);
     this.emitClosedAgent(closedAgent, { persist: false });
     // The timeline store may move a closed agent's timeline out of memory until it is read or resumed.
-    if (releaseTimeline && !closedAgent.internal) await this.timelineStore.release(agentId);
+    if (releaseTimeline && !closedAgent.internal) {
+      await this.timelineStore.release(agentId, {
+        providerSubagents: this.providerSubagents.list(agentId),
+      });
+    }
     this.logger.trace(
       {
         agentId,
@@ -4017,11 +4022,11 @@ export class AgentManager {
   }
 
   async getLastAssistantMessage(agentId: string): Promise<string | null> {
-    if (!this.timelineStore.has(agentId)) {
-      return (await this.durableTimelineStore?.getLastAssistantMessage(agentId)) ?? null;
-    }
     if (!this.getAgent(agentId) && !this.durableTimelineStore) {
       return await this.timelineStore.peekLastAssistantMessage(agentId);
+    }
+    if (!this.timelineStore.has(agentId)) {
+      return (await this.durableTimelineStore?.getLastAssistantMessage(agentId)) ?? null;
     }
     return await this.getLastAssistantMessageFromStores(agentId);
   }

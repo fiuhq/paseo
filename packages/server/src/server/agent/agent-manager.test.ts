@@ -8696,6 +8696,57 @@ test("archiving an agent never parks its timeline on disk", async () => {
   expect(existsSync(directory)).toBe(false);
 });
 
+test("a closed agent's last message and subagents are read from its parked file after a restart", async () => {
+  const agentId = "00000000-0000-4000-8000-000000000120";
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const directory = join(workdir, "parked-timelines");
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let activeSession: TestAgentSession | null = null;
+  class ProviderChildClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      activeSession = new TestAgentSession(config);
+      return activeSession;
+    }
+  }
+  const first = new AgentManager({
+    clients: { codex: new ProviderChildClient() },
+    registry: storage,
+    timelineStore: new ParkedTimelineStore({ directory, logger }),
+    logger,
+    idFactory: () => agentId,
+  });
+  await first.createAgent({ provider: "codex", cwd: workdir, title: "Parent" }, undefined, {
+    workspaceId: "workspace",
+  });
+  activeSession?.pushEvent({
+    type: "provider_subagent",
+    provider: "codex",
+    event: { type: "upsert", id: "child", title: "Child", status: "completed" },
+  });
+  await vi.waitFor(() => expect(first.listProviderSubagents(agentId)).toHaveLength(1));
+  await first.appendTimelineItem(agentId, { type: "assistant_message", text: "done" });
+  await first.closeAgent(agentId);
+
+  const restarted = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    timelineStore: new ParkedTimelineStore({ directory, logger }),
+    logger,
+  });
+
+  expect(await restarted.peekProviderSubagents(agentId)).toEqual([
+    expect.objectContaining({
+      id: "child",
+      parentAgentId: agentId,
+      title: "Child",
+      status: "completed",
+    }),
+  ]);
+  expect(await restarted.getLastAssistantMessage(agentId)).toBe("done");
+  expect(restarted.getAgent(agentId)).toBeNull();
+});
+
 test("global subscribers receive internal agent events only when they opt in", async () => {
   const internalAgentId = "00000000-0000-4000-8000-000000000116";
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));

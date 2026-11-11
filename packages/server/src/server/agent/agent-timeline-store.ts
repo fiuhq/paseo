@@ -7,6 +7,12 @@ import type {
   AgentTimelineFetchResult,
   AgentTimelineRow,
 } from "./agent-timeline-store-types.js";
+import type { ProviderSubagentDescriptor } from "./provider-subagents/store.js";
+
+/** What a closed agent leaves besides its timeline, kept with it while it is released. */
+export interface ReleaseTimelineOptions {
+  providerSubagents?: readonly ProviderSubagentDescriptor[];
+}
 
 export interface SeedAgentTimelineOptions {
   items?: readonly AgentTimelineItem[];
@@ -38,7 +44,7 @@ export class InMemoryAgentTimelineStore {
    * Called when an agent's runtime closes. This store keeps the timeline in memory; a subclass may
    * move it elsewhere, and `load` brings it back.
    */
-  async release(_agentId: string): Promise<void> {}
+  async release(_agentId: string, _options?: ReleaseTimelineOptions): Promise<void> {}
 
   /** Brings a released timeline back into memory. Await it before reading a closed agent's timeline. */
   async load(_agentId: string): Promise<void> {}
@@ -59,6 +65,11 @@ export class InMemoryAgentTimelineStore {
   /** The last assistant message, read without loading its agent; null when there is none. */
   async peekLastAssistantMessage(agentId: string): Promise<string | null> {
     return this.has(agentId) ? this.getLastAssistantMessage(agentId) : null;
+  }
+
+  /** The provider subagents released with a timeline this store no longer holds; null when none. */
+  async peekProviderSubagents(_agentId: string): Promise<ProviderSubagentDescriptor[] | null> {
+    return null;
   }
 
   /** Whether a released timeline is held outside memory until `load`. */

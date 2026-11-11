@@ -162,6 +162,17 @@ describe("ParkedTimelineStore", () => {
     expect(await readdir(directory)).toEqual([]);
   });
 
+  it("reads a parked file without a subagent list as no subagents, and no file as nothing held", async () => {
+    const store = new ParkedTimelineStore({ directory, logger });
+    expect(await store.peekProviderSubagents(AGENT)).toBeNull();
+    await writeFile(
+      path.join(directory, `${AGENT}.json`),
+      JSON.stringify({ version: 1, epoch: "epoch-1", nextSeq: 1, rows: [] }),
+    );
+
+    expect(await store.peekProviderSubagents(AGENT)).toEqual([]);
+  });
+
   it("removes the file when the timeline is deleted", async () => {
     const store = new ParkedTimelineStore({ directory, logger });
     fillTimeline(store);
