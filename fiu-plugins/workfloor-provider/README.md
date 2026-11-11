@@ -8,8 +8,9 @@ your conversations, so you can open one you started in Workfloor.
 A card on an assembly lane opens the same way: paste its Workfloor link (the long one, or the
 short `/c/<card>` one Copy link gives) into Import's search, and the card is imported and opened
 at once. The agent takes the card's name, its history replays, your messages go to the agent of
-the stage it is on now (the next stage's agent, once the lane moves it on), and the agent's
-questions are asked in Paseo. A card whose stage has no agent yet starts one with your message, as
+the stage it is on now (the next stage's agent, once the lane moves it on), the model picker
+offers only that agent, by its Workfloor name (`Planny`), and the agent's questions are asked in
+Paseo. A card whose stage has no agent yet starts one with your message, as
 Workfloor's Start agent does, if you are its assignee or a project admin; send words first,
 pictures after. The lane still moves the card; a stage's go and an approval stay Workfloor's.
 While the card is open in Paseo, its lane is followed between your messages too: when the card
