@@ -37,10 +37,10 @@ loop or exactly-once turn guarantee.
 
 An unarchived agent may be `closed` without being deleted or archived. Closing releases its provider
 processes and subscriptions while retaining its Paseo identity, persistence handle, timeline,
-workspace, labels, title, usage, attention, timestamps, and parent relationship. Opening or prompting
-the agent runs through `ensureAgentLoaded()`, which resumes the durable provider session under the
-same Paseo agent ID. Provider history is not appended again when the canonical timeline is already
-primed.
+workspace, labels, title, usage, attention, timestamps, and parent relationship. Prompting the agent
+runs through `ensureAgentLoaded()`, which resumes the durable provider session under the same Paseo
+agent ID. Reading a closed agent's chat does not resume it; see [timeline sync](timeline-sync.md).
+Provider history is not appended again when the canonical timeline is already primed.
 
 Reload releases the old runtime before resuming its durable session: an idle provider process can
 still own an exclusive writer. A close failure retains that runtime for cleanup and blocks the

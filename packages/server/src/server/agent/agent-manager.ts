@@ -425,6 +425,11 @@ export type AttentionState =
       attentionTimestamp: Date;
     };
 
+interface CloseAgentRuntimeOptions {
+  canClose?: () => boolean;
+  releaseTimeline?: boolean;
+}
+
 /** Private helpers and background agents report to their creator, never to the user. */
 function raisesAttention(agent: Pick<ManagedAgent, "internal" | "background">): boolean {
   return !agent.internal && !agent.background;
@@ -1402,6 +1407,29 @@ export class AgentManager {
     return this.timelineStore.getRows(id);
   }
 
+  /** The timeline head of an agent that is not loaded, read without loading it; null when none is held. */
+  async peekTimelineHead(id: string): Promise<{ epoch: string; seq: number } | null> {
+    return this.getAgent(id) ? null : await this.timelineStore.peekHead(id);
+  }
+
+  /** A timeline page of an agent that is not loaded, read without loading it; null when none is held. */
+  async peekTimeline(
+    id: string,
+    options?: AgentTimelineFetchOptions,
+  ): Promise<AgentTimelineFetchResult | null> {
+    return this.getAgent(id) ? null : await this.timelineStore.peekFetch(id, options);
+  }
+
+  /**
+   * The provider subagents of a parent that is not loaded, from this run's memory or its parked
+   * timeline, read without loading it; null when it must be loaded to answer.
+   */
+  async peekProviderSubagents(parentAgentId: string): Promise<ProviderSubagentDescriptor[] | null> {
+    if (this.getAgent(parentAgentId)) return null;
+    if (this.timelineStore.has(parentAgentId)) return this.providerSubagents.list(parentAgentId);
+    return await this.timelineStore.peekProviderSubagents(parentAgentId);
+  }
+
   /** The timeline head of a loaded agent, or null when this agent is not loaded. Never loads. */
   getLoadedTimelineHead(id: string): { epoch: string; seq: number } | null {
     return this.getAgent(id) ? this.timelineStore.getHead(id) : null;
@@ -2090,7 +2118,7 @@ export class AgentManager {
           this.collectingRuntimes.add(agent.id);
           try {
             return await this.runLifecycleMutation(agent.id, () =>
-              this.closeAgentRuntime(agent.id, () => isEligible() && revalidate()),
+              this.closeAgentRuntime(agent.id, { canClose: () => isEligible() && revalidate() }),
             );
           } finally {
             this.collectingRuntimes.delete(agent.id);
@@ -2137,7 +2165,11 @@ export class AgentManager {
     return close;
   }
 
-  private async closeAgentRuntime(agentId: string, canClose?: () => boolean): Promise<boolean> {
+  private async closeAgentRuntime(
+    agentId: string,
+    options: CloseAgentRuntimeOptions = {},
+  ): Promise<boolean> {
+    const { canClose, releaseTimeline = true } = options;
     const agent = this.requireAgent(agentId);
     this.logger.trace(
       {
@@ -2170,6 +2202,12 @@ export class AgentManager {
     }
     this.detachPluginTools(agentId);
     this.emitClosedAgent(closedAgent, { persist: false });
+    // The timeline store may move a closed agent's timeline out of memory until it is read or resumed.
+    if (releaseTimeline && !closedAgent.internal) {
+      await this.timelineStore.release(agentId, {
+        providerSubagents: this.providerSubagents.list(agentId),
+      });
+    }
     this.logger.trace(
       {
         agentId,
@@ -2219,7 +2257,7 @@ export class AgentManager {
         toStoredAgentRecord(agent, { title: agent.config.title ?? null, internal: true }),
         { archivedAt, updatedAt: archivedAt },
       );
-      await this.closeAgentRuntime(agentId);
+      await this.closeAgentRuntime(agentId, { releaseTimeline: false });
       await this.deleteAgentState(agentId);
       this.retireInternalAgent({ record, lastMessage });
       await this.cascadeArchiveChildren(record);
@@ -2239,7 +2277,7 @@ export class AgentManager {
 
     const { archivedAt } = await this.markRecordArchived(stored, requestedArchivedAt);
     agent.updatedAt = new Date(archivedAt);
-    await this.closeAgentRuntime(agentId);
+    await this.closeAgentRuntime(agentId, { releaseTimeline: false });
     await this.syncNativeArchiveState(stored.provider, stored.persistence, "archive");
     this.discardRetainedAgentState(agentId);
 
@@ -3984,6 +4022,11 @@ export class AgentManager {
   }
 
   async getLastAssistantMessage(agentId: string): Promise<string | null> {
+    if (!this.getAgent(agentId) && !this.durableTimelineStore) {
+      return this.getLastAssistantMessageFromTimeline(
+        (await this.timelineStore.peekItems(agentId)) ?? [],
+      );
+    }
     if (!this.timelineStore.has(agentId)) {
       return (await this.durableTimelineStore?.getLastAssistantMessage(agentId)) ?? null;
     }
@@ -4398,6 +4441,7 @@ export class AgentManager {
       | undefined;
   }): Promise<{ durableTimelineHasRows: boolean }> {
     const { agentId, now, options } = params;
+    await this.timelineStore.load(agentId);
     const timelineAlreadyPrimed = this.timelineStore.has(agentId);
     const explicitTimelineSeed = buildExplicitTimelineSeedForRegister(now, options);
     const shouldSeedFromDurable =

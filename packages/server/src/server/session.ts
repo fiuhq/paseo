@@ -157,6 +157,7 @@ import {
   type AgentSessionConfig,
 } from "./agent/agent-sdk-types.js";
 import type { StoredAgentRecord } from "./agent/agent-storage.js";
+import type { AgentTimelineFetchOptions } from "./agent/agent-timeline-store-types.js";
 import type { AgentStorage } from "./agent/agent-storage.js";
 import {
   ImportSessionsRequestError,
@@ -721,6 +722,12 @@ interface ClientActivity {
   lastActivityAt: Date;
   appVisible: boolean;
   appVisibilityChangedAt: Date;
+}
+
+/** An agent's row for a freshness answer, and its held head when it was read without loading it. */
+interface FreshnessSnapshot {
+  agentPayload: AgentSnapshotPayload;
+  unloadedHead: { epoch: string; seq: number } | null;
 }
 
 export class Session {
@@ -1409,15 +1416,36 @@ export class Session {
     this.refreshObservationProducers();
   }
 
+  /** A page of an agent that is not loaded, with its stored row; null when it must be loaded to read. */
+  private async readUnloadedTimeline(
+    agentId: string,
+    options: AgentTimelineFetchOptions,
+  ): Promise<{ agentPayload: AgentSnapshotPayload; timeline: AgentTimelineFetchResult } | null> {
+    const timeline = await this.agentManager.peekTimeline(agentId, options);
+    if (!timeline) return null;
+    const record = await this.readableStoredAgent(agentId);
+    return record ? { agentPayload: this.buildStoredAgentPayload(record), timeline } : null;
+  }
+
+  /** The stored record of an agent a client may read without loading it: not archived, not internal. */
+  private async readableStoredAgent(agentId: string): Promise<StoredAgentRecord | null> {
+    const record = await this.agentStorage.get(agentId);
+    return record && !record.archivedAt && !record.internal ? record : null;
+  }
+
   private compareTimelineCursors(
     agentIds: string[],
     cursors: Record<string, AgentTimelineCursor>,
+    unloadedHeads: ReadonlyMap<string, { epoch: string; seq: number }>,
   ): Record<string, "current" | "behind"> {
     const timelines: Record<string, "current" | "behind"> = {};
     for (const agentId of agentIds) {
       const cursor = cursors[agentId];
       if (!cursor) continue;
-      const head = this.agentManager.getLoadedTimelineHead(agentId);
+      // A head read while the agent was not loaded counts only if it is still not loaded.
+      const head =
+        this.agentManager.getLoadedTimelineHead(agentId) ??
+        (this.agentManager.getAgent(agentId) ? null : (unloadedHeads.get(agentId) ?? null));
       timelines[agentId] =
         head?.epoch === cursor.epoch && head.seq === cursor.seq ? "current" : "behind";
     }
@@ -1432,18 +1460,39 @@ export class Session {
     agents: Record<string, AgentSnapshotPayload>;
   }> {
     const snapshots = await Promise.all(
-      agentIds.flatMap((agentId) => {
-        const agent = cursors[agentId] ? this.agentManager.getAgent(agentId) : null;
-        return agent ? [this.buildAgentPayload(agent)] : [];
+      agentIds.flatMap((agentId): Promise<FreshnessSnapshot | null>[] => {
+        if (!cursors[agentId]) return [];
+        const agent = this.agentManager.getAgent(agentId);
+        if (!agent) return [this.readUnloadedHead(agentId)];
+        return [
+          this.buildAgentPayload(agent).then((agentPayload) => ({
+            agentPayload,
+            unloadedHead: null,
+          })),
+        ];
       }),
     );
+    const unloadedHeads = new Map<string, { epoch: string; seq: number }>();
+    for (const snapshot of snapshots) {
+      if (snapshot?.unloadedHead)
+        unloadedHeads.set(snapshot.agentPayload.id, snapshot.unloadedHead);
+    }
     // Compared after the await, so a row appended while reading the snapshots answers behind.
-    const timelines = this.compareTimelineCursors(agentIds, cursors);
+    const timelines = this.compareTimelineCursors(agentIds, cursors, unloadedHeads);
     const agents: Record<string, AgentSnapshotPayload> = {};
     for (const snapshot of snapshots) {
-      if (timelines[snapshot.id] === "current") agents[snapshot.id] = snapshot;
+      const payload = snapshot?.agentPayload;
+      if (payload && timelines[payload.id] === "current") agents[payload.id] = payload;
     }
     return { timelines, agents };
+  }
+
+  /** The held timeline head of an agent that is not loaded, with its stored row; null when none. */
+  private async readUnloadedHead(agentId: string): Promise<FreshnessSnapshot | null> {
+    const unloadedHead = await this.agentManager.peekTimelineHead(agentId);
+    if (!unloadedHead) return null;
+    const record = await this.readableStoredAgent(agentId);
+    return record ? { unloadedHead, agentPayload: this.buildStoredAgentPayload(record) } : null;
   }
 
   private async handleAgentTimelineSubscription(
@@ -8389,20 +8438,24 @@ export class Session {
       : undefined;
 
     try {
-      const snapshot = await ensureAgentLoaded(msg.agentId, {
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        logger: this.sessionLogger,
-        purpose: "history",
-      });
-      const agentPayload = await this.buildAgentPayload(snapshot);
-
-      const fetchedControlTimeline = this.agentManager.fetchTimeline(msg.agentId, {
-        direction,
-        cursor,
-        limit: msg.limit,
-        wholeTurns: msg.wholeTurns,
-      });
+      const fetchOptions = { direction, cursor, limit: msg.limit, wholeTurns: msg.wholeTurns };
+      // An agent that is not loaded is read from the timeline the daemon still holds, without
+      // resuming its runtime; only an agent with no held timeline is loaded to read its history.
+      const unloaded = await this.readUnloadedTimeline(msg.agentId, fetchOptions);
+      let agentPayload: AgentSnapshotPayload;
+      let fetchedControlTimeline: AgentTimelineFetchResult;
+      if (unloaded) {
+        ({ agentPayload, timeline: fetchedControlTimeline } = unloaded);
+      } else {
+        const snapshot = await ensureAgentLoaded(msg.agentId, {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          logger: this.sessionLogger,
+          purpose: "history",
+        });
+        agentPayload = await this.buildAgentPayload(snapshot);
+        fetchedControlTimeline = this.agentManager.fetchTimeline(msg.agentId, fetchOptions);
+      }
       const selectedTimeline = {
         timeline: fetchedControlTimeline,
         entries: fetchedControlTimeline.rows,
@@ -8444,7 +8497,7 @@ export class Session {
             ...(msg.mergeWindow === true ? { mergeWindow: true } : {}),
             entries: entries.map((entry) => {
               const payloadEntry = {
-                provider: snapshot.provider,
+                provider: agentPayload.provider,
                 item: entry.item,
                 timestamp: entry.timestamp,
                 seqStart: entry.seqStart,
@@ -8622,17 +8675,23 @@ export class Session {
     msg: Extract<SessionInboundMessage, { type: "agent.provider_subagents.list.request" }>,
   ): Promise<void> {
     try {
-      await ensureUnarchivedAgentLoaded(msg.parentAgentId, {
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        logger: this.sessionLogger,
-      });
+      // A parent that is not loaded but whose history is held or parked answers without resuming.
+      const held = (await this.readableStoredAgent(msg.parentAgentId))
+        ? await this.agentManager.peekProviderSubagents(msg.parentAgentId)
+        : null;
+      if (!held) {
+        await ensureUnarchivedAgentLoaded(msg.parentAgentId, {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          logger: this.sessionLogger,
+        });
+      }
       this.emit({
         type: "agent.provider_subagents.list.response",
         payload: {
           requestId: msg.requestId,
           parentAgentId: msg.parentAgentId,
-          subagents: this.agentManager.listProviderSubagents(msg.parentAgentId),
+          subagents: held ?? this.agentManager.listProviderSubagents(msg.parentAgentId),
           error: null,
         },
       });

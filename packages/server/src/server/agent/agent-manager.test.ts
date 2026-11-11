@@ -6,7 +6,7 @@ import {
 } from "./agent-messages/index.js";
 import { expect, test, vi, onTestFinished } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -21,6 +21,7 @@ import {
 } from "./agent-manager.js";
 import { AgentStorage, parseStoredAgentRecord } from "./agent-storage.js";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
+import { ParkedTimelineStore } from "./parked-timeline-store.js";
 import { limitAgentTimelineItemContent } from "./agent-timeline-content.js";
 import { buildStoredAgentPayload, toAgentPayload } from "./agent-projections.js";
 import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
@@ -8640,6 +8641,148 @@ test("workspace ownership does not turn an ordinary agent into a disposable help
   expect(await storage.get(agentId)).not.toBeNull();
   // Workspace ownership preserves ordinary agent lifecycle hooks.
   expect(beforeHookCalls).toContain("agent.create.before");
+});
+
+test("closing agents parks only public timelines on disk", async () => {
+  const publicId = "00000000-0000-4000-8000-000000000117";
+  const internalId = "00000000-0000-4000-8000-000000000118";
+  const ids = [publicId, internalId];
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const directory = join(workdir, "parked-timelines");
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: new AgentStorage(join(workdir, "agents"), logger),
+    timelineStore: new ParkedTimelineStore({ directory, logger }),
+    logger,
+    idFactory: () => ids.shift()!,
+  });
+  await manager.createAgent({ provider: "codex", cwd: workdir, title: "Public" }, undefined, {
+    workspaceId: "workspace",
+  });
+  await manager.createAgent(
+    { provider: "codex", cwd: workdir, title: "Internal", internal: true },
+    undefined,
+    { workspaceId: undefined },
+  );
+  await manager.appendTimelineItem(publicId, { type: "assistant_message", text: "public" });
+  await manager.appendTimelineItem(internalId, { type: "assistant_message", text: "internal" });
+
+  await manager.closeAgent(publicId);
+  await manager.closeAgent(internalId);
+
+  expect(readdirSync(directory).sort()).toEqual([`${publicId}.head.json`, `${publicId}.json`]);
+});
+
+test("archiving an agent never parks its timeline on disk", async () => {
+  const agentId = "00000000-0000-4000-8000-000000000119";
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const directory = join(workdir, "parked-timelines");
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: new AgentStorage(join(workdir, "agents"), logger),
+    timelineStore: new ParkedTimelineStore({ directory, logger }),
+    logger,
+    idFactory: () => agentId,
+  });
+  await manager.createAgent({ provider: "codex", cwd: workdir, title: "Archived" }, undefined, {
+    workspaceId: "workspace",
+  });
+  await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "archived" });
+
+  await manager.archiveAgent(agentId);
+
+  expect(existsSync(directory)).toBe(false);
+});
+
+test("a closed agent's last message and subagents are read from its parked file after a restart", async () => {
+  const agentId = "00000000-0000-4000-8000-000000000120";
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const directory = join(workdir, "parked-timelines");
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let activeSession: TestAgentSession | null = null;
+  class ProviderChildClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      activeSession = new TestAgentSession(config);
+      return activeSession;
+    }
+  }
+  const first = new AgentManager({
+    clients: { codex: new ProviderChildClient() },
+    registry: storage,
+    timelineStore: new ParkedTimelineStore({ directory, logger }),
+    logger,
+    idFactory: () => agentId,
+  });
+  await first.createAgent({ provider: "codex", cwd: workdir, title: "Parent" }, undefined, {
+    workspaceId: "workspace",
+  });
+  activeSession?.pushEvent({
+    type: "provider_subagent",
+    provider: "codex",
+    event: { type: "upsert", id: "child", title: "Child", status: "completed" },
+  });
+  await vi.waitFor(() => expect(first.listProviderSubagents(agentId)).toHaveLength(1));
+  await first.appendTimelineItem(agentId, { type: "assistant_message", text: "done" });
+  await first.closeAgent(agentId);
+
+  const restarted = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    timelineStore: new ParkedTimelineStore({ directory, logger }),
+    logger,
+  });
+
+  expect(await restarted.peekProviderSubagents(agentId)).toEqual([
+    expect.objectContaining({
+      id: "child",
+      parentAgentId: agentId,
+      title: "Child",
+      status: "completed",
+    }),
+  ]);
+  expect(await restarted.getLastAssistantMessage(agentId)).toBe("done");
+  expect(restarted.getAgent(agentId)).toBeNull();
+});
+
+test("a closed agent's last message joins adjacent assistant messages as it did while loaded", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const stores = [
+    new InMemoryAgentTimelineStore(),
+    new ParkedTimelineStore({ directory: join(workdir, "parked-timelines"), logger }),
+  ];
+  for (const [index, timelineStore] of stores.entries()) {
+    const agentId = `00000000-0000-4000-8000-00000000012${index + 1}`;
+    const manager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: new AgentStorage(join(workdir, `agents-${index}`), logger),
+      timelineStore,
+      logger,
+      idFactory: () => agentId,
+    });
+    await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: "workspace",
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "A",
+      messageId: "m1",
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "B",
+      messageId: "m2",
+    });
+    expect(await manager.getLastAssistantMessage(agentId)).toBe("AB");
+
+    await manager.closeAgent(agentId);
+
+    expect(manager.getAgent(agentId)).toBeNull();
+    expect(await manager.getLastAssistantMessage(agentId)).toBe("AB");
+  }
 });
 
 test("global subscribers receive internal agent events only when they opt in", async () => {
