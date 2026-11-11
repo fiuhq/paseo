@@ -27,6 +27,7 @@ function installed(): InstalledPlugin {
     filePanels: [],
     composerItems: [],
     newWorkspaceItems: [],
+    newWorkspaceTitles: [],
     workspacePanels: [
       {
         id: "details",

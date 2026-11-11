@@ -10,7 +10,10 @@ import type {
   PluginComposerItemContribution,
   PluginComposerSelector,
 } from "./composer.js";
-import type { PluginNewWorkspaceItemContribution } from "./new-workspace.js";
+import type {
+  PluginNewWorkspaceItemContribution,
+  PluginNewWorkspaceTitleContribution,
+} from "./new-workspace.js";
 import type {
   PluginRpcContract,
   PluginSubscribeOptions,
@@ -251,6 +254,7 @@ export interface PluginClientContext extends PluginCommandCapabilities, PluginCl
   addAttachmentSource(contribution: PluginAttachmentSourceContribution<PluginText>): PluginCleanup;
   addComposerItem(contribution: PluginComposerItemContribution): PluginCleanup;
   addNewWorkspaceItem(contribution: PluginNewWorkspaceItemContribution): PluginCleanup;
+  addNewWorkspaceTitle(contribution: PluginNewWorkspaceTitleContribution): PluginCleanup;
   addTheme(contribution: PluginThemeContribution<PluginText>): PluginCleanup;
   addFilePanel(contribution: PluginFilePanelContribution<PluginText>): PluginCleanup;
   addTimelineTransformer<ItemType extends AgentTimelineItem["type"]>(

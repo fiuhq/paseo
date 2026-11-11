@@ -611,6 +611,35 @@ describe("evaluatePluginClientBundle", () => {
     ).toThrow("Composer item flag is not a component");
   });
 
+  it("collects New workspace titles and rejects duplicates and non-components", () => {
+    const plugin = evaluatePluginClientBundle(
+      "quotes",
+      bundle(`
+        function Title() { return null; }
+        const remove = plugin.addNewWorkspaceTitle({ id: "quote", Component: Title });
+        remove();
+        plugin.addNewWorkspaceTitle({ id: "quote", Component: Title });
+      `),
+    );
+    expect(plugin.newWorkspaceTitles.map((title) => title.id)).toEqual(["quote"]);
+    expect(() =>
+      evaluatePluginClientBundle(
+        "quotes",
+        bundle(`
+          function Title() { return null; }
+          plugin.addNewWorkspaceTitle({ id: "quote", Component: Title });
+          plugin.addNewWorkspaceTitle({ id: "quote", Component: Title });
+        `),
+      ),
+    ).toThrow("Duplicate New workspace title: quote");
+    expect(() =>
+      evaluatePluginClientBundle(
+        "quotes",
+        bundle(`plugin.addNewWorkspaceTitle({ id: "quote", Component: "nope" })`),
+      ),
+    ).toThrow("New workspace title quote is not a component");
+  });
+
   it("runs the client entry with the full runtime context", () => {
     const plugin = evaluatePluginClientBundle(
       "review",

@@ -50,6 +50,17 @@ export interface PluginNewWorkspaceItemContribution {
   Component: ComponentType<PluginNewWorkspaceItemProps>;
 }
 
+export interface PluginNewWorkspaceTitleProps extends PluginHostProps {}
+
+/**
+ * Replaces the New workspace screen's title on desktop. The first title registered on the host
+ * wins. `Component` is a function component; when it returns `null` the default title shows.
+ */
+export interface PluginNewWorkspaceTitleContribution {
+  id: string;
+  Component: ComponentType<PluginNewWorkspaceTitleProps>;
+}
+
 const PluginNewWorkspaceContext = createContext<PluginNewWorkspace | null>(null);
 
 export function PluginNewWorkspaceProvider({
