@@ -166,7 +166,15 @@ jobs:
         run: npx vitest run packages/website/src --bail=1
 
       - name: Install website test browsers
-        run: npx playwright install --with-deps chromium webkit
+        # The install (apt packages plus browser downloads) has hung for 40+ minutes after every check
+        # before it passed, holding the job open until the 6-hour default. Bound each attempt and retry.
+        timeout-minutes: 25
+        run: |
+          for attempt in 1 2 3; do
+            timeout 480 npx playwright install --with-deps chromium webkit && exit 0
+            echo "Playwright browser install attempt $attempt failed or timed out; retrying"
+          done
+          exit 1
 
       - name: Verify website mockups
         run: npm run test:e2e --workspace=@getpaseo/website
