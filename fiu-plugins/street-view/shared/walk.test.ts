@@ -166,7 +166,7 @@ describe("bugs", () => {
     }
   });
 
-    test("a bug crawls toward a walker it can see, stops at arm's length, and a dead one stays put", () => {
+  test("a bug crawls toward a walker it can see, stops at arm's length, and a dead one stays put", () => {
     const bug = { id: "b", x: 0, d: 1000, hp: BUG_HP };
     const walker = { x: 0, d: 0, yaw: 0 };
     expect(chase(bug, walker, second).d).toBeCloseTo(986);
