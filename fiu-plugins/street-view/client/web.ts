@@ -31,12 +31,15 @@ function typing(target: unknown): boolean {
 }
 
 function shown(node: unknown): boolean {
+  if (typeof node !== "object" || node === null) return false;
+  if (!("getClientRects" in node) || typeof node.getClientRects !== "function") return false;
+  const rects: unknown = node.getClientRects();
   return (
-    typeof node === "object" &&
-    node !== null &&
-    "getClientRects" in node &&
-    typeof node.getClientRects === "function" &&
-    (node.getClientRects() as { length: number }).length > 0
+    typeof rects === "object" &&
+    rects !== null &&
+    "length" in rects &&
+    typeof rects.length === "number" &&
+    rects.length > 0
   );
 }
 

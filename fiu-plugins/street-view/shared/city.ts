@@ -155,7 +155,9 @@ export function slotCount(stores: number): number {
 /** Pairs a street's stores into the rows a top-down map draws: left store, road, right store. */
 export function rows<T>(stores: readonly T[]): readonly (readonly [T, T | undefined])[] {
   const out: (readonly [T, T | undefined])[] = [];
-  for (let i = 0; i < stores.length; i += 2) out.push([stores[i] as T, stores[i + 1]]);
+  stores.forEach((store, i) => {
+    if (i % 2 === 0) out.push([store, stores[i + 1]]);
+  });
   return out;
 }
 
