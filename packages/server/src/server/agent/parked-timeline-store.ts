@@ -20,9 +20,10 @@ import type { ProviderSubagentDescriptor } from "./provider-subagents/store.js";
  *
  * An idle agent's runtime is closed after an hour, but its timeline stayed in memory, and reading it
  * resumed the whole agent. This store writes the timeline once, when the runtime closes, and drops it
- * from memory. A read of that agent (`peekHead`, `peekFetch`) parses the file for the one request and
- * keeps nothing. `load`, which a resume awaits, reads it back into memory and removes the file, so a
- * file always holds exactly what the agent had when it last stopped.
+ * from memory. A peek of that agent (`peekHead`, `peekFetch`, `peekItems`, `peekProviderSubagents`)
+ * parses the file for the one request and keeps nothing. `load`, which a resume awaits, reads it back
+ * into memory and removes the file, so a file always holds exactly what the agent had when it last
+ * stopped.
  *
  * Nothing is written while an agent runs: one file per release, never a rewrite per event (the write
  * amplification that took timelines off disk in getpaseo/paseo#3647).
