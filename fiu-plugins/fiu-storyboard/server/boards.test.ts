@@ -115,6 +115,41 @@ describe("HostBoards", () => {
     expect(workspaces["wks_abc123"]!.map((b) => [b.id, b.title])).toEqual([[own, "mockups"]]);
     expect(workspaceIds.sort()).toEqual(["wks_abc123", "wks_empty"]);
   });
+
+  it("reads the workspaces at most once a minute, and again with the agents for a new owner", async () => {
+    const registry = path.join(dir, "boards-f.json");
+    board("mockup-one-aaaaaaaa.html", "agent-1", registry, 1_000);
+    let now = 1_000_000;
+    let listings = 0;
+    let ids = ["ws-1"];
+    const boards = new HostBoards(
+      async () => [
+        { id: "agent-1", workspaceId: "ws-1" },
+        { id: "agent-new", workspaceId: "ws-2" },
+      ],
+      registry,
+      () => now,
+      async () => {
+        listings++;
+        return ids;
+      },
+    );
+    await boards.read();
+    await boards.read();
+    now += 59_000;
+    await boards.read();
+    expect(listings).toBe(1);
+
+    ids = ["ws-1", "ws-2"];
+    board("mockup-two-bbbbbbbb.html", "agent-new", registry, 2_000);
+    expect((await boards.read()).workspaceIds.sort()).toEqual(["ws-1", "ws-2"]);
+    expect(listings).toBe(2);
+
+    ids = ["ws-1", "ws-2", "ws-3"];
+    now += 60_000;
+    expect((await boards.read()).workspaceIds.sort()).toEqual(["ws-1", "ws-2", "ws-3"]);
+    expect(listings).toBe(3);
+  });
 });
 
 describe("the registry, read only", () => {

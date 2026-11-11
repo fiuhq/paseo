@@ -22,7 +22,7 @@ export interface AgentPlace {
   readonly workspaceId?: string | null;
 }
 
-/** How long the agents' workspaces are trusted before the daemon is asked again. */
+/** How long the agents' and workspaces' reads are trusted before the daemon is asked again. */
 const AGENTS_TTL_MS = 60_000;
 
 /** The largest page the panel loads; a bigger board stays a file tab. */
@@ -35,6 +35,11 @@ export class HostBoards {
     readonly workspaceOf: Map<string, string>;
     readonly asked: Set<string>;
   } | null = null;
+  /**
+   * Every workspace id as last read. Each listing makes the daemon read every workspace's state, and every open client
+   * reads the boards every few seconds, so the ids share the agents' cache instead of a listing per read.
+   */
+  private ids: { readonly at: number; readonly ids: readonly string[] } | null = null;
 
   constructor(
     /** Every agent of this daemon, archived ones too: a board outlives the agent that wrote it. */
@@ -64,7 +69,9 @@ export class HostBoards {
     );
     return {
       workspaces,
-      workspaceIds: [...new Set([...(await this.workspaceIds()), ...Object.keys(workspaces)])],
+      workspaceIds: [
+        ...new Set([...(await this.knownWorkspaceIds(unasked)), ...Object.keys(workspaces)]),
+      ],
     };
   }
 
@@ -80,6 +87,13 @@ export class HostBoards {
       );
     }
     return { html: readFileSync(file, "utf8"), modifiedAt: stat.mtimeMs };
+  }
+
+  /** Every workspace id; read again once the cache expires, or with the agents when a board names a new owner. */
+  private async knownWorkspaceIds(fresh: boolean): Promise<readonly string[]> {
+    if (!fresh && this.ids && this.now() - this.ids.at < AGENTS_TTL_MS) return this.ids.ids;
+    this.ids = { at: this.now(), ids: await this.workspaceIds() };
+    return this.ids.ids;
   }
 
   private async workspaces(
