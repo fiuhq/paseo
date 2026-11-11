@@ -87,14 +87,17 @@ export function roomArena(): Arena {
 /** Standing in a store's doorway, looking out at the street the way you came in. */
 export const ROOM_START: Pos = { x: 0, d: -ROOM / 2 + 200, yaw: 0 };
 
-/** Standing just outside a store, facing it. */
-export function outside(index: number): Pos {
+/**
+ * Standing just outside a store, facing it turned by `roomYaw`: leaving with the yaw you had in the
+ * room keeps you heading the way you were going, away from the door.
+ */
+export function outside(index: number, roomYaw = 0): Pos {
   const lot = lotOf(index);
   const left = lot.side === "left";
   return {
     x: left ? -ROAD / 2 + MARGIN + 90 : ROAD / 2 - MARGIN - 90,
     d: (lot.slot + 0.5) * LOT,
-    yaw: left ? -90 : 90,
+    yaw: (left ? -90 : 90) + roomYaw,
   };
 }
 
@@ -170,11 +173,11 @@ export function spawnBugs(street: string, stores: number): readonly Bug[] {
     return seed / 2 ** 32;
   };
   const count = Math.max(2, Math.ceil(stores / 3));
-  const length = Math.max(slotCount(stores), 1) * LOT;
+  const far = streetArena(stores, false, false).maxD;
   return Array.from({ length: count }, (_, i) => ({
     id: `${street}-${i}`,
     x: (random() - 0.5) * (ROAD - 2 * MARGIN),
-    d: LOT * 0.6 + random() * length,
+    d: LOT * 0.6 + random() * (far - LOT * 0.6),
     hp: BUG_HP,
   }));
 }

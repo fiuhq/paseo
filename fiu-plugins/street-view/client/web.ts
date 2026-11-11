@@ -134,6 +134,8 @@ export interface Controls {
 }
 
 export interface ControlHandlers {
+  /** False while the street is not on show (the 2D map): only `onKey` hears keys, and swipes scroll. */
+  active(): boolean;
   onFire(): void;
   onUse(): void;
   /** Any other key; return true if it was used. */
@@ -184,9 +186,10 @@ export function controls(root: NodeRef, handlers: ControlHandlers): Controls {
     )
       return;
     const key = event.key.toLowerCase();
-    if (MOVE_KEYS.has(key)) held.add(key);
-    else if (key === "f") handlers.onFire();
-    else if (key === " " || key === "e") handlers.onUse();
+    const playing = handlers.active();
+    if (playing && MOVE_KEYS.has(key)) held.add(key);
+    else if (playing && key === "f") handlers.onFire();
+    else if (playing && (key === " " || key === "e")) handlers.onUse();
     else if (!handlers.onKey(event.key)) return;
     event.preventDefault();
   };
@@ -195,7 +198,7 @@ export function controls(root: NodeRef, handlers: ControlHandlers): Controls {
   };
   const blur = () => held.clear();
   const wheel = (event: WheelEvent) => {
-    if (event.ctrlKey) return; // a pinch is the browser's zoom
+    if (event.ctrlKey || !handlers.active()) return; // a pinch is the browser's zoom
     event.preventDefault();
     turn += event.deltaX * SWIPE_TURN;
     walk += event.deltaY * SWIPE_WALK;

@@ -211,7 +211,7 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
     const { street: here, store: inside } = now.current;
     const index =
       here && inside ? here.stores.findIndex((candidate) => candidate.id === inside.id) : -1;
-    if (index >= 0) pos.current = outside(index);
+    if (index >= 0) pos.current = outside(index, pos.current.yaw);
     setInsideId(null);
   }, []);
   const changeStreet = useCallback((by: 1 | -1) => {
@@ -220,10 +220,11 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
     if (!target) return;
     setStreetKey(target.key);
     setInsideId(null);
+    const yaw = pos.current.yaw;
     pos.current =
       by === 1
-        ? ENTRANCE
-        : { x: 0, d: Math.max(slotCount(target.stores.length), 0.5) * LOT - 80, yaw: 180 };
+        ? { ...ENTRANCE, yaw }
+        : { x: 0, d: Math.max(slotCount(target.stores.length), 0.5) * LOT - 80, yaw };
   }, []);
   const onExit = useCallback(
     (through: Exit) => {
@@ -304,6 +305,7 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
   handlers.current = { fire, use, onKey };
   useEffect(() => {
     const live = controls(root, {
+      active: () => now.current.in3d,
       onFire: () => handlers.current.fire(),
       onUse: () => handlers.current.use(),
       onKey: (key) => handlers.current.onKey(key),
@@ -319,7 +321,10 @@ export function StreetView({ theme, layout, navigation }: PluginScreenProps) {
         streets: all,
         in3d: playing,
       } = now.current;
-      if (!playing || !here) return;
+      if (!playing || !here) {
+        live.take();
+        return;
+      }
       const held = live.held;
       const key = (name: string) => (held.has(name) ? 1 : 0);
       const swipe = live.take();

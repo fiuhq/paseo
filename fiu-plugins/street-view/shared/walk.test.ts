@@ -129,6 +129,18 @@ describe("walking", () => {
     ).toEqual({ kind: "store", index: 3 });
     expect([slotOf(-1), slotOf(0), slotOf(LOT * 1.5)]).toEqual([-1, 0, 1]);
   });
+
+  test("walking out of a store keeps heading away from its door, not back in", () => {
+    const left = hold({ ...still, forward: 1 }, 40, roomArena(), { ...ROOM_START, yaw: 180 });
+    expect(left.exit).toEqual({ kind: "out" });
+    const street = streetArena(4, false, false);
+    // Half a second's walk heads into the road; before, it went straight back through the door.
+    const ahead = hold({ ...still, forward: 1 }, 5, street, outside(3, left.pos.yaw));
+    expect(ahead.exit).toBeNull();
+    expect(ahead.pos.x).toBeLessThan(outside(3).x);
+    // Backing out of the room still faces in, so backing on keeps moving away from the door.
+    expect(hold({ ...still, forward: -1 }, 5, street, outside(3, 0)).exit).toBeNull();
+  });
 });
 
 describe("bugs", () => {
@@ -142,7 +154,19 @@ describe("bugs", () => {
     }
   });
 
-  test("a bug crawls toward a walker it can see, stops at arm's length, and a dead one stays put", () => {
+  test("every bug spawns inside the walkable street, in front of its end wall", () => {
+    for (const stores of [1, 2, 9, 30]) {
+      const arena = streetArena(stores, false, false);
+      for (const street of ["core", "app", "server", "relay", "website", "docs"]) {
+        for (const bug of spawnBugs(street, stores)) {
+          expect(bug.d).toBeGreaterThanOrEqual(arena.minD);
+          expect(bug.d).toBeLessThanOrEqual(arena.maxD);
+        }
+      }
+    }
+  });
+
+    test("a bug crawls toward a walker it can see, stops at arm's length, and a dead one stays put", () => {
     const bug = { id: "b", x: 0, d: 1000, hp: BUG_HP };
     const walker = { x: 0, d: 0, yaw: 0 };
     expect(chase(bug, walker, second).d).toBeCloseTo(986);
