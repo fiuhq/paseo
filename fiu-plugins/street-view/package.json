@@ -1,0 +1,11 @@
+{
+  "name": "@fiuhq/street-view",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paseo plugin: workspaces and their sessions as a walkable 3D street, with a 2D map",
+  "scripts": {
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "verify": "tsgo -p tsconfig.json --noEmit && bun test"
+  }
+}
