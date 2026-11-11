@@ -1,0 +1,9 @@
+{
+  "id": "daily-quotes",
+  "name": "Daily quotes",
+  "description": "Our own quote of the day as the New workspace headline, one list per host, managed in Settings or with /quote",
+  "requirements": {
+    "paseo": ">=0.15.4"
+  },
+  "checkout": "directory"
+}

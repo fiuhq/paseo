@@ -1,0 +1,11 @@
+{
+  "name": "@fiuhq/daily-quotes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paseo plugin: a daily quote as the New workspace headline",
+  "scripts": {
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "verify": "tsgo -p tsconfig.json --noEmit && bun test"
+  }
+}
