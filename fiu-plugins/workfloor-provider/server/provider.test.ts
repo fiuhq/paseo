@@ -1305,10 +1305,17 @@ describe("the Workfloor provider", () => {
     await open(connection, events, "s1", {
       persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
     });
-    // The picker names the card's own stage agent, never the project's conversation agents.
-    expect(await until(events, (e) => e.type === "session.config")).toMatchObject({
-      config: { model: `${P}:test-agent`, models: [{ id: `${P}:test-agent`, label: "Testy" }] },
-    });
+    // Paseo labels the model from the provider's catalog: the card's workspace offers its stage
+    // agent by name; the global catalog, where new conversations start, does not.
+    const catalogFor = async (cwd?: string) => {
+      events.length = 0;
+      await connection.send({ type: "catalog", requestId: `c-${cwd}`, ...(cwd ? { cwd } : {}) });
+      const e = await until(events, (e) => e.type === "catalog");
+      return e.type === "catalog" ? e.catalog.models.map((m) => m.label) : [];
+    };
+    expect(await catalogFor("/tmp")).toEqual(["Buildy · codev", "Testy"]);
+    expect(await catalogFor("/elsewhere")).toEqual(["Buildy · codev"]);
+    expect(await catalogFor()).toEqual(["Buildy · codev"]);
     events.length = 0;
     // Workfloor moves the card to Release Readiness: its agent starts, works, writes and waits.
     const card = wf.cards.get("lane-card")!;
@@ -1327,7 +1334,7 @@ describe("the Workfloor provider", () => {
         type: "session.config",
         config: expect.objectContaining({
           model: `${P}:shippy`,
-          models: [{ id: `${P}:shippy`, label: "Shippy" }],
+          models: expect.arrayContaining([{ id: `${P}:shippy`, label: "Shippy" }]),
         }),
       }),
     );
