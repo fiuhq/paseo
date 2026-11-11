@@ -91,6 +91,10 @@ export type QuestionReply =
  */
 export interface CardView {
   title?: string;
+  /** The stage the card is on. */
+  stageId?: string;
+  /** The name of the agent that has the card now. */
+  agent?: string;
   repository?: string;
   externalItems?: Array<{
     kind: string;
@@ -98,6 +102,12 @@ export interface CardView {
     number?: number;
     state?: string | null;
   }>;
+}
+/** A lane's stage, in the lane's order, and the agent profile it runs, if it runs one. */
+export interface LaneStage {
+  id: string;
+  name: string;
+  agentProfileId?: string;
 }
 /** A card by the IDs Workfloor's routes take: a conversation is a card on its project's Conversations lane. */
 export interface CardRef {
@@ -190,6 +200,18 @@ export class Workfloor {
     return this.request(
       `connection?${new URLSearchParams({ view: "agents", workspace: project, workflow: lane(project) })}`,
     );
+  }
+
+  /** Every agent the project offers its lanes, by profile id and name. */
+  projectAgents(project: string): Promise<Agent[]> {
+    return this.request(
+      `connection?${new URLSearchParams({ view: "agents", workspace: project })}`,
+    );
+  }
+
+  async laneStages(project: string, lane: string): Promise<LaneStage[]> {
+    const query = new URLSearchParams({ view: "lane-stages", workspace: project, workflow: lane });
+    return (await this.request<{ stages?: LaneStage[] }>(`connection?${query}`)).stages ?? [];
   }
 
   /** The project's lanes, by id; its Conversations lane is not among them. */

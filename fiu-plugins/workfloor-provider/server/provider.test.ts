@@ -21,6 +21,8 @@ class FakeWorkfloor {
       agentName?: string;
       /** The card's lane: a conversation's when unset. */
       lane?: string;
+      /** The lane stage the card is on, as its card view reads it. */
+      stage?: string;
       /** The card's current agent session, once its lane moved it on to another stage's agent. */
       session?: string;
       /** The card view's repository and linked items. */
@@ -192,7 +194,26 @@ class FakeWorkfloor {
       const c = this.cards.get(q.get("task")!);
       if (!c || q.get("workflow") !== (c.lane ?? `conversations:${P}`))
         return json({ error: "Not found" }, 404);
-      return json({ task: { id: q.get("task"), title: c.title, ...c.code } });
+      return json({
+        task: {
+          id: q.get("task"),
+          title: c.title,
+          stageId: c.stage,
+          agent: c.agentName,
+          ...c.code,
+        },
+      });
+    }
+    if (url.pathname === "/api/connection" && q.get("view") === "lane-stages") {
+      if (q.get("workflow") !== "normal-lane") return json({ error: "Not found" }, 404);
+      return json({
+        stages: [
+          { id: "plan", name: "Plan", agentProfileId: A },
+          { id: "build", name: "Build", agentProfileId: A },
+          { id: "holding", name: "Holding" },
+          { id: "release", name: "Release Readiness", agentProfileId: A },
+        ],
+      });
     }
     if (url.pathname === "/api/conversations" && init?.method === "POST") {
       const id = `card-${this.cards.size + 1}`;
@@ -1379,29 +1400,40 @@ describe("the Workfloor provider", () => {
       agent: "test-agent",
       agentName: "Testy",
       lane: "normal-lane",
+      stage: "plan",
       messages: [{ id: "m1", role: "agent", body: "E2E passed." }],
     });
-    const { connection, events } = await connect(wf);
+    const { provider, connection, events } = await connect(wf);
     await open(connection, events, "s1", {
       persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
     });
-    // Paseo labels the model from the provider's catalog: the card's workspace offers its stage
-    // agent by name; the global catalog, where new conversations start, does not.
+    // Paseo labels the model from the provider's catalog: the card's workspace lists the lane's
+    // stages, each with its agent, the card's own with the agent that has it; nowhere else does.
     const catalogFor = async (cwd?: string) => {
       events.length = 0;
       await connection.send({ type: "catalog", requestId: `c-${cwd}`, ...(cwd ? { cwd } : {}) });
       const e = await until(events, (e) => e.type === "catalog");
       return e.type === "catalog" ? e.catalog.models.map((m) => m.label) : [];
     };
-    expect(await catalogFor("/tmp")).toEqual(["Buildy · codev", "Testy"]);
+    expect(await catalogFor("/tmp")).toEqual([
+      "Plan Stage · Testy",
+      "Build Stage · Buildy",
+      "Release Readiness Stage · Buildy",
+    ]);
     expect(await catalogFor("/elsewhere")).toEqual(["Buildy · codev"]);
     expect(await catalogFor()).toEqual(["Buildy · codev"]);
+    const keyBefore = await provider.getCatalogCacheKey!({ scope: "workspace", cwd: "/tmp" });
+    expect(keyBefore).toBeString();
+    expect(await provider.getCatalogCacheKey!({ scope: "workspace", cwd: "/elsewhere" })).toBe(
+      undefined,
+    );
     events.length = 0;
     // Workfloor moves the card to Release Readiness: its agent starts, works, writes and waits.
     const card = wf.cards.get("lane-card")!;
     card.session = "s-release";
     card.agent = "shippy";
     card.agentName = "Shippy";
+    card.stage = "release";
     card.state = "RUNNING";
     wf.changed();
     await Bun.sleep(30);
@@ -1413,8 +1445,12 @@ describe("the Workfloor provider", () => {
       expect.objectContaining({
         type: "session.config",
         config: expect.objectContaining({
-          model: `${P}:shippy`,
-          models: expect.arrayContaining([{ id: `${P}:shippy`, label: "Shippy" }]),
+          model: `${P}:shippy@release`,
+          models: [
+            { id: `${P}:${A}@plan`, label: "Plan Stage · Buildy" },
+            { id: `${P}:${A}@build`, label: "Build Stage · Buildy" },
+            { id: `${P}:shippy@release`, label: "Release Readiness Stage · Shippy" },
+          ],
         }),
       }),
     );
@@ -1422,12 +1458,43 @@ describe("the Workfloor provider", () => {
     expect(items).toEqual([
       expect.objectContaining({
         type: "notification",
-        message: "The card moved on: Shippy has it now",
+        message: "The card moved on: Release Readiness Stage · Shippy has it now",
       }),
       expect.objectContaining({ type: "assistant_message", text: "Release checks are next." }),
     ]);
+    // The new rows get a new cache key, so Paseo reads the catalogue again.
+    const keyAfter = await provider.getCatalogCacheKey!({ scope: "workspace", cwd: "/tmp" });
+    expect(keyAfter).toBeString();
+    expect(keyAfter).not.toBe(keyBefore);
     // Nothing was sent to Workfloor: Paseo only followed the lane.
     expect(wf.requests.filter((r) => r.method === "POST")).toEqual([]);
+  });
+
+  test("a lane card whose stages can't be read shows only the agent that has it, never the project's agents", async () => {
+    const wf = new FakeWorkfloor();
+    const real = wf.fetch;
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
+      String(input).includes("view=lane-stages")
+        ? new Response(JSON.stringify({ error: "Internal error" }), { status: 500 })
+        : real(input, init)) as typeof fetch;
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "test-agent",
+      agentName: "Testy",
+      lane: "normal-lane",
+      stage: "plan",
+      messages: [],
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    events.length = 0;
+    await connection.send({ type: "catalog", requestId: "c-tmp", cwd: "/tmp" });
+    const e = await until(events, (e) => e.type === "catalog");
+    const labels = e.type === "catalog" ? e.catalog.models.map((m) => m.label) : [];
+    expect(labels).toEqual(["Testy"]);
   });
 
   test("a new conversation in a card's workspace refuses the card's stage agent", async () => {
@@ -1438,6 +1505,7 @@ describe("the Workfloor provider", () => {
       agent: "test-agent",
       agentName: "Testy",
       lane: "normal-lane",
+      stage: "plan",
       messages: [],
     });
     const { connection, events } = await connect(wf);
@@ -1451,7 +1519,7 @@ describe("the Workfloor provider", () => {
         mcpServers: {},
         settings: {},
         persist: true,
-        model: `${P}:test-agent`,
+        model: `${P}:test-agent@plan`,
       },
     });
     events.length = 0;
@@ -1461,7 +1529,7 @@ describe("the Workfloor provider", () => {
         type: "failed",
         error: {
           message:
-            "Testy is a lane card's stage agent: a new conversation needs one of the project's agents, such as Flux",
+            "Plan Stage · Testy is a lane card's stage agent: a new conversation needs one of the project's agents, such as Flux",
         },
       },
     });
