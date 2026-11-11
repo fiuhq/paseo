@@ -57,6 +57,16 @@ function parseModel(model: string | undefined): { project: string; agent: string
   return project && agent && !rest.length ? { project, agent } : undefined;
 }
 
+/** The card's current stage agent, named as Workfloor names it. */
+function cardAgent(card: Card, detail: Detail): ProviderModel | undefined {
+  const current = detail.sessions?.find((s) => s.id === detail.sessionId);
+  if (!current?.agentProfileId) return undefined;
+  return {
+    id: modelId(card.project, current.agentProfileId),
+    label: current.agentName || current.agentProfileId,
+  };
+}
+
 /** A conversation, or a card on one of the project's assembly lanes. */
 type Card = CardRef;
 interface Turn {
@@ -73,6 +83,8 @@ interface Session {
   config: ProviderSessionConfig;
   model?: string;
   card?: Card;
+  /** The card's current stage agent, the only model its picker offers. */
+  agent?: ProviderModel;
   /** Workfloor's agent session on the card, once it has one. */
   workfloorSession?: string;
   seen: Set<string>;
@@ -479,8 +491,8 @@ async function openSession(
     session.archived = archived;
     session.card = card;
     session.workfloorSession = detail.sessionId;
-    const agent = detail.sessions?.find((s) => s.id === detail.sessionId)?.agentProfileId;
-    if (agent) session.model = modelId(card.project, agent);
+    session.agent = cardAgent(card, detail);
+    if (session.agent) session.model = session.agent.id;
     history = detail.messages;
     for (const m of history) session.seen.add(m.id);
     title ||= detail.title;
@@ -522,7 +534,7 @@ async function openSession(
 async function configState(session: Session, state: State): Promise<ProviderConfigState> {
   return {
     ...(session.model ? { model: session.model } : {}),
-    models: await state.catalog(),
+    models: session.card ? (session.agent ? [session.agent] : []) : await state.catalog(),
     modes: [],
     thinkingOptions: [],
     settings: [],
@@ -852,18 +864,18 @@ function unwatch(session: Session): void {
 /** The card's agent now, which the lane moves on stage by stage, shown as the session's model. */
 async function track(session: Session, detail: Detail, state: State): Promise<void> {
   session.workfloorSession = detail.sessionId ?? session.workfloorSession;
-  const agent = detail.sessions?.find((s) => s.id === detail.sessionId)?.agentProfileId;
-  if (!agent || !session.card) return;
-  const model = modelId(session.card.project, agent);
-  if (model === session.model) return;
+  const card = session.card;
+  const agent = card && cardAgent(card, detail);
+  if (!card || !agent || agent.id === session.model) return;
   try {
-    const config = await configState({ ...session, model }, state);
+    const config = await configState({ ...session, model: agent.id, agent }, state);
     const moved = session.model !== undefined;
-    session.model = model;
+    session.model = agent.id;
+    session.agent = agent;
     state.emit({ type: "session.config", sessionId: session.id, config });
     // The lane moved the card on to another stage's agent: say so where the person reads.
     if (moved && detail.sessionId) {
-      const label = config.models.find((m) => m.id === model)?.label ?? agent;
+      const label = agent.label;
       state.emit({
         type: "timeline.item",
         sessionId: session.id,
@@ -876,7 +888,7 @@ async function track(session: Session, detail: Detail, state: State): Promise<vo
       });
     }
   } catch (error) {
-    console.error(`[workfloor-provider] showing ${session.card.card}'s agent: ${message(error)}`);
+    console.error(`[workfloor-provider] showing ${card.card}'s agent: ${message(error)}`);
   }
 }
 

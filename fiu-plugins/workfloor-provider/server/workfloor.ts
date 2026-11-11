@@ -39,7 +39,13 @@ export interface Message {
 export interface Detail {
   title?: string;
   sessionId?: string;
-  sessions?: Array<{ id: string; state: string; agentProfileId?: string; error?: string }>;
+  sessions?: Array<{
+    id: string;
+    state: string;
+    agentProfileId?: string;
+    agentName?: string;
+    error?: string;
+  }>;
   messages: Message[];
   pendingAction?: "question" | "permission";
 }
