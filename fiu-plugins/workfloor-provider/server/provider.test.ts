@@ -1390,6 +1390,34 @@ describe("the Workfloor provider", () => {
     );
   });
 
+  test("a new conversation refuses an agent the token no longer reaches", async () => {
+    const wf = new FakeWorkfloor();
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      config: {
+        cwd: "/tmp",
+        env: {},
+        mcpServers: {},
+        settings: {},
+        persist: true,
+        model: `${P}:removed-agent`,
+      },
+    });
+    events.length = 0;
+    await say(connection, "s1", "hello");
+    expect(await until(events, (e) => e.type === "session.prompt_result")).toMatchObject({
+      result: {
+        type: "failed",
+        error: {
+          message: `${P}:removed-agent isn't one of the Workfloor agents your token reaches: pick another agent`,
+        },
+      },
+    });
+    expect(wf.requests.some((r) => r.path === "/api/conversations" && r.method === "POST")).toBe(
+      false,
+    );
+  });
+
   test("a closed card is no longer watched", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", {
