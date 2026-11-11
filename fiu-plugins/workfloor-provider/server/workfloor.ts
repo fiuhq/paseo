@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { RequestBudget, retryAfterMs } from "./budget.js";
 
 /**
  * Workfloor's conversation routes, as its own page calls them, with a personal token (`wfpat_…`) as the
@@ -148,11 +149,27 @@ export function cardIdOfShortLink(text: string | undefined): string | undefined 
   }
 }
 
+/** A request Workfloor refused for the token's rate is sent this many times before its 429 is returned. */
+const REFUSED_ATTEMPTS = 4;
+
 export class Workfloor {
   constructor(
     private readonly auth: WorkfloorAuth,
     private readonly fetchImpl: typeof fetch = fetch,
+    /** The token's requests, shared by every client of this token. */
+    private readonly budget: RequestBudget,
   ) {}
+
+  /** Every call takes a slot of the token's budget; one Workfloor refused is asked again once it allows. */
+  private async call(url: string, init?: RequestInit): Promise<Response> {
+    for (let attempt = 1; ; attempt += 1) {
+      await this.budget.take();
+      const response = await this.fetchImpl(url, init);
+      if (response.status !== 429 || attempt >= REFUSED_ATTEMPTS) return response;
+      this.budget.refused(retryAfterMs(response.headers.get("retry-after")));
+      await response.body?.cancel().catch(() => undefined);
+    }
+  }
 
   /** The card's page in Workfloor, for a person to open. */
   link(ref: CardRef): string {
@@ -291,7 +308,7 @@ export class Workfloor {
       message: scope.message,
       id,
     });
-    const response = await this.fetchImpl(`${this.auth.url}/api/attachments/content?${query}`, {
+    const response = await this.call(`${this.auth.url}/api/attachments/content?${query}`, {
       headers: { authorization: `Bearer ${this.auth.token}` },
     });
     if (!response.ok)
@@ -324,7 +341,7 @@ export class Workfloor {
       task: scope.card,
       ...(scope.session ? { session: scope.session } : {}),
     });
-    const response = await this.fetchImpl(`${this.auth.url}/api/events?${query}`, {
+    const response = await this.call(`${this.auth.url}/api/events?${query}`, {
       headers: { authorization: `Bearer ${this.auth.token}`, accept: "text/event-stream" },
       signal,
     });
@@ -357,7 +374,7 @@ export class Workfloor {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetchImpl(`${this.auth.url}/api/${path}`, {
+    const response = await this.call(`${this.auth.url}/api/${path}`, {
       ...init,
       headers: {
         authorization: `Bearer ${this.auth.token}`,
