@@ -13,11 +13,13 @@ export interface Placement {
 }
 
 /**
- * Where an imported card works in Paseo: a worktree of its repository's Paseo project, checked out
- * on the card's open pull request. The one made before for this card (or any worktree already on
- * that pull request) is reused; a card with no open pull request works in the project's checkout.
- * No directory when Paseo has no project for the card's repository. A failure never throws: it
- * leaves the card in the project's checkout when the project was found, and says why.
+ * Where an imported card works in Paseo: its own worktree of its repository's Paseo project, named
+ * after the card. A card with an open pull request when first imported is checked out on it; one
+ * without branches off the default branch. A card keeps the workspace it was given on later pastes
+ * or imports, even once it has a pull request; a card with no workspace yet reuses a worktree
+ * already on its pull request. No directory when Paseo has no project for the card's repository. A
+ * failure never throws: it leaves the card in the project's checkout when the project was found,
+ * and says why.
  */
 export async function cardWorkspace(
   paseo: Paseo,
@@ -41,7 +43,6 @@ export async function cardWorkspace(
         item.number &&
         (item.repository ?? repo).toLowerCase() === repo,
     )?.number;
-    if (!pr) return { cwd: checkout };
     const key = `${ref.project}/${ref.card}`;
     const mine: Awaited<ReturnType<Paseo["workspaces"]["list"]>>["entries"] = [];
     for (let cursor: string | undefined; ; ) {
@@ -55,14 +56,15 @@ export async function cardWorkspace(
     }
     const existing =
       mine.find((w) => w.metadata?.[CARD_KEY] === key) ??
-      mine.find((w) => w.githubRuntime?.pullRequest?.number === pr);
+      (pr ? mine.find((w) => w.githubRuntime?.pullRequest?.number === pr) : undefined);
     if (existing?.workspaceDirectory) return { cwd: existing.workspaceDirectory };
     const created = await paseo.workspaces.create({
       source: {
         kind: "worktree",
         projectId: project.projectId,
-        action: "checkout",
-        checkoutSource: { kind: "change_request", number: pr },
+        ...(pr
+          ? { action: "checkout", checkoutSource: { kind: "change_request", number: pr } }
+          : {}),
       },
       ...(card.title ? { title: card.title } : {}),
       metadata: { [CARD_KEY]: key },
