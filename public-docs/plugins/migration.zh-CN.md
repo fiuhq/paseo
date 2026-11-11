@@ -75,6 +75,7 @@ my-plugin/
 | 旧客户端回调中的 `client.addComposerPill(pill)`                                               | `index.client.tsx` 或被导入的 `client/` 函数中的 `client.addComposerPill(pill)`                                        |
 | 新的编辑器项贡献                                                                              | `index.client.tsx` 中的 `client.addComposerItem(item)`;见[编辑器项](reference#composer-items)                          |
 | 新的“新建工作区”项贡献                                                                        | `index.client.tsx` 中的 `client.addNewWorkspaceItem(item)`;见[新建工作区项](reference#new-workspace-items)             |
+| 新的“新建工作区”标题贡献                                                                      | `index.client.tsx` 中的 `client.addNewWorkspaceTitle(title)`;见[新建工作区项](reference#new-workspace-items)           |
 | 新的标题栏贡献                                                                                | `client.addHeaderButton({ id, workspaceId, button })`                                                                  |
 | 旧根入口中的 `plugin.addAttachmentSource(source)`                                             | `index.client.tsx` 中的 `client.addAttachmentSource(source)`                                                           |
 | 新的设置界面贡献                                                                              | `index.client.tsx` 中的 `client.addSettingsScreen(screen)`；见[设置界面](reference#settings-screens)                   |
