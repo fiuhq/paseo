@@ -117,6 +117,8 @@ interface Snapshot {
 
 // How long a listing may show a config before re-checking it. Daemon edits drop the snapshot at once.
 const SNAPSHOT_REVALIDATE_MS = 2_000;
+// Above the roots a busy daemon lists: a listing that visits more roots than this evicts the next one it needs.
+const MAX_SNAPSHOTS = 1_024;
 
 /** Owns config admission, snapshots and daemon read/modify/write ordering for every consumer. */
 class ProjectConfigOwner {
@@ -171,7 +173,7 @@ class ProjectConfigOwner {
     this.snapshots.delete(root);
     this.snapshots.set(root, snapshot);
     // Worktrees come and go; retain only a bounded set of reusable snapshots.
-    if (this.snapshots.size > 256) this.snapshots.delete(this.snapshots.keys().next().value!);
+    if (this.snapshots.size > MAX_SNAPSHOTS) this.snapshots.delete(this.snapshots.keys().next().value!);
     return snapshot;
   }
 
@@ -193,7 +195,8 @@ class ProjectConfigOwner {
     const root = resolve(repoRoot);
     const cached = this.snapshots.get(root);
     if (!cached) return this.read(root);
-    if (Date.now() - cached.checkedAt >= SNAPSHOT_REVALIDATE_MS) {
+    const age = Date.now() - cached.checkedAt;
+    if (age < 0 || age >= SNAPSHOT_REVALIDATE_MS) {
       // A failed re-check keeps the last snapshot; the next listing tries again.
       void this.read(root).catch(() => undefined);
     }
