@@ -10,7 +10,7 @@ then checks out only the plugin's directory; an older daemon ignores the key and
 whole repository. Either way a plugin imports nothing from outside its own directory; tests may.
 
 Check a plugin with `bun install --frozen-lockfile && bun run verify` in its directory. A plugin
-that draws in the app (`better-sidebar`) declares no dependencies of its own: it typechecks against
+that draws in the app (`better-sidebar`, `street-view`) declares no dependencies of its own: it typechecks against
 this repository's plugin SDK, React and React Native, so run `npm ci` and build `@getpaseo/protocol`
 and `@getpaseo/plugin` at the repository root first. The `fiu plugins` workflow does both for every
 plugin on each change here.
