@@ -1,21 +1,16 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { View, type LayoutChangeEvent } from "react-native";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { withUnistyles } from "react-native-unistyles";
 import type { PluginHostProps } from "@getpaseo/plugin/client";
 import { pluginThemeMapping, usePluginItemHost } from "../item-host";
 import { PluginEnvironmentProvider } from "../popover";
 import { useInstalledPlugins } from "../registry";
 import { SurfaceErrorBoundary } from "../surface-error-boundary";
+import { titleCallerFor } from "./caller";
 import { firstNewWorkspaceTitle, type NewWorkspaceTitle } from "./model";
-
-function renderNothing() {
-  return null;
-}
 
 /**
  * The New workspace title: the host's first plugin title, or `children`, the default title. A
- * plugin title that draws nothing, or throws, shows the default; React cannot tell a null render
- * apart, so the host reads the plugin title's measured height instead.
+ * plugin title that renders nothing, or throws, shows the default.
  */
 export function PluginNewWorkspaceTitle({
   serverId,
@@ -31,11 +26,7 @@ export function PluginNewWorkspaceTitle({
   );
   if (!selected) return children;
   return (
-    <ThemedNewWorkspaceTitleHost
-      key={`${selected.plugin.id}\n${selected.title.id}`}
-      selected={selected}
-      uniProps={pluginThemeMapping}
-    >
+    <ThemedNewWorkspaceTitleHost selected={selected} uniProps={pluginThemeMapping}>
       {children}
     </ThemedNewWorkspaceTitleHost>
   );
@@ -51,27 +42,18 @@ function NewWorkspaceTitleHost({
   children: ReactNode;
 }) {
   const { environment, props } = usePluginItemHost(plugin, theme);
-  const [drawn, setDrawn] = useState(false);
-  const handleLayout = useCallback(
-    (event: LayoutChangeEvent) => setDrawn(event.nativeEvent.layout.height > 0),
-    [],
-  );
-  const { Component } = title;
+  const renderDefault = useCallback(() => children, [children]);
+  const Caller = titleCallerFor(title.Component);
   return (
-    <>
-      <View onLayout={handleLayout} testID="plugin-new-workspace-title">
-        <PluginEnvironmentProvider environment={environment}>
-          <SurfaceErrorBoundary
-            installation={plugin}
-            Surface={Component}
-            renderError={renderNothing}
-          >
-            <Component {...props} />
-          </SurfaceErrorBoundary>
-        </PluginEnvironmentProvider>
-      </View>
-      {drawn ? null : children}
-    </>
+    <PluginEnvironmentProvider environment={environment}>
+      <SurfaceErrorBoundary
+        installation={plugin}
+        Surface={title.Component}
+        renderError={renderDefault}
+      >
+        <Caller titleProps={props}>{children}</Caller>
+      </SurfaceErrorBoundary>
+    </PluginEnvironmentProvider>
   );
 }
 

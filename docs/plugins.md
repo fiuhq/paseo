@@ -805,12 +805,15 @@ composer's controls. `ComposerControlLockProvider` carries the screen's lock to 
 `plugins/item-host.tsx` is the host shared by composer and New workspace items.
 
 `addNewWorkspaceTitle` swaps the desktop title for the host's first plugin title
-(`plugins/new-workspace-title`). React cannot tell that a child rendered `null`, so the host
-measures it: the plugin title sits in a `View` whose `onLayout` height decides whether the default
-title still shows. A throwing title renders nothing behind its boundary and falls back the same
-way. Compact layout has no title, so the slot is desktop-only. The title shares the item host but
-not `PluginNewWorkspaceProvider`: it is not a setup field, and the title row stays
-`pointerEvents="none"`.
+(`plugins/new-workspace-title`). React cannot tell that a mounted child rendered `null`, so
+`titleCallerFor` calls a function component itself and shows the default title when the result is
+empty; the title's hooks run as the caller's. The caller opts out of the React Compiler with
+`"use no memo"`, since a cached call would skip those hooks, and each title component gets its own
+caller type so a reloaded plugin remounts. Do not measure layout instead: `onLayout` lags a frame,
+so both titles flash, and it never fires in a background tab, where `ResizeObserver` waits for a
+paint. A throwing title falls back through its error boundary. Compact layout has no title, so the
+slot is desktop-only. The title shares the item host but not `PluginNewWorkspaceProvider`: it is
+not a setup field, and the title row stays `pointerEvents="none"`.
 
 ## Contribute timeline items
 
