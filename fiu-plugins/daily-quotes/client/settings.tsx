@@ -18,7 +18,7 @@ import {
   type RemovedQuote,
   type RotationRow,
 } from "../shared/quotes";
-import { today, useQuotes, useStoreQuotes } from "./quotes";
+import { today, useQuotes, useRefetchQuotes, useStoreQuotes } from "./quotes";
 
 type Theme = PluginSurfaceProps["theme"];
 
@@ -123,6 +123,7 @@ function QuotesList({ state, theme }: { state: QuotesState; theme: Theme }) {
   const styles = useStyles(theme);
   const toast = useToast();
   const storeQuotes = useStoreQuotes();
+  const refetchQuotes = useRefetchQuotes();
   const add = useRpc(addQuoteRpc);
   const remove = useRpc(removeQuoteRpc);
   const restore = useRpc(restoreQuoteRpc);
@@ -140,11 +141,12 @@ function QuotesList({ state, theme }: { state: QuotesState; theme: Theme }) {
         await work();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : String(error));
+        refetchQuotes();
       } finally {
         setBusy(false);
       }
     },
-    [toast],
+    [refetchQuotes, toast],
   );
   const toggle = useCallback(
     (enabled: boolean) => run(async () => storeQuotes(await setEnabled({ enabled }))),

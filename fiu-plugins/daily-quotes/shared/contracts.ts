@@ -1,10 +1,9 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
-import { MAX_QUOTE_LENGTH, QuotesStateSchema } from "./quotes";
+import { QuotesStateSchema } from "./quotes";
 
 /** The calling client's local calendar day (`dayNumber`), so a change re-anchors on its today. */
 const Day = z.number().int();
-const Quote = z.string().max(MAX_QUOTE_LENGTH);
 
 export const listQuotes = defineRpc({
   name: "daily-quotes.list",
@@ -14,7 +13,7 @@ export const listQuotes = defineRpc({
 
 export const addQuoteRpc = defineRpc({
   name: "daily-quotes.add",
-  input: z.object({ text: Quote, day: Day }),
+  input: z.object({ text: z.string(), day: Day }),
   output: QuotesStateSchema,
 });
 
@@ -30,7 +29,7 @@ export const removeQuoteRpc = defineRpc({
 export const restoreQuoteRpc = defineRpc({
   name: "daily-quotes.restore",
   input: z.object({
-    removed: z.object({ index: z.number().int().min(0), text: Quote, wasToday: z.boolean() }),
+    removed: z.object({ index: z.number().int().min(0), text: z.string(), wasToday: z.boolean() }),
     day: Day,
   }),
   output: QuotesStateSchema,

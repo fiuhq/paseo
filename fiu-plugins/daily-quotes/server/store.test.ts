@@ -41,4 +41,14 @@ describe("QuotesStore", () => {
     await expect(new QuotesStore(file).read()).rejects.toThrow("is not a daily quotes list");
     expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ quotes: "not a list" });
   });
+
+  test("names the file when it is not JSON, and leaves it as written", async () => {
+    const file = quotesFile(await home());
+    await new QuotesStore(file, () => 100).read();
+    await writeFile(file, "{ not json");
+    await expect(new QuotesStore(file).read()).rejects.toThrow(
+      `${file} is not a daily quotes list:`,
+    );
+    expect(await readFile(file, "utf8")).toBe("{ not json");
+  });
 });

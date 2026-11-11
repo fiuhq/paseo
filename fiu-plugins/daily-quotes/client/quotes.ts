@@ -18,6 +18,15 @@ export function useStoreQuotes(): (state: QuotesState) => void {
   return useCallback((state) => queryClient.setQueryData(QUOTES_KEY, state), [queryClient]);
 }
 
+/** Refetches the host's list, so a screen a refused change found stale catches up. */
+export function useRefetchQuotes(): () => void {
+  const queryClient = useQueryClient();
+  return useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: QUOTES_KEY }),
+    [queryClient],
+  );
+}
+
 /** Today on this device's calendar. */
 export function today(): number {
   return dayNumber(new Date());

@@ -49,7 +49,12 @@ export class QuotesStore {
       await this.save(seeded);
       return seeded;
     }
-    const parsed = QuotesStateSchema.safeParse(JSON.parse(raw));
+    let parsed: ReturnType<typeof QuotesStateSchema.safeParse>;
+    try {
+      parsed = QuotesStateSchema.safeParse(JSON.parse(raw));
+    } catch (error) {
+      throw new Error(`${this.file} is not a daily quotes list: ${(error as Error).message}`);
+    }
     if (!parsed.success)
       throw new Error(`${this.file} is not a daily quotes list: ${parsed.error.message}`);
     return parsed.data;
