@@ -96,6 +96,8 @@ export type {
   PluginNewWorkspace,
   PluginNewWorkspaceItemContribution,
   PluginNewWorkspaceItemProps,
+  PluginNewWorkspaceTitleContribution,
+  PluginNewWorkspaceTitleProps,
 } from "./new-workspace.js";
 export { useRpc, useSubscription, type PluginSubscriptionState } from "./rpc-context.js";
 export type {

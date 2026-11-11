@@ -2139,6 +2139,12 @@ with a list in the composer's overflow sheet too.
 The [New workspace issues example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/new-workspace-issues)
 searches a fixed issue list from a daemon handler and sets the branch and metadata from the choice.
 
+`client.addNewWorkspaceTitle({ id, Component })` replaces the screen's "New workspace" title on
+desktop; a phone shows no title. The first title registered on the host wins, and a `Component`
+that renders `null`, or throws, leaves the default title in place, so return `null` while you have
+nothing to show. The title receives the same props as an item but is not a setup field:
+`useNewWorkspace()` throws there, and the title does not take presses.
+
 ## Composer pills
 
 `client.addComposerPill({ id, workspaceId, agentId, button })` uses the same [button descriptor](#button-descriptor)

@@ -48,6 +48,7 @@ function plugin(id: string, serverId: string, panels: PanelInput[]): InstalledPl
     commandCenterItems: [],
     composerItems: [],
     newWorkspaceItems: [],
+    newWorkspaceTitles: [],
     clientSlashCommands: [],
     attachmentSources: [],
     themes: [],

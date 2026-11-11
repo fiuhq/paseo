@@ -106,6 +106,7 @@ function plugin(onAgentSelect: AgentCommandItem["onSelect"]): InstalledPlugin {
     filePanels: [],
     composerItems: [],
     newWorkspaceItems: [],
+    newWorkspaceTitles: [],
     workspacePanels: [
       {
         id: "details",

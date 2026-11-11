@@ -40,6 +40,7 @@ function installed(
     filePanels: [],
     composerItems: [],
     newWorkspaceItems: [],
+    newWorkspaceTitles: [],
     workspacePanels: [],
     commandCenterItems: [],
     clientSlashCommands: [],

@@ -750,8 +750,9 @@ the sheet draws no plugin rows.
 
 ## Contribute New workspace items
 
-`addNewWorkspaceItem` mounts a plugin component on the New workspace screen. The public contract
-is the [New workspace items reference](../public-docs/plugins/reference.md#new-workspace-items).
+`addNewWorkspaceItem` mounts a plugin component on the New workspace screen, and
+`addNewWorkspaceTitle` replaces its title. The public contract is the
+[New workspace items reference](../public-docs/plugins/reference.md#new-workspace-items).
 
 The screen's choices that a plugin may change live in one plain store,
 `createNewWorkspaceSetup` (`packages/app/src/screens/new-workspace/setup-model.ts`): the base
@@ -802,6 +803,14 @@ composer's controls. `ComposerControlLockProvider` carries the screen's lock to 
 `PluginCombobox` (`plugins/react-native/composer-controls.tsx`) runs `search` through
 `useFetchQuery` with `dataShape: "list"`, which keeps the previous results while a newer query runs.
 `plugins/item-host.tsx` is the host shared by composer and New workspace items.
+
+`addNewWorkspaceTitle` swaps the desktop title for the host's first plugin title
+(`plugins/new-workspace-title`). React cannot tell that a child rendered `null`, so the host
+measures it: the plugin title sits in a `View` whose `onLayout` height decides whether the default
+title still shows. A throwing title renders nothing behind its boundary and falls back the same
+way. Compact layout has no title, so the slot is desktop-only. The title shares the item host but
+not `PluginNewWorkspaceProvider`: it is not a setup field, and the title row stays
+`pointerEvents="none"`.
 
 ## Contribute timeline items
 

@@ -59,6 +59,7 @@ function installation(
     filePanels: [],
     composerItems: [],
     newWorkspaceItems: [],
+    newWorkspaceTitles: [],
     workspacePanels: [],
     commandCenterItems: [],
     clientSlashCommands: [],

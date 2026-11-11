@@ -109,6 +109,7 @@ import {
   PluginNewWorkspaceItems,
   type NewWorkspaceItemsScreen,
 } from "@/plugins/new-workspace-items";
+import { PluginNewWorkspaceTitle } from "@/plugins/new-workspace-title";
 import {
   createNewWorkspaceSetup,
   useNewWorkspaceSetupState,
@@ -1957,7 +1958,9 @@ function NewWorkspaceLayout({
   ) : (
     <>
       <View style={styles.composerTitleContainer} pointerEvents="none">
-        <Text style={styles.composerTitle}>{title}</Text>
+        <PluginNewWorkspaceTitle serverId={serverId}>
+          <Text style={styles.composerTitle}>{title}</Text>
+        </PluginNewWorkspaceTitle>
       </View>
       {formStack}
     </>

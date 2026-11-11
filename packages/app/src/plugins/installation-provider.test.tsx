@@ -49,6 +49,7 @@ function installation(invoked: string[]): InstalledPlugin {
     filePanels: [],
     composerItems: [],
     newWorkspaceItems: [],
+    newWorkspaceTitles: [],
     workspacePanels: [],
     commandCenterItems: [],
     clientSlashCommands: [],

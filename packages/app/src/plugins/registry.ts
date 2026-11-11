@@ -134,6 +134,7 @@ export class PluginRegistry {
           filePanels: [],
           composerItems: [],
           newWorkspaceItems: [],
+          newWorkspaceTitles: [],
           workspacePanels: [],
           commandCenterItems: [],
           clientSlashCommands: [],

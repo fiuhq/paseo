@@ -1781,6 +1781,10 @@ export default function contribute(client: PluginClientContext) {
 
 [新建工作区 Issue 示例](https://github.com/getpaseo/paseo/tree/main/plugin-examples/new-workspace-issues)通过守护进程处理器搜索一个固定的 Issue 列表，并根据所选项设置分支和元数据。
 
+`client.addNewWorkspaceTitle({ id, Component })` 在桌面端替换界面上的 "New workspace" 标题；手机上不显示标题。
+宿主上第一个注册的标题生效。`Component` 渲染 `null` 或抛出错误时保留默认标题，所以在没有内容可显示时返回
+`null`。标题接收与项相同的 props，但它不是设置字段：在标题中调用 `useNewWorkspace()` 会抛出错误，标题也不响应点击。
+
 ## Composer 胶囊 {#composer-pills}
 
 `client.addComposerPill({ id, workspaceId, agentId, button })` 使用同样的[按钮描述符](#button-descriptor)，
