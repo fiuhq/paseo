@@ -173,7 +173,8 @@ class ProjectConfigOwner {
     this.snapshots.delete(root);
     this.snapshots.set(root, snapshot);
     // Worktrees come and go; retain only a bounded set of reusable snapshots.
-    if (this.snapshots.size > MAX_SNAPSHOTS) this.snapshots.delete(this.snapshots.keys().next().value!);
+    if (this.snapshots.size > MAX_SNAPSHOTS)
+      this.snapshots.delete(this.snapshots.keys().next().value!);
     return snapshot;
   }
 
