@@ -117,8 +117,7 @@ timeline state; the response is compared with the local authoritative range firs
 A chat with a cached cursor asks the daemon first. The `agent.timeline.set_subscription.request`
 that attaches the chat carries its `{ epoch, seq }`, and the response answers `current` or `behind`
 per chat. The daemon attaches before it compares, so an entry committed in between arrives live or
-counts as behind. `current` means the agent is loaded, the epoch matches, and the cursor is at the
-head; it completes catch-up with no fetch. The response carries the agent row for each `current`
+counts as behind. `current` means the epoch matches and the cursor is at the head; it completes catch-up with no fetch. The response carries the agent row for each `current`
 chat, because the timeline fetch is also what refreshes that row and the replica cache stores only
 part of it. `behind`, or no entry, runs the bounded catch-up. The subscribe handler never loads an
 agent. An agent that is not loaded answers from its held or parked timeline head (`current` comes
