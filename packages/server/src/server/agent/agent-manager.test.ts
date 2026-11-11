@@ -6,7 +6,7 @@ import {
 } from "./agent-messages/index.js";
 import { expect, test, vi, onTestFinished } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -8672,6 +8672,28 @@ test("closing agents parks only public timelines on disk", async () => {
   await manager.closeAgent(internalId);
 
   expect(readdirSync(directory).sort()).toEqual([`${publicId}.head.json`, `${publicId}.json`]);
+});
+
+test("archiving an agent never parks its timeline on disk", async () => {
+  const agentId = "00000000-0000-4000-8000-000000000119";
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const directory = join(workdir, "parked-timelines");
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: new AgentStorage(join(workdir, "agents"), logger),
+    timelineStore: new ParkedTimelineStore({ directory, logger }),
+    logger,
+    idFactory: () => agentId,
+  });
+  await manager.createAgent({ provider: "codex", cwd: workdir, title: "Archived" }, undefined, {
+    workspaceId: "workspace",
+  });
+  await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "archived" });
+
+  await manager.archiveAgent(agentId);
+
+  expect(existsSync(directory)).toBe(false);
 });
 
 test("global subscribers receive internal agent events only when they opt in", async () => {

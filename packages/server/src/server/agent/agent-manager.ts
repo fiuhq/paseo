@@ -426,6 +426,11 @@ export type AttentionState =
     };
 
 /** Private helpers and background agents report to their creator, never to the user. */
+interface CloseAgentRuntimeOptions {
+  canClose?: () => boolean;
+  releaseTimeline?: boolean;
+}
+
 function raisesAttention(agent: Pick<ManagedAgent, "internal" | "background">): boolean {
   return !agent.internal && !agent.background;
 }
@@ -2112,7 +2117,7 @@ export class AgentManager {
           this.collectingRuntimes.add(agent.id);
           try {
             return await this.runLifecycleMutation(agent.id, () =>
-              this.closeAgentRuntime(agent.id, () => isEligible() && revalidate()),
+              this.closeAgentRuntime(agent.id, { canClose: () => isEligible() && revalidate() }),
             );
           } finally {
             this.collectingRuntimes.delete(agent.id);
@@ -2159,7 +2164,11 @@ export class AgentManager {
     return close;
   }
 
-  private async closeAgentRuntime(agentId: string, canClose?: () => boolean): Promise<boolean> {
+  private async closeAgentRuntime(
+    agentId: string,
+    options: CloseAgentRuntimeOptions = {},
+  ): Promise<boolean> {
+    const { canClose, releaseTimeline = true } = options;
     const agent = this.requireAgent(agentId);
     this.logger.trace(
       {
@@ -2193,7 +2202,7 @@ export class AgentManager {
     this.detachPluginTools(agentId);
     this.emitClosedAgent(closedAgent, { persist: false });
     // The timeline store may move a closed agent's timeline out of memory until it is read or resumed.
-    if (!closedAgent.internal) await this.timelineStore.release(agentId);
+    if (releaseTimeline && !closedAgent.internal) await this.timelineStore.release(agentId);
     this.logger.trace(
       {
         agentId,
@@ -2243,7 +2252,7 @@ export class AgentManager {
         toStoredAgentRecord(agent, { title: agent.config.title ?? null, internal: true }),
         { archivedAt, updatedAt: archivedAt },
       );
-      await this.closeAgentRuntime(agentId);
+      await this.closeAgentRuntime(agentId, { releaseTimeline: false });
       await this.deleteAgentState(agentId);
       this.retireInternalAgent({ record, lastMessage });
       await this.cascadeArchiveChildren(record);
@@ -2263,7 +2272,7 @@ export class AgentManager {
 
     const { archivedAt } = await this.markRecordArchived(stored, requestedArchivedAt);
     agent.updatedAt = new Date(archivedAt);
-    await this.closeAgentRuntime(agentId);
+    await this.closeAgentRuntime(agentId, { releaseTimeline: false });
     await this.syncNativeArchiveState(stored.provider, stored.persistence, "archive");
     this.discardRetainedAgentState(agentId);
 
