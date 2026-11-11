@@ -12,6 +12,7 @@ import type {
   AgentTimelineFetchResult,
   AgentTimelineRow,
 } from "./agent-timeline-store-types.js";
+import type { AgentTimelineItem } from "./agent-sdk-types.js";
 import type { ProviderSubagentDescriptor } from "./provider-subagents/store.js";
 
 /**
@@ -131,9 +132,9 @@ export class ParkedTimelineStore extends InMemoryAgentTimelineStore {
     return reader;
   }
 
-  override async peekLastAssistantMessage(agentId: string): Promise<string | null> {
+  override async peekItems(agentId: string): Promise<AgentTimelineItem[] | null> {
     const reader = await this.reader(agentId);
-    return reader ? reader.getLastAssistantMessage(agentId) : null;
+    return reader ? reader.getItems(agentId) : null;
   }
 
   protected override isReleased(agentId: string): boolean {

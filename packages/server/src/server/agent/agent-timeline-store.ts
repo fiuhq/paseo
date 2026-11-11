@@ -62,9 +62,9 @@ export class InMemoryAgentTimelineStore {
     return this.has(agentId) ? this.fetch(agentId, options) : null;
   }
 
-  /** The last assistant message, read without loading its agent; null when there is none. */
-  async peekLastAssistantMessage(agentId: string): Promise<string | null> {
-    return this.has(agentId) ? this.getLastAssistantMessage(agentId) : null;
+  /** The projected items, read without loading their agent; null when no timeline is held. */
+  async peekItems(agentId: string): Promise<AgentTimelineItem[] | null> {
+    return this.has(agentId) ? this.getItems(agentId) : null;
   }
 
   /** The provider subagents released with a timeline this store no longer holds; null when none. */

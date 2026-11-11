@@ -4023,7 +4023,9 @@ export class AgentManager {
 
   async getLastAssistantMessage(agentId: string): Promise<string | null> {
     if (!this.getAgent(agentId) && !this.durableTimelineStore) {
-      return await this.timelineStore.peekLastAssistantMessage(agentId);
+      return this.getLastAssistantMessageFromTimeline(
+        (await this.timelineStore.peekItems(agentId)) ?? [],
+      );
     }
     if (!this.timelineStore.has(agentId)) {
       return (await this.durableTimelineStore?.getLastAssistantMessage(agentId)) ?? null;

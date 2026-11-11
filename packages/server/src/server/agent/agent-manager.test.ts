@@ -8747,6 +8747,44 @@ test("a closed agent's last message and subagents are read from its parked file 
   expect(restarted.getAgent(agentId)).toBeNull();
 });
 
+test("a closed agent's last message joins adjacent assistant messages as it did while loaded", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const stores = [
+    new InMemoryAgentTimelineStore(),
+    new ParkedTimelineStore({ directory: join(workdir, "parked-timelines"), logger }),
+  ];
+  for (const [index, timelineStore] of stores.entries()) {
+    const agentId = `00000000-0000-4000-8000-00000000012${index + 1}`;
+    const manager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: new AgentStorage(join(workdir, `agents-${index}`), logger),
+      timelineStore,
+      logger,
+      idFactory: () => agentId,
+    });
+    await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: "workspace",
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "A",
+      messageId: "m1",
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "B",
+      messageId: "m2",
+    });
+    expect(await manager.getLastAssistantMessage(agentId)).toBe("AB");
+
+    await manager.closeAgent(agentId);
+
+    expect(manager.getAgent(agentId)).toBeNull();
+    expect(await manager.getLastAssistantMessage(agentId)).toBe("AB");
+  }
+});
+
 test("global subscribers receive internal agent events only when they opt in", async () => {
   const internalAgentId = "00000000-0000-4000-8000-000000000116";
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
