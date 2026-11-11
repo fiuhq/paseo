@@ -13,7 +13,7 @@ The daemon keeps one list per host in `$PASEO_HOME/daily-quotes/quotes.json`, wr
 temporary file and a rename, so every client of that host sees the same list. Each client computes
 today from its own clock: today's quote is `quotes[(day - anchorDay) mod n]`, and every change
 re-anchors on the day it is made, so removing today's quote hands today to the next one. A new host
-starts with the three quotes in `shared/quotes.ts`. A file that does not parse is reported, never
+starts with the quotes and terms in `shared/quotes.ts`. A file that does not parse is reported, never
 overwritten.
 
 The title needs a Paseo build with `client.addNewWorkspaceTitle`; on an older build the plugin

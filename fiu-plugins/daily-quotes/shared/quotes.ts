@@ -11,11 +11,15 @@ import { z } from "zod";
 
 export const MAX_QUOTE_LENGTH = 140;
 
-/** The operator's own list, in rotation order; the first is today's on the day the store is born. */
+/**
+ * The operator's own quotes and terms to remember, in rotation order; the first is today's on the
+ * day the store is born.
+ */
 export const SEED_QUOTES = [
   "Be more ambitious",
   "Pitch hard, get roasted hard",
   "Soc2 compliance for vietnam",
+  "Phased readiness roadmap: numbered phases, task cards per phase, a status colour on each card",
 ] as const;
 
 export const QuotesStateSchema = z.object({

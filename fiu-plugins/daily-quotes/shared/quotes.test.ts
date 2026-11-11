@@ -11,6 +11,8 @@ import {
   type QuotesState,
 } from "./quotes";
 
+const ROADMAP =
+  "Phased readiness roadmap: numbered phases, task cards per phase, a status colour on each card";
 const DAY = dayNumber(new Date(2026, 10, 11));
 const texts = (state: QuotesState, day = DAY) => rotation(state, day).map((row) => row.text);
 
@@ -39,11 +41,13 @@ describe("rotation", () => {
       "Be more ambitious",
       "Pitch hard, get roasted hard",
       "Soc2 compliance for vietnam",
+      ROADMAP,
     ]);
-    expect(rotation(state, DAY).map((row) => row.daysFromToday)).toEqual([0, 1, 2]);
+    expect(rotation(state, DAY).map((row) => row.daysFromToday)).toEqual([0, 1, 2, 3]);
     expect(todayQuote(state, DAY + 1)).toBe("Pitch hard, get roasted hard");
-    expect(todayQuote(state, DAY + 3)).toBe("Be more ambitious");
-    expect(todayQuote(state, DAY - 1)).toBe("Soc2 compliance for vietnam");
+    expect(todayQuote(state, DAY + 3)).toBe(ROADMAP);
+    expect(todayQuote(state, DAY + 4)).toBe("Be more ambitious");
+    expect(todayQuote(state, DAY - 1)).toBe(ROADMAP);
   });
 
   test("is empty with no quotes", () => {
@@ -60,6 +64,7 @@ describe("addQuote", () => {
     expect(texts(state, later)).toEqual([
       "Pitch hard, get roasted hard",
       "Soc2 compliance for vietnam",
+      ROADMAP,
       "Be more ambitious",
       "Ship it",
     ]);
@@ -81,13 +86,17 @@ describe("removeQuote and restoreQuote", () => {
     const seeded = seedState(DAY);
     const { state, removed } = removeQuote(seeded, 0, "Be more ambitious", DAY);
     expect(removed).toEqual({ index: 0, text: "Be more ambitious", wasToday: true });
-    expect(texts(state)).toEqual(["Pitch hard, get roasted hard", "Soc2 compliance for vietnam"]);
+    expect(texts(state)).toEqual([
+      "Pitch hard, get roasted hard",
+      "Soc2 compliance for vietnam",
+      ROADMAP,
+    ]);
     expect(texts(restoreQuote(state, removed, DAY))).toEqual(texts(seeded));
   });
 
   test("removing the last quote in the list while it is today's hands today to the first", () => {
-    const day = DAY + 2;
-    const { state } = removeQuote(seedState(DAY), 2, "Soc2 compliance for vietnam", day);
+    const day = DAY + 3;
+    const { state } = removeQuote(seedState(DAY), 3, ROADMAP, day);
     expect(todayQuote(state, day)).toBe("Be more ambitious");
   });
 
@@ -99,6 +108,7 @@ describe("removeQuote and restoreQuote", () => {
     expect(texts(state, later)).toEqual([
       "Pitch hard, get roasted hard",
       "Soc2 compliance for vietnam",
+      ROADMAP,
     ]);
     expect(texts(restoreQuote(state, removed, later), later)).toEqual(texts(seeded, later));
   });
