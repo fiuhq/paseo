@@ -157,7 +157,7 @@ export class Workfloor {
     private readonly auth: WorkfloorAuth,
     private readonly fetchImpl: typeof fetch = fetch,
     /** The token's requests, shared by every client of this token. */
-    private readonly budget: RequestBudget = new RequestBudget(),
+    private readonly budget: RequestBudget,
   ) {}
 
   /** Every call takes a slot of the token's budget; one Workfloor refused is asked again once it allows. */

@@ -692,6 +692,37 @@ describe("the Workfloor provider", () => {
     expect(failed).toBe(true);
   }, 15_000);
 
+  test("a card whose reads keep failing is read again once, however many events wake it", async () => {
+    const wf = new FakeWorkfloor();
+    const answer = wf.fetch;
+    let failing = true;
+    let failed = 0;
+    wf.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const waits = wf.cards.get("card-1")?.state === "WAITING_FOR_INPUT";
+      if (url.searchParams.get("view") === "detail" && waits && failing) {
+        failed += 1;
+        return new Response(JSON.stringify({ error: "Internal error" }), { status: 500 });
+      }
+      return answer(input, init);
+    }) as typeof fetch;
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1");
+    await say(connection, "s1", "hello world");
+    await Bun.sleep(200);
+    for (let i = 0; i < 8; i += 1) {
+      wf.changed();
+      await Bun.sleep(50);
+    }
+    const afterEvents = failed;
+    expect(afterEvents).toBeGreaterThan(8);
+    await Bun.sleep(6_000);
+    expect(failed - afterEvents).toBe(1);
+    failing = false;
+    await connection.send({ type: "session.interrupt", requestId: "i1", sessionId: "s1" });
+    await until(events, turnEnded);
+  }, 12_000);
+
   test("a message to a conversation whose agent session started late reads it, instead of refusing for good", async () => {
     const wf = new FakeWorkfloor();
     const { connection, events } = await connect(wf);
