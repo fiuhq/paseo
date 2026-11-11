@@ -14,9 +14,10 @@ export interface Placement {
 
 /**
  * Where an imported card works in Paseo: its own worktree of its repository's Paseo project, named
- * after the card. A card with an open pull request is checked out on it; one without branches off
- * the default branch. The one made before for this card (or any worktree already on that pull
- * request) is reused. No directory when Paseo has no project for the card's repository. A failure
+ * after the card. A card with an open pull request when first imported is checked out on it; one
+ * without branches off the default branch. A card keeps the workspace it was given on later pastes
+ * or imports, even once it has a pull request; a card with no workspace yet reuses a worktree
+ * already on its pull request. No directory when Paseo has no project for the card's repository. A failure
  * never throws: it leaves the card in the project's checkout when the project was found, and says why.
  */
 export async function cardWorkspace(

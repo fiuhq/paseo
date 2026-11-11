@@ -29,9 +29,11 @@ in place of its pictures.
 
 An imported card is named after its Workfloor title and gets its own workspace: a worktree of its
 repository's Paseo project, titled with the card's name, checked out on the card's open pull
-request, or branched off the default branch when it has none. Pasting a card's link into Import's
-search makes that worktree (or finds it) right away, before you click Import; a later paste or
-import reuses it, as it does a worktree already on that pull request. A card whose repository has
+request when it has one at its first import, or branched off the default branch when it has none.
+Pasting a card's link into Import's search makes that worktree (or finds it) right away, before you
+click Import. A later paste or import gives the card back the workspace it was given, even once the
+card has a pull request; a card with no workspace yet reuses a worktree already on its pull request.
+A card whose repository has
 no Paseo project stays where you imported it. When the worktree can't be made, the card is still listed, in the project's
 checkout, and its description says why.
 
