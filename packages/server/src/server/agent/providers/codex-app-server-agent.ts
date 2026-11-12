@@ -163,6 +163,12 @@ const INTERRUPT_TIMEOUT_MS = 2_000;
  */
 const THREAD_WINDOW_FRESH_WAIT_MS = 1_500;
 const THREAD_WINDOW_KEPT = 16;
+/**
+ * Codex answers `thread/list` in pages of at most this many rows and reads every session file for
+ * each, so a whole page costs what a partial one does, and a list read in whole pages still covers
+ * Import's next request when its limit grows by one with each agent opened.
+ */
+const CODEX_THREAD_PAGE = 100;
 
 /** One directory's Codex session list: the last read and the running read, by rows asked. */
 interface CodexThreadWindow {
@@ -7949,11 +7955,10 @@ export class CodexAppServerAgentClient implements AgentClient {
   ): Promise<ImportableProviderSession[]> {
     const limit = options?.limit ?? 20;
     const scanLimit = Math.min(options?.scanLimit ?? limit, 500);
-    // thread/list returns the cheap `cwd` field. Fetch a wider window: when
-    // filtering, most threads will be from other cwds, and the local
-    // realpath-aware filter keeps symlink-equivalent workspace paths. Import's
-    // limit also grows with each agent it opens, which the kept list then covers.
-    const listLimit = Math.max(scanLimit, 50);
+    // thread/list returns the cheap `cwd` field. Fetch a wider window when
+    // filtering since most threads will be from other cwds, then keep the
+    // local realpath-aware filter for symlink-equivalent workspace paths.
+    const listLimit = options?.cwd ? Math.max(scanLimit, 50) : scanLimit;
     // Codex records each thread under the model provider that ran it and,
     // unless told otherwise, lists only the provider its own config selects.
     // Include legacy custom ids, but keep Codex built-in sessions separate.
@@ -8017,7 +8022,8 @@ export class CodexAppServerAgentClient implements AgentClient {
     const entry = found;
     const kept = entry.kept;
     if (!entry.reading || entry.reading.size < window.limit) {
-      const size = Math.max(window.limit, kept?.size ?? 0);
+      const size =
+        Math.ceil(Math.max(window.limit, kept?.size ?? 0) / CODEX_THREAD_PAGE) * CODEX_THREAD_PAGE;
       const read = { size, threads: this.readThreadWindow({ ...window, limit: size }) };
       entry.reading = read;
       const settle = () => {

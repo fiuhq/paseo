@@ -7887,28 +7887,28 @@ describe("Codex importable sessions", () => {
         dispose: async () => {},
       }),
     });
-    // Import asks for its page plus the agents already open, one more after each import. A list
-    // reads at least 50 rows, so the list kept before an import still covers the one after it.
+    // Import asks for its page plus the agents already open, one more after each import. Lists are
+    // read in whole pages of 100 rows, so the list kept before an import covers the one after it.
     const ids = async (limit: number) => {
       const sessions = await provider.listImportableSessions({ limit });
       return sessions.map((session) => session.providerHandleId);
     };
 
-    expect(await ids(18)).toEqual(["first"]);
+    expect(await ids(50)).toEqual(["first"]);
     // The fresh read hangs: the kept list answers a bigger request it covers once the wait is over.
-    expect(await ids(19)).toEqual(["first"]);
-    expect(listLimits).toEqual([50, 50]);
+    expect(await ids(51)).toEqual(["first"]);
+    expect(listLimits).toEqual([100, 100]);
     // A look while that read still runs joins it rather than starting another.
-    expect(await ids(19)).toEqual(["first"]);
-    expect(listLimits).toEqual([50, 50]);
+    expect(await ids(51)).toEqual(["first"]);
+    expect(listLimits).toEqual([100, 100]);
     // A request for more rows than were kept starts a bigger read and waits for it, past the wait
     // a covered request would have taken.
-    const grown = ids(60);
+    const grown = ids(101);
     await new Promise((resolve) => setTimeout(resolve, 1_800));
-    expect(listLimits).toEqual([50, 50, 60]);
+    expect(listLimits).toEqual([100, 100, 200]);
     slowRead.resolve();
     expect(await grown).toEqual(["second", "first"]);
-    await vi.waitFor(async () => expect(await ids(19)).toEqual(["second", "first"]));
+    await vi.waitFor(async () => expect(await ids(51)).toEqual(["second", "first"]));
   }, 15_000);
 
   const CODEX_THREAD_PAGE_CAP = 100;
@@ -8205,7 +8205,7 @@ describe("Codex importable sessions", () => {
       },
       {
         method: "thread/list",
-        params: { limit: 50, sortKey: "updated_at", cwd: "/workspace/project-a" },
+        params: { limit: 100, sortKey: "updated_at", cwd: "/workspace/project-a" },
       },
     ]);
   });
