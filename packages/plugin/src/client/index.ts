@@ -87,6 +87,7 @@ export { useComposer, useComposers } from "./composer.js";
 export type {
   PluginComposer,
   PluginComposerAttachment,
+  PluginComposerFocusOptions,
   PluginComposerItemContribution,
   PluginComposerItemProps,
   PluginComposerSelector,

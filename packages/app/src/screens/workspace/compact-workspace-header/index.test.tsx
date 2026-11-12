@@ -51,7 +51,7 @@ vi.mock("@/components/ui/button", () => ({
     </button>
   ),
 }));
-vi.mock("@/components/workspace-rename-modal", () => ({ WorkspaceRenameModal: () => null }));
+vi.mock("@/workspace-rename", () => ({ WorkspaceRenameModal: () => null }));
 vi.mock("@/screens/workspace/workspace-explorer-toggle", () => ({
   EXPLORER_TOGGLE_KEYS: [],
   WorkspaceExplorerToggle: () => null,

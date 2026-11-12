@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import { Button } from "@/components/ui/button";
-import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
+import { WorkspaceRenameModal } from "@/workspace-rename";
 import { describeWorkspaceTitleState } from "@/utils/workspace-title-state";
 
 /** Says why a workspace has no title yet, or that its title went on unchecked. */

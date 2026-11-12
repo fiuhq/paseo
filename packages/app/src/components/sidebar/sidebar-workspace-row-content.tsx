@@ -54,10 +54,13 @@ const ThemedCircleAlert = withUnistyles(CircleAlert);
 export function SidebarWorkspaceRowFrame({
   workspace,
   isDragging = false,
+  isEditingTitle = false,
   children,
 }: {
   workspace: SidebarWorkspaceEntry;
   isDragging?: boolean;
+  /** Hover would fade the kebab in over the title being edited and open the hover card. */
+  isEditingTitle?: boolean;
   children: (input: {
     isHovered: boolean;
     contextMenuOpen: boolean;
@@ -86,10 +89,10 @@ export function SidebarWorkspaceRowFrame({
         workspace={workspace}
         prHint={workspace.prHint}
         isDragging={isDragging}
-        disabled={contextMenuOpen}
+        disabled={contextMenuOpen || isEditingTitle}
       >
         {children({
-          isHovered: isHovered && !contextMenuOpen && !isDragging,
+          isHovered: isHovered && !contextMenuOpen && !isDragging && !isEditingTitle,
           contextMenuOpen,
           onContextMenuOpenChange: handleContextMenuOpenChange,
           hoverHandlers,
@@ -117,6 +120,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   shortcutNumber = null,
   showShortcutBadge = false,
   reserveIdleStatusIndicatorSpace = true,
+  titleEditor = null,
   children,
 }: {
   workspace: SidebarWorkspaceEntry;
@@ -134,6 +138,8 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   showShortcutBadge?: boolean;
   /** Keep the empty leading slot when the workspace has no active status. */
   reserveIdleStatusIndicatorSpace?: boolean;
+  /** Takes the title's place, in a box exactly one title line tall, while renaming in place. */
+  titleEditor?: ReactNode;
   children?: ReactNode;
 }) {
   const {
@@ -144,9 +150,6 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   // The workspace carries label names; their colors live in its host's catalog, so the row is
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
-  const expandable = useWorkspaceRowsExpandable();
-  const compact = useIsCompactFormFactor();
-  const [chevronFocused, setChevronFocused] = useState(false);
   const workspaceBranchTextStyle = useMemo(
     () => [
       styles.workspaceBranchText,
@@ -175,47 +178,25 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
       reserveIdleSpace={reserveIdleStatusIndicatorSpace}
     />
   );
-  let leading: ReactNode = visual;
-  if (expandable && (isNative || compact)) {
-    // Touch has no hover, so the chevron keeps a column of its own and the status stays visible.
-    leading = (
-      <>
-        <View style={styles.workspaceStatusDot}>
-          <SidebarWorkspaceChevron workspaceKey={workspace.workspaceKey} />
-        </View>
-        {visual}
-      </>
-    );
-  } else if (expandable) {
-    // Like a project row, the chevron takes the leading visual's place while the row is hovered,
-    // so it needs no column. It stays mounted on top, only hidden, so keyboard focus reaches it.
-    const shown = isHovered || chevronFocused;
-    leading = (
-      <View style={styles.leadingSwap}>
-        <View style={shown ? styles.leadingHidden : undefined}>{visual}</View>
-        <View style={[styles.leadingOverlay, !shown && styles.leadingHidden]}>
-          <SidebarWorkspaceChevron
-            workspaceKey={workspace.workspaceKey}
-            onFocusChange={setChevronFocused}
-          />
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.workspaceRowContent}>
       <View style={styles.workspaceRowMain}>
-        {leading}
+        <WorkspaceRowLeading workspaceKey={workspace.workspaceKey} isHovered={isHovered}>
+          {visual}
+        </WorkspaceRowLeading>
         <View style={styles.workspaceContentColumn}>
           <View style={styles.workspaceTitleRow}>
-            <Text
-              style={workspaceBranchTextStyle}
-              numberOfLines={1}
-              testID={`sidebar-workspace-title-${workspace.workspaceKey}`}
-            >
-              {workspaceLabel}
-            </Text>
+            {titleEditor ? (
+              <View style={styles.workspaceTitleEditorSlot}>{titleEditor}</View>
+            ) : (
+              <Text
+                style={workspaceBranchTextStyle}
+                numberOfLines={1}
+                testID={`sidebar-workspace-title-${workspace.workspaceKey}`}
+              >
+                {workspaceLabel}
+              </Text>
+            )}
             <View style={sidebarWorkspaceRowStyles.rowRight}>{children}</View>
           </View>
           <WorkspaceMetaRow
@@ -236,6 +217,44 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     </View>
   );
 });
+
+/** The row's leading visual, swapped for the expand chevron when the workspace rows can expand. */
+function WorkspaceRowLeading({
+  children: visual,
+  workspaceKey,
+  isHovered,
+}: {
+  children: ReactNode;
+  workspaceKey: string;
+  isHovered: boolean;
+}) {
+  const expandable = useWorkspaceRowsExpandable();
+  const compact = useIsCompactFormFactor();
+  const [chevronFocused, setChevronFocused] = useState(false);
+  if (!expandable) return visual;
+  if (isNative || compact) {
+    // Touch has no hover, so the chevron keeps a column of its own and the status stays visible.
+    return (
+      <>
+        <View style={styles.workspaceStatusDot}>
+          <SidebarWorkspaceChevron workspaceKey={workspaceKey} />
+        </View>
+        {visual}
+      </>
+    );
+  }
+  // Like a project row, the chevron takes the leading visual's place while the row is hovered,
+  // so it needs no column. It stays mounted on top, only hidden, so keyboard focus reaches it.
+  const shown = isHovered || chevronFocused;
+  return (
+    <View style={styles.leadingSwap}>
+      <View style={shown ? styles.leadingHidden : undefined}>{visual}</View>
+      <View style={[styles.leadingOverlay, !shown && styles.leadingHidden]}>
+        <SidebarWorkspaceChevron workspaceKey={workspaceKey} onFocusChange={setChevronFocused} />
+      </View>
+    </View>
+  );
+}
 
 function WorkspaceStatusIndicator({
   bucket,
@@ -619,6 +638,11 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: "400",
     lineHeight: TITLE_LINE_HEIGHT,
     opacity: 0.76,
+    flex: 1,
+    minWidth: 0,
+  },
+  workspaceTitleEditorSlot: {
+    height: TITLE_LINE_HEIGHT,
     flex: 1,
     minWidth: 0,
   },

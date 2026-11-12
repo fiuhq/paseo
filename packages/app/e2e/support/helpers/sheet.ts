@@ -109,3 +109,15 @@ export async function expectDeclinedDiscardPrompt(
   await page.getByTestId("confirm-dialog-cancel").click();
   await expect(page.getByTestId("confirm-dialog")).toHaveCount(0);
 }
+
+/** A seeded prompt the mock agent echoes, so the chat shows `target` as a tappable file link. */
+export function promptMentioning(target: string): string {
+  return [
+    "Generate a title and a git branch name for a coding agent from the user prompt and attachments.",
+    "Return JSON only with fields 'title' and 'branch'.",
+    "",
+    "<user-prompt>",
+    `Open \`${target}\` now`,
+    "</user-prompt>",
+  ].join("\n");
+}
