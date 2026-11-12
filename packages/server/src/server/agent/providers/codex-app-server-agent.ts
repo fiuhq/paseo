@@ -8031,6 +8031,7 @@ export class CodexAppServerAgentClient implements AgentClient {
       read.threads.then((threads) => {
         entry.kept = { size, threads };
         settle();
+        return threads;
       }, settle);
     }
     const reading = entry.reading.threads.then((threads) => threads.slice(0, window.limit));
