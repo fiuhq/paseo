@@ -22,7 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { z } from "zod";
 
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
@@ -3348,6 +3348,8 @@ test("fetch_agent_history_request skips rows whose workspace project record is m
 });
 
 test("fetch_recent_provider_sessions_request lists importable provider sessions by handle", async () => {
+  const recentCwd = mkdtempSync(path.join(tmpdir(), "paseo-recent-sessions-"));
+  onTestFinished(() => rmSync(recentCwd, { recursive: true, force: true }));
   const emitted: Array<{ type: string; payload: unknown }> = [];
   const session = createSessionForWorkspaceTests();
 
@@ -3375,7 +3377,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
       provider: "codex",
       sessionId: "stored-session",
       nativeHandle: "stored-handle",
-      cwd: "/tmp/recent",
+      cwd: recentCwd,
       title: "Already stored",
       lastActivityAt: "2026-04-30T12:04:00.000Z",
       firstPrompt: "stored prompt",
@@ -3383,7 +3385,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
     makeImportableProviderSession({
       provider: "claude",
       sessionId: "wrong-provider",
-      cwd: "/tmp/recent",
+      cwd: recentCwd,
       title: "Wrong provider",
       lastActivityAt: "2026-04-30T12:03:00.000Z",
     }),
@@ -3391,7 +3393,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
       provider: "codex",
       sessionId: "older-session",
       nativeHandle: "older-handle",
-      cwd: "/tmp/recent",
+      cwd: recentCwd,
       title: "Older than since",
       lastActivityAt: "2026-04-29T23:59:59.000Z",
     }),
@@ -3399,7 +3401,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
       provider: "codex",
       sessionId: "newer-session",
       nativeHandle: "newer-handle",
-      cwd: "/tmp/recent",
+      cwd: recentCwd,
       title: "Newer import",
       lastActivityAt: "2026-04-30T12:02:00.000Z",
       firstPrompt: "newer prompt",
@@ -3408,7 +3410,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
       provider: "codex",
       sessionId: "second-session",
       nativeHandle: "second-handle",
-      cwd: "/tmp/recent",
+      cwd: recentCwd,
       title: "Second import",
       lastActivityAt: "2026-04-30T12:00:00.000Z",
       firstPrompt: "second prompt",
@@ -3417,7 +3419,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
       provider: "codex",
       sessionId: "third-session",
       nativeHandle: "third-handle",
-      cwd: "/tmp/recent",
+      cwd: recentCwd,
       title: "Third import",
       lastActivityAt: "2026-04-30T11:59:00.000Z",
       firstPrompt: "third prompt",
@@ -3426,7 +3428,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
       provider: "codex",
       sessionId: "live-session",
       nativeHandle: "live-handle",
-      cwd: "/tmp/recent",
+      cwd: recentCwd,
       title: "Already live",
       lastActivityAt: "2026-04-30T12:01:00.000Z",
       firstPrompt: "live prompt",
@@ -3448,7 +3450,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
     {
       id: "stored-agent",
       provider: "codex",
-      cwd: "/tmp/recent",
+      cwd: recentCwd,
       createdAt: "2026-04-30T00:00:00.000Z",
       updatedAt: "2026-04-30T00:00:00.000Z",
       title: "Stored",
@@ -3465,7 +3467,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
   await session.handleMessage({
     type: "fetch_recent_provider_sessions_request",
     requestId: "req-recent-provider-sessions",
-    cwd: "/tmp/recent",
+    cwd: recentCwd,
     providers: ["codex"],
     since: "2026-04-30T00:00:00.000Z",
     limit: 2,
@@ -3481,7 +3483,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
             providerId: "codex",
             providerLabel: "Codex",
             providerHandleId: "newer-handle",
-            cwd: "/tmp/recent",
+            cwd: recentCwd,
             title: "Newer import",
             firstPromptPreview: "newer prompt",
             lastPromptPreview: "newer prompt",
@@ -3491,7 +3493,7 @@ test("fetch_recent_provider_sessions_request lists importable provider sessions 
             providerId: "codex",
             providerLabel: "Codex",
             providerHandleId: "second-handle",
-            cwd: "/tmp/recent",
+            cwd: recentCwd,
             title: "Second import",
             firstPromptPreview: "second prompt",
             lastPromptPreview: "second prompt",

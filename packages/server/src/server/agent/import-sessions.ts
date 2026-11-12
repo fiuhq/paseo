@@ -74,6 +74,7 @@ export interface ListImportableProviderSessionsInput {
 export interface ListImportableProviderSessionsResult {
   entries: RecentProviderSessionDescriptorPayload[];
   filteredAlreadyImportedCount: number;
+  filteredMissingDirectoryCount: number;
   providerErrors: Array<{ provider: string; message: string }>;
 }
 
@@ -171,13 +172,12 @@ export async function listImportableProviderSessions(
   }
 
   candidates.sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
-  const entries = (
-    await keepSessionsWithDirectory(
-      candidates,
-      limit,
-      input.sessionDirectoryExists ?? isExistingDirectory,
-    )
-  ).map((descriptor) =>
+  const { kept, missingDirectoryCount } = await keepSessionsWithDirectory(
+    candidates,
+    limit,
+    input.sessionDirectoryExists ?? isExistingDirectory,
+  );
+  const entries = kept.map((descriptor) =>
     toRecentProviderSessionDescriptorPayload(descriptor, {
       providerLabel: providerSnapshotManager.getProviderLabel(descriptor.provider),
     }),
@@ -186,6 +186,7 @@ export async function listImportableProviderSessions(
   return {
     entries,
     filteredAlreadyImportedCount,
+    filteredMissingDirectoryCount: missingDirectoryCount,
     providerErrors: listing.providerErrors,
   };
 }
@@ -353,10 +354,6 @@ function parseRecentProviderSessionsSince(since: string | undefined): number | n
   return timestamp;
 }
 
-/**
- * The first `limit` sessions, in order, whose directory is still there. A session started in a
- * directory since deleted (a throwaway worktree) can't be imported: the import fails on it.
- */
 async function isExistingDirectory(cwd: string): Promise<boolean> {
   return stat(cwd).then(
     (info) => info.isDirectory(),
@@ -364,12 +361,18 @@ async function isExistingDirectory(cwd: string): Promise<boolean> {
   );
 }
 
+/**
+ * The first `limit` sessions, in order, whose directory is still there, and how many were passed
+ * over on the way. A session started in a directory since deleted (a throwaway worktree) can't be
+ * imported: the import fails on it.
+ */
 async function keepSessionsWithDirectory<T extends { cwd: string; importedAgentId?: string }>(
   sessions: T[],
   limit: number,
   directoryExists: (cwd: string) => Promise<boolean>,
-): Promise<T[]> {
+): Promise<{ kept: T[]; missingDirectoryCount: number }> {
   const kept: T[] = [];
+  let missingDirectoryCount = 0;
   for (let start = 0; start < sessions.length && kept.length < limit; start += limit) {
     const batch = sessions.slice(start, start + limit);
     const present = await Promise.all(
@@ -377,9 +380,10 @@ async function keepSessionsWithDirectory<T extends { cwd: string; importedAgentI
     );
     for (let index = 0; index < batch.length && kept.length < limit; index++) {
       if (present[index]) kept.push(batch[index]!);
+      else missingDirectoryCount += 1;
     }
   }
-  return kept;
+  return { kept, missingDirectoryCount };
 }
 
 async function collectImportedProviderSessions(

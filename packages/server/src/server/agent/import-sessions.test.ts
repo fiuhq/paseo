@@ -255,6 +255,7 @@ test("listImportableProviderSessions filters, sorts, limits, and projects import
   });
   expect(result).toEqual({
     filteredAlreadyImportedCount: 2,
+    filteredMissingDirectoryCount: 0,
     providerErrors: [],
     entries: [
       {
@@ -993,4 +994,29 @@ test("listImportableProviderSessions leaves out a session whose directory is gon
   });
 
   expect(result.entries.map((entry) => entry.providerHandleId)).toEqual(["in-project"]);
+  expect(result.filteredMissingDirectoryCount).toBe(1);
+});
+
+test("listImportableProviderSessions counts only the gone-directory sessions it passed over to fill the page", async () => {
+  const sessions = ["newest", "older", "in-deleted-worktree"].map((sessionId, index) =>
+    makeImportableSession({
+      provider: "claude",
+      sessionId,
+      cwd: sessionId === "in-deleted-worktree" ? "/tmp/deleted-worktree" : "/tmp/project",
+      lastActivityAt: `2026-04-30T12:0${3 - index}:00.000Z`,
+    }),
+  );
+  const result = await listImportableProviderSessions({
+    sessionDirectoryExists: async (cwd) => cwd !== "/tmp/deleted-worktree",
+    request: makeRequest({ providers: ["claude"], limit: 2 }),
+    agentManager: {
+      listAgents: () => [],
+      listImportableSessions: vi.fn(async () => makeImportableSessionsResult(sessions)),
+    },
+    agentStorage: { listAll: async () => [] },
+    providerSnapshotManager: { getProviderLabel: () => "Claude Code" },
+  });
+
+  expect(result.entries.map((entry) => entry.providerHandleId)).toEqual(["newest", "older"]);
+  expect(result.filteredMissingDirectoryCount).toBe(0);
 });

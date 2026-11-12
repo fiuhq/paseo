@@ -39,6 +39,7 @@ import {
   nextPageLimit,
   PER_PROVIDER_LIMIT,
   type ProviderErrorRow,
+  type SessionsSearch,
   resolveImportTarget,
   resolveProvidersToFetch,
   requiresImportSessionsHostUpgrade,
@@ -99,7 +100,7 @@ interface SessionsQueryConfig {
   // in-flight daemon requests behind a dead provider (#2512).
   retry: false;
   placeholderData: typeof keepPreviousData;
-  queryFn: () => Promise<RecentSessionsResponse>;
+  queryFn: () => Promise<RecentSessionsResponse & { search: SessionsSearch }>;
 }
 
 function buildSessionsQueriesConfig(args: {
@@ -123,12 +124,13 @@ function buildSessionsQueriesConfig(args: {
       if (!client) {
         throw new Error(hostDisconnectedMessage ?? i18n.t("workspace.terminal.hostDisconnected"));
       }
-      return await client.fetchRecentProviderSessions({
+      const response = await client.fetchRecentProviderSessions({
         ...(cwd ? { cwd } : {}),
         providers: [provider],
         limit,
         ...(query ? { query } : {}),
       });
+      return { ...response, search: { cwd, query } };
     },
   }));
 }
@@ -777,13 +779,19 @@ export function ImportSessionSheet({
     [importMutation, openImportedSession],
   );
 
-  // A failed import belongs to the search it was made from.
-  const resetImport = importMutation.reset;
+  // A failed import belongs to the search it was made from; a running one carries on.
+  const { isError: importFailed, reset: resetImport } = importMutation;
+  const importSearch = useRef(query);
   useEffect(() => {
-    resetImport();
-  }, [query, resetImport]);
+    if (importSearch.current === query) return;
+    importSearch.current = query;
+    if (importFailed) resetImport();
+  }, [query, importFailed, resetImport]);
 
-  const staleSessionKeys = useMemo(() => staleSessionRowKeys(queries), [queries]);
+  const staleSessionKeys = useMemo(
+    () => staleSessionRowKeys(queries, { cwd: scopeCwd, query }),
+    [queries, scopeCwd, query],
+  );
 
   // A pasted link that names exactly one session imports it at once, once per link and sheet.
   const [openedAt, setOpenedAt] = useState<number | null>(null);

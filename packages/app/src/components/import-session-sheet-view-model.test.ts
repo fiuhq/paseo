@@ -238,6 +238,15 @@ describe("hasMoreSessions", () => {
     expect(hasMoreSessions([settled({ entries: [entry(), entry()] })], 200)).toBe(false);
   });
 
+  it("counts the sessions left out for a gone directory as listed, keeping Load more on a full page", () => {
+    expect(
+      hasMoreSessions([settled({ entries: [entry()], filteredMissingDirectoryCount: 1 })], 2),
+    ).toBe(true);
+    expect(
+      hasMoreSessions([settled({ entries: [entry()], filteredMissingDirectoryCount: 0 })], 2),
+    ).toBe(false);
+  });
+
   it("keeps reporting more while the next page replaces placeholder rows", () => {
     expect(
       hasMoreSessions([settled({ entries: [entry()] }, { isPlaceholderData: true })], 45),
@@ -518,13 +527,44 @@ describe("pastedLinkSession", () => {
 });
 
 describe("staleSessionRowKeys", () => {
+  const search = { cwd: null, query: "https://example.test/c/card" };
+
   it("marks the rows a provider still shows from a previous search, and only those", () => {
     const old = entry({ providerId: "claude", providerHandleId: "review-session" });
     const current = entry({ providerId: "workfloor", providerHandleId: "card" });
-    const keys = staleSessionRowKeys([
-      { ...settled({ entries: [old] }), isPlaceholderData: true },
-      settled({ entries: [current] }),
-    ]);
+    const keys = staleSessionRowKeys(
+      [
+        settled(
+          { entries: [old], search: { cwd: null, query: "review" } },
+          { isPlaceholderData: true },
+        ),
+        settled({ entries: [current], search }),
+      ],
+      search,
+    );
     expect([...keys]).toEqual(["claude:review-session"]);
+  });
+
+  it("marks rows listed for another directory", () => {
+    const scoped = entry({ providerHandleId: "scoped" });
+    const keys = staleSessionRowKeys(
+      [
+        settled(
+          { entries: [scoped], search: { cwd: "/repo/paseo", query: "" } },
+          { isPlaceholderData: true },
+        ),
+      ],
+      { cwd: null, query: "" },
+    );
+    expect([...keys]).toEqual(["claude:scoped"]);
+  });
+
+  it("leaves the rows of the same search pressable while Load more fetches a bigger page", () => {
+    const shown = entry({ providerHandleId: "shown" });
+    const keys = staleSessionRowKeys(
+      [settled({ entries: [shown], search }, { isPlaceholderData: true })],
+      search,
+    );
+    expect([...keys]).toEqual([]);
   });
 });

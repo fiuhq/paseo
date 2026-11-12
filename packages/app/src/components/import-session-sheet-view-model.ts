@@ -25,12 +25,21 @@ export function requiresImportSessionsHostUpgrade(input: {
   return !input.supportsSnapshot || (Boolean(input.workspaceId) && !input.supportsWorkspaceTarget);
 }
 
+/** What a listing was asked for; not its page size, since a bigger page is the same search. */
+export interface SessionsSearch {
+  cwd: string | null;
+  query: string;
+}
+
 export interface SessionsQueryResult {
   data:
     | {
         entries: FetchRecentProviderSessionEntry[];
         filteredAlreadyImportedCount?: number;
+        filteredMissingDirectoryCount?: number;
         providerErrors?: Array<{ provider: string; message: string }>;
+        /** The search these entries answer. */
+        search?: SessionsSearch;
       }
     | undefined;
   isError: boolean;
@@ -113,12 +122,18 @@ export function pastedLinkSession(
 /**
  * The rows a provider still shows from a previous search while it answers the new one. They are
  * kept on screen so the list doesn't blink, and can't be imported: the person pasted something
- * else, and the row under their cursor isn't what they asked for.
+ * else, and the row under their cursor isn't what they asked for. Rows kept while a bigger page of
+ * the same search loads still answer it, and stay importable.
  */
-export function staleSessionRowKeys(queries: ReadonlyArray<SessionsQueryResult>): Set<string> {
+export function staleSessionRowKeys(
+  queries: ReadonlyArray<SessionsQueryResult>,
+  search: SessionsSearch,
+): Set<string> {
   const keys = new Set<string>();
   for (const query of queries) {
     if (!query.isPlaceholderData || !query.data) continue;
+    const answered = query.data.search;
+    if (answered && answered.cwd === search.cwd && answered.query === search.query) continue;
     for (const entry of query.data.entries)
       keys.add(`${entry.providerId}:${entry.providerHandleId}`);
   }
@@ -138,8 +153,10 @@ export function sumFilteredAlreadyImportedCount(
 /**
  * A provider that returned a full page may have more behind it. The daemon
  * slices to `limit` after dropping already-imported sessions, so a short page is
- * the end of that provider's list. Placeholder rows belong to the previous page,
- * so the button holds its place instead of blinking out while the next loads.
+ * the end of that provider's list. Sessions it left out because their directory
+ * is gone still filled the page, so they count as listed. Placeholder rows belong
+ * to the previous page, so the button holds its place instead of blinking out
+ * while the next loads.
  */
 export function hasMoreSessions(
   queries: ReadonlyArray<SessionsQueryResult>,
@@ -147,7 +164,9 @@ export function hasMoreSessions(
 ): boolean {
   if (nextPageLimit(limit) === limit) return false;
   return queries.some((entryQuery) => {
-    const count = entryQuery.data?.entries.length ?? 0;
+    const count =
+      (entryQuery.data?.entries.length ?? 0) +
+      (entryQuery.data?.filteredMissingDirectoryCount ?? 0);
     return entryQuery.isPlaceholderData ? count > 0 : count >= limit;
   });
 }

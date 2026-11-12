@@ -163,6 +163,13 @@ const INTERRUPT_TIMEOUT_MS = 2_000;
  */
 const THREAD_WINDOW_FRESH_WAIT_MS = 1_500;
 const THREAD_WINDOW_KEPT = 16;
+
+/** One directory's Codex session list: the last read and the running read, by rows asked. */
+interface CodexThreadWindow {
+  kept?: { size: number; threads: Array<Record<string, unknown>> };
+  reading?: { size: number; threads: Promise<Array<Record<string, unknown>>> };
+}
+
 // `turn/interrupt` ends a turn but leaves the shell commands it started running.
 // Each terminate is bounded by the first constant. A turn start waits for the
 // interrupted turn's commands to end, at most the interrupt's own bound plus one
@@ -7740,10 +7747,7 @@ export class CodexAppServerAgentClient implements AgentClient {
   readonly capabilities = CODEX_APP_SERVER_CAPABILITIES;
   private goalsEnabledPromise: Promise<boolean> | null = null;
   private autoReviewEnabledPromise: Promise<boolean> | null = null;
-  private readonly threadWindows = new Map<
-    string,
-    { threads?: Array<Record<string, unknown>>; reading?: Promise<Array<Record<string, unknown>>> }
-  >();
+  private readonly threadWindows = new Map<string, CodexThreadWindow>();
 
   constructor(
     private readonly logger: Logger,
@@ -7945,10 +7949,11 @@ export class CodexAppServerAgentClient implements AgentClient {
   ): Promise<ImportableProviderSession[]> {
     const limit = options?.limit ?? 20;
     const scanLimit = Math.min(options?.scanLimit ?? limit, 500);
-    // thread/list returns the cheap `cwd` field. Fetch a wider window when
-    // filtering since most threads will be from other cwds, then keep the
-    // local realpath-aware filter for symlink-equivalent workspace paths.
-    const listLimit = options?.cwd ? Math.max(scanLimit, 50) : scanLimit;
+    // thread/list returns the cheap `cwd` field. Fetch a wider window: when
+    // filtering, most threads will be from other cwds, and the local
+    // realpath-aware filter keeps symlink-equivalent workspace paths. Import's
+    // limit also grows with each agent it opens, which the kept list then covers.
+    const listLimit = Math.max(scanLimit, 50);
     // Codex records each thread under the model provider that ran it and,
     // unless told otherwise, lists only the provider its own config selects.
     // Include legacy custom ids, but keep Codex built-in sessions separate.
@@ -7989,40 +7994,43 @@ export class CodexAppServerAgentClient implements AgentClient {
   }
 
   /**
-   * Codex's threads for one window: a fresh read when it answers within
-   * THREAD_WINDOW_FRESH_WAIT_MS, else the window last read, while the fresh read carries on and is
-   * kept for the next look. Only one read of a window runs at a time; the first look waits for it.
+   * Codex's newest `window.limit` threads for one directory: a fresh read when it answers within
+   * THREAD_WINDOW_FRESH_WAIT_MS, else the list last read when it covers as many rows, while the
+   * fresh read carries on and is kept for the next look. A look joins the running read when that
+   * read asks for enough rows; the first look, and one asking for more than was kept, waits for it.
    */
   private async threadWindow(window: {
     limit: number;
     cwd?: string;
     modelProviders?: string[];
   }): Promise<Array<Record<string, unknown>>> {
-    const key = JSON.stringify([window.limit, window.cwd ?? null, window.modelProviders ?? null]);
-    let kept = this.threadWindows.get(key);
-    if (!kept) {
-      kept = {};
-      this.threadWindows.set(key, kept);
-      // ponytail: drop the oldest window past a few; Import asks for a handful of sizes and cwds.
+    const key = JSON.stringify([window.cwd ?? null, window.modelProviders ?? null]);
+    let found = this.threadWindows.get(key);
+    if (!found) {
+      found = {};
+      this.threadWindows.set(key, found);
+      // ponytail: drop the oldest list past a few; Import lists a handful of directories.
       if (this.threadWindows.size > THREAD_WINDOW_KEPT) {
         this.threadWindows.delete(this.threadWindows.keys().next().value!);
       }
     }
-    const entry = kept;
-    const reading =
-      entry.reading ??
-      (entry.reading = this.readThreadWindow(window).then(
-        (threads) => {
-          entry.threads = threads;
-          entry.reading = undefined;
-          return threads;
-        },
-        (error: unknown) => {
-          entry.reading = undefined;
-          throw error;
-        },
-      ));
-    const last = entry.threads;
+    const entry = found;
+    const kept = entry.kept;
+    if (!entry.reading || entry.reading.size < window.limit) {
+      const size = Math.max(window.limit, kept?.size ?? 0);
+      const read = { size, threads: this.readThreadWindow({ ...window, limit: size }) };
+      entry.reading = read;
+      const settle = () => {
+        if (entry.reading === read) entry.reading = undefined;
+      };
+      read.threads.then((threads) => {
+        if (size >= (entry.kept?.size ?? 0)) entry.kept = { size, threads };
+        settle();
+      }, settle);
+    }
+    const reading = entry.reading.threads.then((threads) => threads.slice(0, window.limit));
+    const last =
+      kept && kept.size >= window.limit ? kept.threads.slice(0, window.limit) : undefined;
     if (!last) return reading;
     // The kept list answers; a failed fresh read is logged and the next look tries again.
     reading.catch((error: unknown) =>

@@ -4607,6 +4607,8 @@ export const FetchRecentProviderSessionsResponseMessageSchema = z.object({
     requestId: z.string(),
     entries: z.array(RecentProviderSessionDescriptorPayloadSchema),
     filteredAlreadyImportedCount: z.number().int().nonnegative().optional(),
+    /** Listed sessions left out because their directory is gone; they still filled the page. */
+    filteredMissingDirectoryCount: z.number().int().nonnegative().optional(),
     providerErrors: z
       .array(
         z.object({
