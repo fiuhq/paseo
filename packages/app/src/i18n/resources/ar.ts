@@ -463,6 +463,8 @@ export const ar: TranslationResources = {
     },
     row: {
       importing: "جارٍ الاستيراد...",
+      alreadyOpen: "مفتوحة بالفعل",
+      openTab: "فتح علامة التبويب",
     },
   },
   workspace: {

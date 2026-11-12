@@ -12,6 +12,7 @@ import {
   hasMoreSessions,
   nextPageLimit,
   pastedLinkSession,
+  staleSessionRowKeys,
   PER_PROVIDER_LIMIT,
   resolveDirectoryLabel,
   resolveImportTarget,
@@ -508,5 +509,22 @@ describe("pastedLinkSession", () => {
   it("names nothing for words or a link followed by more words", () => {
     expect(pastedLinkSession("heap crash", [fresh([card])], openedAt)).toBeNull();
     expect(pastedLinkSession(`${link} and more`, [fresh([card])], openedAt)).toBeNull();
+  });
+
+  it("names nothing when the linked session is already open, leaving the row to open it", () => {
+    const open = { ...card, importedAgentId: "agent-on-card" };
+    expect(pastedLinkSession(link, [fresh([open])], openedAt)).toBeNull();
+  });
+});
+
+describe("staleSessionRowKeys", () => {
+  it("marks the rows a provider still shows from a previous search, and only those", () => {
+    const old = entry({ providerId: "claude", providerHandleId: "review-session" });
+    const current = entry({ providerId: "workfloor", providerHandleId: "card" });
+    const keys = staleSessionRowKeys([
+      { ...settled({ entries: [old] }), isPlaceholderData: true },
+      settled({ entries: [current] }),
+    ]);
+    expect([...keys]).toEqual(["claude:review-session"]);
   });
 });

@@ -468,6 +468,8 @@ export const ja: TranslationResources = {
     },
     row: {
       importing: "インポート中...",
+      alreadyOpen: "すでに開いています",
+      openTab: "タブを開く",
     },
   },
   workspace: {

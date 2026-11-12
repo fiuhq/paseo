@@ -468,6 +468,8 @@ export const fr: TranslationResources = {
     },
     row: {
       importing: "Importation…",
+      alreadyOpen: "Déjà ouverte",
+      openTab: "Ouvrir l’onglet",
     },
   },
   workspace: {

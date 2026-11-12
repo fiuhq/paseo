@@ -156,6 +156,13 @@ function isCodexAlreadyUnarchivedError(error: unknown, threadId: string): boolea
 
 const TURN_START_TIMEOUT_MS = 90 * 1000;
 const INTERRUPT_TIMEOUT_MS = 2_000;
+/**
+ * How long Import waits for a fresh Codex session list before answering with the last one it
+ * read. Codex reads every saved session file on each list (openai/codex#24510), which takes tens
+ * of seconds on a long history; the fresh read still lands in the kept list for the next look.
+ */
+const THREAD_WINDOW_FRESH_WAIT_MS = 1_500;
+const THREAD_WINDOW_KEPT = 16;
 // `turn/interrupt` ends a turn but leaves the shell commands it started running.
 // Each terminate is bounded by the first constant. A turn start waits for the
 // interrupted turn's commands to end, at most the interrupt's own bound plus one
@@ -7733,6 +7740,10 @@ export class CodexAppServerAgentClient implements AgentClient {
   readonly capabilities = CODEX_APP_SERVER_CAPABILITIES;
   private goalsEnabledPromise: Promise<boolean> | null = null;
   private autoReviewEnabledPromise: Promise<boolean> | null = null;
+  private readonly threadWindows = new Map<
+    string,
+    { threads?: Array<Record<string, unknown>>; reading?: Promise<Array<Record<string, unknown>>> }
+  >();
 
   constructor(
     private readonly logger: Logger,
@@ -7932,6 +7943,107 @@ export class CodexAppServerAgentClient implements AgentClient {
   async listImportableSessions(
     options?: ListImportableSessionsOptions,
   ): Promise<ImportableProviderSession[]> {
+    const limit = options?.limit ?? 20;
+    const scanLimit = Math.min(options?.scanLimit ?? limit, 500);
+    // thread/list returns the cheap `cwd` field. Fetch a wider window when
+    // filtering since most threads will be from other cwds, then keep the
+    // local realpath-aware filter for symlink-equivalent workspace paths.
+    const listLimit = options?.cwd ? Math.max(scanLimit, 50) : scanLimit;
+    // Codex records each thread under the model provider that ran it and,
+    // unless told otherwise, lists only the provider its own config selects.
+    // Include legacy custom ids, but keep Codex built-in sessions separate.
+    const customProviderConfig = this.customProviderConfig();
+    let modelProviders: string[] | undefined;
+    if (customProviderConfig && this.deps.customProvider) {
+      modelProviders = [customProviderConfig.model_provider];
+      if (!CODEX_BUILTIN_MODEL_PROVIDER_IDS.has(this.deps.customProvider.id)) {
+        modelProviders.push(this.deps.customProvider.id);
+      }
+    }
+    const window = {
+      limit: listLimit,
+      cwd: options?.cwd,
+      ...(modelProviders ? { modelProviders } : {}),
+    };
+    const allThreads = await this.threadWindow(window);
+    const threads = filterCodexThreadsByCwd(allThreads, options?.cwd);
+    return threads.slice(0, limit).map((thread) => {
+      const threadId = typeof thread.id === "string" ? thread.id : "";
+      const cwd = typeof thread.cwd === "string" ? thread.cwd : process.cwd();
+      const preview = typeof thread.preview === "string" ? thread.preview : null;
+      const title = typeof thread.name === "string" && thread.name.trim() ? thread.name : preview;
+
+      return {
+        providerHandleId: threadId,
+        cwd,
+        title,
+        firstPromptPreview: preview,
+        lastPromptPreview: preview,
+        lastActivityAt: new Date(
+          ((typeof thread.updatedAt === "number" ? thread.updatedAt : undefined) ??
+            (typeof thread.createdAt === "number" ? thread.createdAt : undefined) ??
+            0) * 1000,
+        ),
+      };
+    });
+  }
+
+  /**
+   * Codex's threads for one window: a fresh read when it answers within
+   * THREAD_WINDOW_FRESH_WAIT_MS, else the window last read, while the fresh read carries on and is
+   * kept for the next look. Only one read of a window runs at a time; the first look waits for it.
+   */
+  private async threadWindow(window: {
+    limit: number;
+    cwd?: string;
+    modelProviders?: string[];
+  }): Promise<Array<Record<string, unknown>>> {
+    const key = JSON.stringify([window.limit, window.cwd ?? null, window.modelProviders ?? null]);
+    let kept = this.threadWindows.get(key);
+    if (!kept) {
+      kept = {};
+      this.threadWindows.set(key, kept);
+      // ponytail: drop the oldest window past a few; Import asks for a handful of sizes and cwds.
+      if (this.threadWindows.size > THREAD_WINDOW_KEPT) {
+        this.threadWindows.delete(this.threadWindows.keys().next().value!);
+      }
+    }
+    const entry = kept;
+    const reading =
+      entry.reading ??
+      (entry.reading = this.readThreadWindow(window).then(
+        (threads) => {
+          entry.threads = threads;
+          entry.reading = undefined;
+          return threads;
+        },
+        (error: unknown) => {
+          entry.reading = undefined;
+          throw error;
+        },
+      ));
+    const last = entry.threads;
+    if (!last) return reading;
+    // The kept list answers; a failed fresh read is logged and the next look tries again.
+    reading.catch((error: unknown) =>
+      this.logger.warn({ err: error }, "Failed to refresh the Codex session list"),
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waited = new Promise<Array<Record<string, unknown>>>((resolve) => {
+      timer = setTimeout(() => resolve(last), THREAD_WINDOW_FRESH_WAIT_MS);
+    });
+    try {
+      return await Promise.race([reading.catch(() => last), waited]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async readThreadWindow(window: {
+    limit: number;
+    cwd?: string;
+    modelProviders?: string[];
+  }): Promise<Array<Record<string, unknown>>> {
     const environment = buildCodexAppServerEnv(this.runtimeSettings);
     const spawn = await this.prepareAppServerSpawn({ environment });
     const { client } = await codexAppServerStartup.start({
@@ -7943,50 +8055,8 @@ export class CodexAppServerAgentClient implements AgentClient {
       initializeParams: buildCodexAppServerInitializeParams(),
       logger: this.logger,
     });
-
     try {
-      const limit = options?.limit ?? 20;
-      const scanLimit = Math.min(options?.scanLimit ?? limit, 500);
-      // thread/list returns the cheap `cwd` field. Fetch a wider window when
-      // filtering since most threads will be from other cwds, then keep the
-      // local realpath-aware filter for symlink-equivalent workspace paths.
-      const listLimit = options?.cwd ? Math.max(scanLimit, 50) : scanLimit;
-      // Codex records each thread under the model provider that ran it and,
-      // unless told otherwise, lists only the provider its own config selects.
-      // Include legacy custom ids, but keep Codex built-in sessions separate.
-      const customProviderConfig = this.customProviderConfig();
-      let modelProviders: string[] | undefined;
-      if (customProviderConfig && this.deps.customProvider) {
-        modelProviders = [customProviderConfig.model_provider];
-        if (!CODEX_BUILTIN_MODEL_PROVIDER_IDS.has(this.deps.customProvider.id)) {
-          modelProviders.push(this.deps.customProvider.id);
-        }
-      }
-      const allThreads = await readCodexThreadWindow(client, this.logger, {
-        limit: listLimit,
-        cwd: options?.cwd,
-        ...(modelProviders ? { modelProviders } : {}),
-      });
-      const threads = filterCodexThreadsByCwd(allThreads, options?.cwd);
-      return threads.slice(0, limit).map((thread) => {
-        const threadId = typeof thread.id === "string" ? thread.id : "";
-        const cwd = typeof thread.cwd === "string" ? thread.cwd : process.cwd();
-        const preview = typeof thread.preview === "string" ? thread.preview : null;
-        const title = typeof thread.name === "string" && thread.name.trim() ? thread.name : preview;
-
-        return {
-          providerHandleId: threadId,
-          cwd,
-          title,
-          firstPromptPreview: preview,
-          lastPromptPreview: preview,
-          lastActivityAt: new Date(
-            ((typeof thread.updatedAt === "number" ? thread.updatedAt : undefined) ??
-              (typeof thread.createdAt === "number" ? thread.createdAt : undefined) ??
-              0) * 1000,
-          ),
-        };
-      });
+      return await readCodexThreadWindow(client, this.logger, window);
     } finally {
       await client.dispose();
     }

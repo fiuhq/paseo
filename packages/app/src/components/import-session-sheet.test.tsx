@@ -219,7 +219,9 @@ interface RenderOptions {
   visible?: boolean;
   onClose?: () => void;
   onImportedAgent?: (agentId: string) => void;
-  onImported?: (agent: Awaited<ReturnType<DaemonClient["importAgent"]>>) => void;
+  onImported?: (
+    agent: Pick<Awaited<ReturnType<DaemonClient["importAgent"]>>, "id" | "cwd">,
+  ) => void;
   cwd?: string | null;
   workspaceId?: string;
   supportsSearch?: boolean;
@@ -616,6 +618,76 @@ describe("ImportSessionSheet", () => {
     expect(onImportedAgent).toHaveBeenCalledWith("agent-imported");
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a session another agent has open and opens that agent instead of importing it", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "claude",
+          providerLabel: "Claude Code",
+          cwd: "/repo/card-worktree",
+          importedAgentId: "agent-elsewhere",
+        }),
+      ],
+    }));
+    const importAgent = vi.fn();
+    const onClose = vi.fn();
+    const onImported = vi.fn();
+
+    renderSheet(
+      { fetchRecentProviderSessions, importAgent } as Pick<
+        DaemonClient,
+        "fetchRecentProviderSessions" | "importAgent"
+      >,
+      {
+        cwd: null,
+        onClose,
+        onImported,
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+      },
+    );
+
+    await screen.findByTestId("import-session-row-open-claude-provider-thread-1");
+    expect(screen.getByText("Already open")).toBeTruthy();
+    expect(screen.getByText("Open tab")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("import-session-session-claude-provider-thread-1"));
+
+    expect(onImported).toHaveBeenCalledWith({ id: "agent-elsewhere", cwd: "/repo/card-worktree" });
+    expect(importAgent).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens an already-open session of this workspace as a tab here", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "claude",
+          providerLabel: "Claude Code",
+          importedAgentId: "agent-here",
+        }),
+      ],
+    }));
+    const importAgent = vi.fn();
+    const onImportedAgent = vi.fn();
+
+    renderSheet(
+      { fetchRecentProviderSessions, importAgent } as Pick<
+        DaemonClient,
+        "fetchRecentProviderSessions" | "importAgent"
+      >,
+      {
+        onImportedAgent,
+        workspaceId: "ws-current",
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+      },
+    );
+
+    fireEvent.click(await screen.findByTestId("import-session-session-claude-provider-thread-1"));
+    expect(onImportedAgent).toHaveBeenCalledWith("agent-here");
+    expect(importAgent).not.toHaveBeenCalled();
   });
 
   it("shows an import error state without closing when selected session import fails", async () => {

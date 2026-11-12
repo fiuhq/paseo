@@ -7846,7 +7846,10 @@ describe("Codex importable sessions", () => {
       }),
     });
 
-    const scans = Array.from({ length: 24 }, () => provider.listImportableSessions({ limit: 1 }));
+    // Each scan asks for its own window: one window shares a single read (see below).
+    const scans = Array.from({ length: 24 }, (_, index) =>
+      provider.listImportableSessions({ limit: index + 1 }),
+    );
     await firstEntered.promise;
     expect(spawned).toBe(1);
     releaseFirst.resolve();
@@ -7857,6 +7860,46 @@ describe("Codex importable sessions", () => {
     expect(maxActiveInitializations).toBe(1);
     expect(disposed).toBe(24);
   });
+
+  test("a slow fresh list is answered from the last read, which the fresh read then replaces", async () => {
+    const slowRead = deferred<void>();
+    let lists = 0;
+    const thread = (id: string, updatedAt: number) => ({
+      id,
+      cwd: "/workspace/a",
+      preview: id,
+      updatedAt,
+    });
+    const provider = new CodexAppServerAgentClient(createTestLogger(), undefined, {
+      appServerProcess: createFakeCodexAppServerProcess(() => createCodexAppServerChildProcess()),
+      _createCodexClient: () => ({
+        request: async (method) => {
+          if (method === "initialize") return {};
+          if (method === "thread/list") {
+            lists++;
+            if (lists === 1) return { data: [thread("first", 1)] };
+            if (lists === 2) await slowRead.promise;
+            return { data: [thread("second", 2), thread("first", 1)] };
+          }
+          throw new Error(`Unexpected Codex method: ${method}`);
+        },
+        notify: () => {},
+        dispose: async () => {},
+      }),
+    });
+    const ids = async () =>
+      (await provider.listImportableSessions({ limit: 5 })).map((s) => s.providerHandleId);
+
+    expect(await ids()).toEqual(["first"]);
+    // The fresh read hangs: the last read answers once the wait is over.
+    expect(await ids()).toEqual(["first"]);
+    expect(lists).toBe(2);
+    // A look while that read still runs joins it rather than starting another.
+    expect(await ids()).toEqual(["first"]);
+    expect(lists).toBe(2);
+    slowRead.resolve();
+    await vi.waitFor(async () => expect(await ids()).toEqual(["second", "first"]));
+  }, 10_000);
 
   const CODEX_THREAD_PAGE_CAP = 100;
 

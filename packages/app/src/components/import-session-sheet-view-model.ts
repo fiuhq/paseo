@@ -103,8 +103,26 @@ export function pastedLinkSession(
   const answered = queries.filter(
     (q) => !q.isPlaceholderData && (q.dataUpdatedAt ?? 0) >= openedAt,
   );
-  const exact = aggregateSessionEntries(answered).filter((entry) => entry.exact);
+  // A session already open stays in the list, marked, for the person to open themselves.
+  const exact = aggregateSessionEntries(answered).filter(
+    (entry) => entry.exact && !entry.importedAgentId,
+  );
   return exact.length === 1 ? exact[0]! : null;
+}
+
+/**
+ * The rows a provider still shows from a previous search while it answers the new one. They are
+ * kept on screen so the list doesn't blink, and can't be imported: the person pasted something
+ * else, and the row under their cursor isn't what they asked for.
+ */
+export function staleSessionRowKeys(queries: ReadonlyArray<SessionsQueryResult>): Set<string> {
+  const keys = new Set<string>();
+  for (const query of queries) {
+    if (!query.isPlaceholderData || !query.data) continue;
+    for (const entry of query.data.entries)
+      keys.add(`${entry.providerId}:${entry.providerHandleId}`);
+  }
+  return keys;
 }
 
 export function sumFilteredAlreadyImportedCount(

@@ -980,6 +980,8 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
   exact: z.boolean().optional(),
+  /** The agent that already has this session open; a search keeps such a row so it can be opened. */
+  importedAgentId: z.string().optional(),
 });
 
 export type RecentProviderSessionDescriptorPayload = z.infer<

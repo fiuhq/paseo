@@ -460,6 +460,8 @@ export const en = {
     },
     row: {
       importing: "Importing...",
+      alreadyOpen: "Already open",
+      openTab: "Open tab",
     },
   },
   workspace: {

@@ -67,6 +67,8 @@ function makeImportableSession(args: {
   };
 }
 
+const everyDirectoryExists = async () => true;
+
 function makeImportableSessionsResult(sessions: ManagedImportableProviderSession[]) {
   return { sessions, providerErrors: [] };
 }
@@ -234,6 +236,7 @@ test("listImportableProviderSessions filters, sorts, limits, and projects import
   } satisfies Pick<AgentStorage, "listAll">;
 
   const result = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
     request: makeRequest({
       cwd,
       providers: ["codex"],
@@ -297,6 +300,7 @@ test("listImportableProviderSessions looks past already-imported rows to fill th
   );
 
   const result = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
     request: makeRequest({ cwd, providers: ["claude"], limit: 1 }),
     agentManager: {
       listAgents: () => [],
@@ -358,6 +362,7 @@ test("listImportableProviderSessions requests a bounded deep scan for search res
   const listImportableSessions = vi.fn(async () => makeImportableSessionsResult(matchingSessions));
 
   const result = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
     request: makeRequest({ query: "INVOICE", limit: 10 }),
     agentManager: { listAgents: () => [], listImportableSessions },
     agentStorage: { listAll: async () => [] },
@@ -391,6 +396,7 @@ test("listImportableProviderSessions includes a provider session after its Paseo
   });
 
   const result = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
     request: makeRequest({ cwd, providers: ["claude"] }),
     agentManager: {
       listAgents: () => [],
@@ -428,6 +434,7 @@ test("listImportableProviderSessions includes an archived provider session still
   });
 
   const result = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
     request: makeRequest({ cwd, providers: ["claude"] }),
     agentManager: {
       listAgents: () => [
@@ -483,6 +490,7 @@ test("listImportableProviderSessions filters out metadata generation sessions", 
   ];
 
   const result = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
     request: makeRequest({ cwd, providers: ["codex"] }),
     agentManager: {
       listAgents: () => [],
@@ -508,6 +516,7 @@ test("listImportableProviderSessions keeps realpath-equivalent cwd matches", asy
   const persistedCwd = realpathSync(linkedCwd);
 
   const result = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
     request: makeRequest({ cwd: linkedCwd, providers: ["pi"] }),
     agentManager: {
       listAgents: () => [],
@@ -910,4 +919,78 @@ test("importProviderSession requires cwd from the selected provider row", async 
   await expect(harness.import({ providerHandleId: "thread-imported" })).rejects.toThrow(
     "Import requires cwd from the selected provider session",
   );
+});
+
+test("listImportableProviderSessions keeps an already-open session in a search, naming its agent", async () => {
+  const cwd = "/tmp/project";
+  const open = makeImportableSession({
+    provider: "workfloor",
+    sessionId: "card-handle",
+    cwd,
+    title: "Plan tab card",
+    lastActivityAt: "2026-04-30T12:02:00.000Z",
+  });
+  const listImportableSessions = vi.fn(async () => makeImportableSessionsResult([open]));
+  const agentManager = {
+    listAgents: () => [
+      makeManagedAgent({
+        id: "agent-on-card",
+        provider: "workfloor",
+        cwd,
+        sessionId: "card-handle",
+      }),
+    ],
+    listImportableSessions,
+  };
+  const agentStorage = { listAll: async () => [] };
+  const providerSnapshotManager = { getProviderLabel: () => "Workfloor" };
+
+  const searched = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
+    request: makeRequest({ providers: ["workfloor"], query: "https://example.test/c/card" }),
+    agentManager,
+    agentStorage,
+    providerSnapshotManager,
+  });
+  expect(searched.entries.map((entry) => [entry.providerHandleId, entry.importedAgentId])).toEqual([
+    ["card-handle", "agent-on-card"],
+  ]);
+  expect(searched.filteredAlreadyImportedCount).toBe(0);
+
+  const recent = await listImportableProviderSessions({
+    sessionDirectoryExists: everyDirectoryExists,
+    request: makeRequest({ providers: ["workfloor"] }),
+    agentManager,
+    agentStorage,
+    providerSnapshotManager,
+  });
+  expect(recent.entries).toEqual([]);
+  expect(recent.filteredAlreadyImportedCount).toBe(1);
+});
+
+test("listImportableProviderSessions leaves out a session whose directory is gone and fills the page past it", async () => {
+  const gone = makeImportableSession({
+    provider: "claude",
+    sessionId: "in-deleted-worktree",
+    cwd: "/tmp/deleted-worktree",
+    lastActivityAt: "2026-04-30T12:02:00.000Z",
+  });
+  const kept = makeImportableSession({
+    provider: "claude",
+    sessionId: "in-project",
+    cwd: "/tmp/project",
+    lastActivityAt: "2026-04-30T12:01:00.000Z",
+  });
+  const result = await listImportableProviderSessions({
+    sessionDirectoryExists: async (cwd) => cwd !== "/tmp/deleted-worktree",
+    request: makeRequest({ providers: ["claude"], limit: 1 }),
+    agentManager: {
+      listAgents: () => [],
+      listImportableSessions: vi.fn(async () => makeImportableSessionsResult([gone, kept])),
+    },
+    agentStorage: { listAll: async () => [] },
+    providerSnapshotManager: { getProviderLabel: () => "Claude Code" },
+  });
+
+  expect(result.entries.map((entry) => entry.providerHandleId)).toEqual(["in-project"]);
 });

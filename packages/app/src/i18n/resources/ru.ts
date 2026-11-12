@@ -467,6 +467,8 @@ export const ru: TranslationResources = {
     },
     row: {
       importing: "Импортируется...",
+      alreadyOpen: "Уже открыта",
+      openTab: "Открыть вкладку",
     },
   },
   workspace: {
