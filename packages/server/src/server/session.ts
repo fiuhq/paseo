@@ -6876,6 +6876,9 @@ export class Session {
           ...(result.filteredAlreadyImportedCount > 0
             ? { filteredAlreadyImportedCount: result.filteredAlreadyImportedCount }
             : {}),
+          ...(result.filteredMissingDirectoryCount > 0
+            ? { filteredMissingDirectoryCount: result.filteredMissingDirectoryCount }
+            : {}),
           ...(result.providerErrors.length > 0 ? { providerErrors: result.providerErrors } : {}),
         },
       });

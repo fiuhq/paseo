@@ -467,6 +467,8 @@ export const ptBR: TranslationResources = {
     },
     row: {
       importing: "Importando...",
+      alreadyOpen: "Já aberta",
+      openTab: "Abrir aba",
     },
   },
   workspace: {

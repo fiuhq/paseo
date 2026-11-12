@@ -12,6 +12,7 @@ import {
   hasMoreSessions,
   nextPageLimit,
   pastedLinkSession,
+  staleSessionRowKeys,
   PER_PROVIDER_LIMIT,
   resolveDirectoryLabel,
   resolveImportTarget,
@@ -235,6 +236,15 @@ describe("hasMoreSessions", () => {
 
   it("reports no more at the last page size, however full the page is", () => {
     expect(hasMoreSessions([settled({ entries: [entry(), entry()] })], 200)).toBe(false);
+  });
+
+  it("counts the sessions left out for a gone directory as listed, keeping Load more on a full page", () => {
+    expect(
+      hasMoreSessions([settled({ entries: [entry()], filteredMissingDirectoryCount: 1 })], 2),
+    ).toBe(true);
+    expect(
+      hasMoreSessions([settled({ entries: [entry()], filteredMissingDirectoryCount: 0 })], 2),
+    ).toBe(false);
   });
 
   it("keeps reporting more while the next page replaces placeholder rows", () => {
@@ -508,5 +518,53 @@ describe("pastedLinkSession", () => {
   it("names nothing for words or a link followed by more words", () => {
     expect(pastedLinkSession("heap crash", [fresh([card])], openedAt)).toBeNull();
     expect(pastedLinkSession(`${link} and more`, [fresh([card])], openedAt)).toBeNull();
+  });
+
+  it("names nothing when the linked session is already open, leaving the row to open it", () => {
+    const open = { ...card, importedAgentId: "agent-on-card" };
+    expect(pastedLinkSession(link, [fresh([open])], openedAt)).toBeNull();
+  });
+});
+
+describe("staleSessionRowKeys", () => {
+  const search = { cwd: null, query: "https://example.test/c/card" };
+
+  it("marks the rows a provider still shows from a previous search, and only those", () => {
+    const old = entry({ providerId: "claude", providerHandleId: "review-session" });
+    const current = entry({ providerId: "workfloor", providerHandleId: "card" });
+    const keys = staleSessionRowKeys(
+      [
+        settled(
+          { entries: [old], search: { cwd: null, query: "review" } },
+          { isPlaceholderData: true },
+        ),
+        settled({ entries: [current], search }),
+      ],
+      search,
+    );
+    expect([...keys]).toEqual(["claude:review-session"]);
+  });
+
+  it("marks rows listed for another directory", () => {
+    const scoped = entry({ providerHandleId: "scoped" });
+    const keys = staleSessionRowKeys(
+      [
+        settled(
+          { entries: [scoped], search: { cwd: "/repo/paseo", query: "" } },
+          { isPlaceholderData: true },
+        ),
+      ],
+      { cwd: null, query: "" },
+    );
+    expect([...keys]).toEqual(["claude:scoped"]);
+  });
+
+  it("leaves the rows of the same search pressable while Load more fetches a bigger page", () => {
+    const shown = entry({ providerHandleId: "shown" });
+    const keys = staleSessionRowKeys(
+      [settled({ entries: [shown], search }, { isPlaceholderData: true })],
+      search,
+    );
+    expect([...keys]).toEqual([]);
   });
 });

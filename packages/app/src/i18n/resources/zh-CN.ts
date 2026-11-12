@@ -463,6 +463,8 @@ export const zhCN: TranslationResources = {
     },
     row: {
       importing: "正在导入...",
+      alreadyOpen: "已打开",
+      openTab: "打开标签页",
     },
   },
   workspace: {

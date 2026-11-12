@@ -25,6 +25,7 @@ import { i18n } from "@/i18n/i18next";
 import {
   aggregateSessionEntries,
   pastedLinkSession,
+  staleSessionRowKeys,
   ALL_FILTER_VALUE,
   buildProviderLabelMap,
   collectProviderErrorRows,
@@ -38,6 +39,7 @@ import {
   nextPageLimit,
   PER_PROVIDER_LIMIT,
   type ProviderErrorRow,
+  type SessionsSearch,
   resolveImportTarget,
   resolveProvidersToFetch,
   requiresImportSessionsHostUpgrade,
@@ -66,7 +68,7 @@ interface ImportSessionSheetProps {
   /** The agent belongs to the workspace the sheet was opened from; open it here. */
   onImportedAgent?: (agentId: string) => void;
   /** The agent belongs to its own workspace; open that workspace and navigate. */
-  onImported?: (agent: ImportedAgent) => void;
+  onImported?: (agent: Pick<ImportedAgent, "id" | "cwd">) => void;
 }
 
 type RecentSessionsResponse = Awaited<
@@ -98,7 +100,7 @@ interface SessionsQueryConfig {
   // in-flight daemon requests behind a dead provider (#2512).
   retry: false;
   placeholderData: typeof keepPreviousData;
-  queryFn: () => Promise<RecentSessionsResponse>;
+  queryFn: () => Promise<RecentSessionsResponse & { search: SessionsSearch }>;
 }
 
 function buildSessionsQueriesConfig(args: {
@@ -122,12 +124,13 @@ function buildSessionsQueriesConfig(args: {
       if (!client) {
         throw new Error(hostDisconnectedMessage ?? i18n.t("workspace.terminal.hostDisconnected"));
       }
-      return await client.fetchRecentProviderSessions({
+      const response = await client.fetchRecentProviderSessions({
         ...(cwd ? { cwd } : {}),
         providers: [provider],
         limit,
         ...(query ? { query } : {}),
       });
+      return { ...response, search: { cwd, query } };
     },
   }));
 }
@@ -301,6 +304,7 @@ function ImportSessionSheetRow({
 }: {
   serverId: string | null;
   entry: FetchRecentProviderSessionEntry;
+  /** Its rows belong to a previous search still on screen, or an import is running. */
   disabled: boolean;
   importing: boolean;
   /** The row's directory, shown only when rows can come from more than one. */
@@ -334,6 +338,7 @@ function ImportSessionSheetRow({
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityState={accessibilityState}
+      {...(entry.importedAgentId ? { accessibilityHint: t("importSession.row.openTab") } : {})}
       style={pressableStyle}
       testID={`import-session-session-${entry.providerId}-${entry.providerHandleId}`}
     >
@@ -345,11 +350,7 @@ function ImportSessionSheetRow({
           <Text style={styles.rowTitle} numberOfLines={1}>
             {title}
           </Text>
-          {importing ? (
-            <Text style={styles.rowMeta}>{t("importSession.row.importing")}</Text>
-          ) : (
-            <ImportSessionActivityTime date={entry.lastActivityAt} />
-          )}
+          <ImportSessionRowStatus entry={entry} importing={importing} />
         </View>
         <Text style={styles.rowPreview} numberOfLines={2}>
           {promptPreview}
@@ -366,6 +367,34 @@ function ImportSessionSheetRow({
       </View>
     </Pressable>
   );
+}
+
+/** What the right of a row says: importing, already open (pressing opens it), or when it was last used. */
+function ImportSessionRowStatus({
+  entry,
+  importing,
+}: {
+  entry: FetchRecentProviderSessionEntry;
+  importing: boolean;
+}) {
+  const { t } = useTranslation();
+  if (importing) {
+    return <Text style={styles.rowMeta}>{t("importSession.row.importing")}</Text>;
+  }
+  if (entry.importedAgentId) {
+    return (
+      <View style={styles.rowOpen}>
+        <View
+          style={styles.rowOpenBadge}
+          testID={`import-session-row-open-${entry.providerId}-${entry.providerHandleId}`}
+        >
+          <Text style={styles.rowOpenBadgeText}>{t("importSession.row.alreadyOpen")}</Text>
+        </View>
+        <Text style={styles.rowOpenAction}>{t("importSession.row.openTab")}</Text>
+      </View>
+    );
+  }
+  return <ImportSessionActivityTime date={entry.lastActivityAt} />;
 }
 
 function ImportSessionActivityTime({ date }: { date: string }) {
@@ -403,6 +432,7 @@ function SessionRows({
   serverId,
   entries,
   disabled,
+  staleSessionKeys,
   importingSessionKey,
   resolveFolder,
   onImportSession,
@@ -415,6 +445,8 @@ function SessionRows({
   serverId: string | null;
   entries: ReadonlyArray<FetchRecentProviderSessionEntry>;
   disabled: boolean;
+  /** Rows of a previous search, shown while the new one loads: seen, never imported. */
+  staleSessionKeys: ReadonlySet<string>;
   importingSessionKey: string | null;
   resolveFolder: (entry: FetchRecentProviderSessionEntry) => string | null;
   onImportSession: (entry: FetchRecentProviderSessionEntry) => void;
@@ -427,13 +459,13 @@ function SessionRows({
         key={getSessionRowKey(entry)}
         serverId={serverId}
         entry={entry}
-        disabled={disabled}
+        disabled={disabled || staleSessionKeys.has(getSessionRowKey(entry))}
         importing={importingSessionKey === getSessionRowKey(entry)}
         folder={resolveFolder(entry)}
         onImportSession={onImportSession}
       />
     ),
-    [serverId, disabled, importingSessionKey, resolveFolder, onImportSession],
+    [serverId, disabled, staleSessionKeys, importingSessionKey, resolveFolder, onImportSession],
   );
   const renderItem = useCallback(
     (item: FetchRecentProviderSessionEntry) => (
@@ -717,11 +749,48 @@ export function ImportSessionSheet({
       ? `${importMutation.variables.providerId}:${importMutation.variables.providerHandleId}`
       : null;
 
+  // A session another agent already has open is opened there, never imported twice.
+  const openImportedSession = useCallback(
+    (entry: FetchRecentProviderSessionEntry, agentId: string) => {
+      const target = resolveImportTarget({
+        entryCwd: entry.cwd,
+        workspaceCwd: cwd,
+        workspaceId,
+        isScopedListing: scopeCwd !== null,
+      });
+      onClose();
+      if (target.crossWorkspace) {
+        onImported?.({ id: agentId, cwd: entry.cwd });
+      } else {
+        onImportedAgent?.(agentId);
+      }
+    },
+    [cwd, workspaceId, scopeCwd, onClose, onImported, onImportedAgent],
+  );
+
   const handleImportSession = useCallback(
     (entry: FetchRecentProviderSessionEntry) => {
+      if (entry.importedAgentId) {
+        openImportedSession(entry, entry.importedAgentId);
+        return;
+      }
       importMutation.mutate(entry);
     },
-    [importMutation],
+    [importMutation, openImportedSession],
+  );
+
+  // A failed import belongs to the search it was made from; a running one carries on.
+  const { isError: importFailed, reset: resetImport } = importMutation;
+  const importSearch = useRef(query);
+  useEffect(() => {
+    if (importSearch.current === query) return;
+    importSearch.current = query;
+    if (importFailed) resetImport();
+  }, [query, importFailed, resetImport]);
+
+  const staleSessionKeys = useMemo(
+    () => staleSessionRowKeys(queries, { cwd: scopeCwd, query }),
+    [queries, scopeCwd, query],
   );
 
   // A pasted link that names exactly one session imports it at once, once per link and sheet.
@@ -948,6 +1017,7 @@ export function ImportSessionSheet({
       serverId={serverId}
       entries={visibleEntries}
       disabled={importMutation.isPending}
+      staleSessionKeys={staleSessionKeys}
       importingSessionKey={importingSessionKey}
       resolveFolder={resolveFolder}
       onImportSession={handleImportSession}
@@ -1070,6 +1140,25 @@ const styles = StyleSheet.create((theme) => ({
   rowMeta: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  rowOpen: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  rowOpenBadge: {
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: theme.spacing[2],
+    backgroundColor: theme.colors.statusSuccessTint,
+  },
+  rowOpenBadgeText: {
+    color: theme.colors.statusSuccess,
+    fontSize: theme.fontSize.sm,
+  },
+  rowOpenAction: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSize.sm,
+    fontWeight: "600",
   },
   rowPreview: {
     color: theme.colors.foregroundMuted,

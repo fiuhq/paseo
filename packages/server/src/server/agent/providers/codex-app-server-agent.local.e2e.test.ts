@@ -234,8 +234,14 @@ describe("Codex app-server provider (local e2e)", () => {
           const provider = new CodexAppServerAgentClient(createTestLogger(), {
             env: { CODEX_HOME: codexHome },
           });
+          // Each scan lists its own directory, so each starts its own Codex.
           const results = await Promise.allSettled(
-            Array.from({ length: 24 }, () => provider.listImportableSessions({ limit: 1 })),
+            Array.from({ length: 24 }, (_, index) =>
+              provider.listImportableSessions({
+                limit: 1,
+                cwd: path.join(codexHome, String(index)),
+              }),
+            ),
           );
           expect(results).toEqual(
             Array.from({ length: 24 }, () => ({ status: "fulfilled", value: [] })),

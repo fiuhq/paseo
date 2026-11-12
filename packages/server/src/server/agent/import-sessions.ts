@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import type { z } from "zod";
 import type { Logger } from "pino";
 import type { ProviderSnapshotManager } from "./provider-snapshot-manager.js";
@@ -66,11 +67,14 @@ export interface ListImportableProviderSessionsInput {
   agentManager: Pick<AgentManager, "listAgents" | "listImportableSessions">;
   agentStorage: Pick<AgentStorage, "listAll">;
   providerSnapshotManager: Pick<ProviderSnapshotManager, "getProviderLabel">;
+  /** Whether a session's directory is still there; a session whose directory is gone can't be imported. */
+  sessionDirectoryExists?: (cwd: string) => Promise<boolean>;
 }
 
 export interface ListImportableProviderSessionsResult {
   entries: RecentProviderSessionDescriptorPayload[];
   filteredAlreadyImportedCount: number;
+  filteredMissingDirectoryCount: number;
   providerErrors: Array<{ provider: string; message: string }>;
 }
 
@@ -140,7 +144,7 @@ export async function listImportableProviderSessions(
     cwd: request.cwd,
   });
   let filteredAlreadyImportedCount = 0;
-  const candidates: ManagedImportableProviderSession[] = [];
+  const candidates: Array<ManagedImportableProviderSession & { importedAgentId?: string }> = [];
   const matchesRequestCwd = request.cwd ? createRealpathAwarePathMatcher(request.cwd) : null;
   for (const session of listing.sessions) {
     if (matchesRequestCwd && !matchesRequestCwd(session.cwd)) {
@@ -152,27 +156,37 @@ export async function listImportableProviderSessions(
     if (isMetadataGenerationSession(session)) {
       continue;
     }
-    if (
-      importedHandles.has(toProviderSessionHandleKey(session.provider, session.providerHandleId))
-    ) {
+    const handleKey = toProviderSessionHandleKey(session.provider, session.providerHandleId);
+    if (importedHandles.has(handleKey)) {
+      const importedAgentId = importedHandles.get(handleKey);
+      // A search is someone looking for one session: show it with the agent that has it open,
+      // so the sheet can take them there. The recent list leaves it out.
+      if (query && importedAgentId) {
+        candidates.push(Object.assign(session, { importedAgentId }));
+        continue;
+      }
       filteredAlreadyImportedCount += 1;
       continue;
     }
     candidates.push(session);
   }
 
-  const entries = candidates
-    .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime())
-    .slice(0, limit)
-    .map((descriptor) =>
-      toRecentProviderSessionDescriptorPayload(descriptor, {
-        providerLabel: providerSnapshotManager.getProviderLabel(descriptor.provider),
-      }),
-    );
+  candidates.sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
+  const { kept, missingDirectoryCount } = await keepSessionsWithDirectory(
+    candidates,
+    limit,
+    input.sessionDirectoryExists ?? isExistingDirectory,
+  );
+  const entries = kept.map((descriptor) =>
+    toRecentProviderSessionDescriptorPayload(descriptor, {
+      providerLabel: providerSnapshotManager.getProviderLabel(descriptor.provider),
+    }),
+  );
 
   return {
     entries,
     filteredAlreadyImportedCount,
+    filteredMissingDirectoryCount: missingDirectoryCount,
     providerErrors: listing.providerErrors,
   };
 }
@@ -340,38 +354,71 @@ function parseRecentProviderSessionsSince(since: string | undefined): number | n
   return timestamp;
 }
 
+async function isExistingDirectory(cwd: string): Promise<boolean> {
+  return stat(cwd).then(
+    (info) => info.isDirectory(),
+    () => false,
+  );
+}
+
+/**
+ * The first `limit` sessions, in order, whose directory is still there, and how many were passed
+ * over on the way. A session started in a directory since deleted (a throwaway worktree) can't be
+ * imported: the import fails on it.
+ */
+async function keepSessionsWithDirectory<T extends { cwd: string; importedAgentId?: string }>(
+  sessions: T[],
+  limit: number,
+  directoryExists: (cwd: string) => Promise<boolean>,
+): Promise<{ kept: T[]; missingDirectoryCount: number }> {
+  const kept: T[] = [];
+  let missingDirectoryCount = 0;
+  for (let start = 0; start < sessions.length && kept.length < limit; start += limit) {
+    const batch = sessions.slice(start, start + limit);
+    const present = await Promise.all(
+      batch.map((session) => (session.importedAgentId ? true : directoryExists(session.cwd))),
+    );
+    for (let index = 0; index < batch.length && kept.length < limit; index++) {
+      if (present[index]) kept.push(batch[index]!);
+      else missingDirectoryCount += 1;
+    }
+  }
+  return { kept, missingDirectoryCount };
+}
+
 async function collectImportedProviderSessions(
   agentManager: Pick<AgentManager, "listAgents">,
   agentStorage: Pick<AgentStorage, "listAll">,
   providerFilter: Set<string> | undefined,
-): Promise<{ handles: Set<string>; count: number }> {
-  const handles = new Set<string>();
+): Promise<{ handles: Map<string, string>; count: number }> {
+  const handles = new Map<string, string>();
   const sessions = new Set<string>();
   // Explicit provider-history import deduplicates against archived as well as active sessions.
   const records = await agentStorage.listAll();
   const storedRecordsById = new Map(records.map((record) => [record.id, record]));
 
   const collect = (
+    agentId: string,
     provider: AgentProvider | StoredAgentRecord["provider"] | string,
     persistence: AgentPersistenceHandle | null | undefined,
   ) => {
     if (!persistence || (providerFilter && !providerFilter.has(provider))) return;
     sessions.add(toProviderSessionHandleKey(provider, persistence.sessionId));
-    collectProviderSessionHandleKeys(handles, provider, persistence);
+    collectProviderSessionHandleKeys(handles, agentId, provider, persistence);
   };
 
   for (const agent of agentManager.listAgents()) {
     if (storedRecordsById.get(agent.id)?.archivedAt) {
       continue;
     }
-    collect(agent.provider, agent.persistence);
+    collect(agent.id, agent.provider, agent.persistence);
   }
 
   for (const record of records) {
     if (record.archivedAt) {
       continue;
     }
-    collect(record.provider, record.persistence);
+    collect(record.id, record.provider, record.persistence);
   }
 
   return { handles, count: sessions.size };
@@ -388,7 +435,8 @@ export function isMetadataGenerationSession(input: { firstPromptPreview: string 
 }
 
 function collectProviderSessionHandleKeys(
-  target: Set<string>,
+  target: Map<string, string>,
+  agentId: string,
   provider: AgentProvider | StoredAgentRecord["provider"] | string,
   persistence: AgentPersistenceHandle | null | undefined,
 ): void {
@@ -396,8 +444,12 @@ function collectProviderSessionHandleKeys(
     return;
   }
 
-  target.add(toProviderSessionHandleKey(provider, persistence.sessionId));
+  // A live agent is collected before its stored record, and keeps its handle.
+  const keys = [toProviderSessionHandleKey(provider, persistence.sessionId)];
   if (persistence.nativeHandle) {
-    target.add(toProviderSessionHandleKey(provider, persistence.nativeHandle));
+    keys.push(toProviderSessionHandleKey(provider, persistence.nativeHandle));
+  }
+  for (const key of keys) {
+    if (!target.has(key)) target.set(key, agentId);
   }
 }

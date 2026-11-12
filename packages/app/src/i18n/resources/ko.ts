@@ -464,6 +464,8 @@ export const ko: TranslationResources = {
     },
     row: {
       importing: "가져오는 중...",
+      alreadyOpen: "이미 열림",
+      openTab: "탭 열기",
     },
   },
   workspace: {

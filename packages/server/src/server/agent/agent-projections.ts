@@ -408,7 +408,7 @@ export function selectAgentListItems(
 }
 
 export function toRecentProviderSessionDescriptorPayload(
-  session: ImportableProviderSession & { provider: string },
+  session: ImportableProviderSession & { provider: string; importedAgentId?: string },
   options: RecentProviderSessionProjectionOptions,
 ): RecentProviderSessionDescriptorPayload {
   return {
@@ -421,6 +421,7 @@ export function toRecentProviderSessionDescriptorPayload(
     lastPromptPreview: session.lastPromptPreview,
     lastActivityAt: session.lastActivityAt.toISOString(),
     ...(session.exact ? { exact: true } : {}),
+    ...(session.importedAgentId ? { importedAgentId: session.importedAgentId } : {}),
   };
 }
 

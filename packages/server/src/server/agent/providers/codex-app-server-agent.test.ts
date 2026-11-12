@@ -7846,7 +7846,10 @@ describe("Codex importable sessions", () => {
       }),
     });
 
-    const scans = Array.from({ length: 24 }, () => provider.listImportableSessions({ limit: 1 }));
+    // Each scan lists its own directory: looks at one directory share a read (see below).
+    const scans = Array.from({ length: 24 }, (_, index) =>
+      provider.listImportableSessions({ limit: 1, cwd: `/workspace/${index}` }),
+    );
     await firstEntered.promise;
     expect(spawned).toBe(1);
     releaseFirst.resolve();
@@ -7857,6 +7860,85 @@ describe("Codex importable sessions", () => {
     expect(maxActiveInitializations).toBe(1);
     expect(disposed).toBe(24);
   });
+
+  test("a slow fresh list is answered from the last read when it covers the request, which the fresh read then replaces", async () => {
+    const slowRead = deferred<void>();
+    const listLimits: number[] = [];
+    const thread = (id: string, updatedAt: number) => ({
+      id,
+      cwd: "/workspace/a",
+      preview: id,
+      updatedAt,
+    });
+    const provider = new CodexAppServerAgentClient(createTestLogger(), undefined, {
+      appServerProcess: createFakeCodexAppServerProcess(() => createCodexAppServerChildProcess()),
+      _createCodexClient: () => ({
+        request: async (method, params) => {
+          if (method === "initialize") return {};
+          if (method === "thread/list") {
+            listLimits.push((params as { limit: number }).limit);
+            if (listLimits.length === 1) return { data: [thread("first", 1)] };
+            await slowRead.promise;
+            return { data: [thread("second", 2), thread("first", 1)] };
+          }
+          throw new Error(`Unexpected Codex method: ${method}`);
+        },
+        notify: () => {},
+        dispose: async () => {},
+      }),
+    });
+    // Import asks for its page plus the agents already open, one more after each import. Lists are
+    // read in whole pages of 100 rows, so the list kept before an import covers the one after it.
+    const ids = async (limit: number) => {
+      const sessions = await provider.listImportableSessions({ limit });
+      return sessions.map((session) => session.providerHandleId);
+    };
+
+    expect(await ids(50)).toEqual(["first"]);
+    // The fresh read hangs: the kept list answers a bigger request it covers once the wait is over.
+    expect(await ids(51)).toEqual(["first"]);
+    expect(listLimits).toEqual([100, 100]);
+    // A look while that read still runs joins it rather than starting another.
+    expect(await ids(51)).toEqual(["first"]);
+    expect(listLimits).toEqual([100, 100]);
+    // A request for more rows than were kept starts a bigger read and waits for it, past the wait
+    // a covered request would have taken.
+    const grown = ids(101);
+    await new Promise((resolve) => setTimeout(resolve, 1_800));
+    expect(listLimits).toEqual([100, 100, 200]);
+    slowRead.resolve();
+    expect(await grown).toEqual(["second", "first"]);
+    await vi.waitFor(async () => expect(await ids(51)).toEqual(["second", "first"]));
+  }, 15_000);
+
+  test("after a search reads 500 rows, a plain open is answered from it and refreshes one page", async () => {
+    const slowRead = deferred<void>();
+    const listLimits: number[] = [];
+    const provider = new CodexAppServerAgentClient(createTestLogger(), undefined, {
+      appServerProcess: createFakeCodexAppServerProcess(() => createCodexAppServerChildProcess()),
+      _createCodexClient: () => ({
+        request: async (method, params) => {
+          if (method === "initialize") return {};
+          if (method === "thread/list") {
+            listLimits.push((params as { limit: number }).limit);
+            if (listLimits.length > 1) await slowRead.promise;
+            return { data: [{ id: "first", cwd: "/workspace/a", preview: "first", updatedAt: 1 }] };
+          }
+          throw new Error(`Unexpected Codex method: ${method}`);
+        },
+        notify: () => {},
+        dispose: async () => {},
+      }),
+    });
+
+    // An Import search scans 500 rows (IMPORT_SESSION_SEARCH_SCAN_LIMIT); a plain open asks 15.
+    await provider.listImportableSessions({ limit: 20, scanLimit: 500 });
+    const recent = await provider.listImportableSessions({ limit: 15 });
+
+    expect(recent.map((session) => session.providerHandleId)).toEqual(["first"]);
+    expect(listLimits).toEqual([500, 100]);
+    slowRead.resolve();
+  }, 10_000);
 
   const CODEX_THREAD_PAGE_CAP = 100;
 
@@ -8152,7 +8234,7 @@ describe("Codex importable sessions", () => {
       },
       {
         method: "thread/list",
-        params: { limit: 50, sortKey: "updated_at", cwd: "/workspace/project-a" },
+        params: { limit: 100, sortKey: "updated_at", cwd: "/workspace/project-a" },
       },
     ]);
   });

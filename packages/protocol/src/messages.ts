@@ -980,6 +980,8 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
   exact: z.boolean().optional(),
+  /** The agent that already has this session open; a search keeps such a row so it can be opened. */
+  importedAgentId: z.string().optional(),
 });
 
 export type RecentProviderSessionDescriptorPayload = z.infer<
@@ -4605,6 +4607,8 @@ export const FetchRecentProviderSessionsResponseMessageSchema = z.object({
     requestId: z.string(),
     entries: z.array(RecentProviderSessionDescriptorPayloadSchema),
     filteredAlreadyImportedCount: z.number().int().nonnegative().optional(),
+    /** Listed sessions left out because their directory is gone; they still filled the page. */
+    filteredMissingDirectoryCount: z.number().int().nonnegative().optional(),
     providerErrors: z
       .array(
         z.object({

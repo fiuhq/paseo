@@ -468,6 +468,8 @@ export const es: TranslationResources = {
     },
     row: {
       importing: "Importador...",
+      alreadyOpen: "Ya abierta",
+      openTab: "Abrir pestaña",
     },
   },
   workspace: {
