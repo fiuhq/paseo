@@ -8022,15 +8022,14 @@ export class CodexAppServerAgentClient implements AgentClient {
     const entry = found;
     const kept = entry.kept;
     if (!entry.reading || entry.reading.size < window.limit) {
-      const size =
-        Math.ceil(Math.max(window.limit, kept?.size ?? 0) / CODEX_THREAD_PAGE) * CODEX_THREAD_PAGE;
+      const size = Math.ceil(window.limit / CODEX_THREAD_PAGE) * CODEX_THREAD_PAGE;
       const read = { size, threads: this.readThreadWindow({ ...window, limit: size }) };
       entry.reading = read;
       const settle = () => {
         if (entry.reading === read) entry.reading = undefined;
       };
       read.threads.then((threads) => {
-        if (size >= (entry.kept?.size ?? 0)) entry.kept = { size, threads };
+        entry.kept = { size, threads };
         settle();
       }, settle);
     }
