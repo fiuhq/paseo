@@ -39,6 +39,16 @@ export function describeWorkspaceTitleState(
         canRename: true,
       };
     case "unchecked":
+      // COMPAT(workspaceTitleBelowBar): a scored unchecked title is the best of refused tries; a new status value would break older apps' parsing.
+      if (state.score !== null) {
+        return {
+          text: i18n.t("workspace.titleState.belowBar", {
+            tries: state.attempts,
+            score: state.score.toFixed(2),
+          }),
+          canRename: true,
+        };
+      }
       return {
         text: i18n.t("workspace.titleState.unchecked", {
           judge: state.judge ?? i18n.t("workspace.titleState.judgeFallback"),

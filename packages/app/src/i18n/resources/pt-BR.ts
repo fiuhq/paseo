@@ -477,6 +477,7 @@ export const ptBR: TranslationResources = {
       refused: 'Recusado "{{title}}" ({{score}}): aguardando o agente',
       noReply: "Ainda sem título: o agente não respondeu",
       exhausted: "Ainda sem título: {{tries}} tentativas recusadas",
+      belowBar: "O melhor de {{tries}} tentativas, nota {{score}}: abaixo do limite",
       unchecked: "Não verificado: {{judge}} indisponível",
       judgeFallback: "o avaliador",
       rename: "Renomear",

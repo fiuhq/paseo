@@ -478,6 +478,7 @@ export const fr: TranslationResources = {
       refused: "Refusé « {{title}} » ({{score}}) : en attente de l’agent",
       noReply: "Pas encore de titre : l’agent n’a pas répondu",
       exhausted: "Pas encore de titre : {{tries}} essais refusés",
+      belowBar: "Le meilleur de {{tries}} essais, noté {{score}} : sous le seuil",
       unchecked: "Non vérifié : {{judge}} injoignable",
       judgeFallback: "l’évaluateur",
       rename: "Renommer",

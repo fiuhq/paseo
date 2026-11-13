@@ -473,6 +473,7 @@ export const zhCN: TranslationResources = {
       refused: "已拒绝“{{title}}”({{score}}):等待智能体",
       noReply: "暂无标题:智能体未回复",
       exhausted: "暂无标题:已拒绝 {{tries}} 次",
+      belowBar: "{{tries}} 次中最佳({{score}}):未达标准",
       unchecked: "未检查:无法连接 {{judge}}",
       judgeFallback: "评审器",
       rename: "重命名",

@@ -473,6 +473,7 @@ export const ar: TranslationResources = {
       refused: 'تم رفض "{{title}}" ({{score}}): بانتظار الوكيل',
       noReply: "لا يوجد عنوان بعد: لم يرد الوكيل",
       exhausted: "لا يوجد عنوان بعد: رُفضت {{tries}} محاولات",
+      belowBar: "الأفضل من {{tries}} محاولات، بدرجة {{score}}: دون الحد",
       unchecked: "لم يتم التحقق: تعذر الوصول إلى {{judge}}",
       judgeFallback: "المُقيّم",
       rename: "إعادة تسمية",

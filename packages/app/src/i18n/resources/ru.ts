@@ -477,6 +477,7 @@ export const ru: TranslationResources = {
       refused: "Отклонено «{{title}}» ({{score}}): ждём агента",
       noReply: "Названия пока нет: агент не ответил",
       exhausted: "Названия пока нет: отклонено попыток: {{tries}}",
+      belowBar: "Лучший из {{tries}} попыток, оценка {{score}}: ниже порога",
       unchecked: "Не проверено: {{judge}} недоступен",
       judgeFallback: "оценщик",
       rename: "Переименовать",

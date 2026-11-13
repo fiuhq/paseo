@@ -247,14 +247,51 @@ describe("WorkspaceTitleGate", () => {
     ]);
   });
 
-  test("three refusals end with no title and the state says so, in one turn", async () => {
-    const h = harness({ verdicts: [refuse(0.1), refuse(0.2), refuse(0.3), accept(0.9)] });
+  test("three refusals put on the title the judge scored highest, marked under the bar, in one turn", async () => {
+    let tries = 0;
+    const h = harness({
+      verdicts: [refuse(0.1), refuse(0.6), refuse(0.3), accept(0.9)],
+      generated: () => ({ title: `Guess ${++tries}`, branch: `guess-${tries}` }),
+    });
 
     await h.gate.start(h.record(), PROMPT);
     await h.endTurn("turn_completed");
     await h.endTurn("turn_completed");
 
     expect(h.judged).toHaveLength(3);
+    expect(h.applied).toEqual([{ title: "Guess 2", branch: "guess-2", unchecked: true }]);
+    expect(h.record().titleState).toMatchObject({
+      status: "unchecked",
+      attempts: 3,
+      score: 0.6,
+      judge: "Jev",
+    });
+    expect(isWorkspaceTitleHeld(h.record().titleState)).toBe(false);
+  });
+
+  test("a tie between refused titles goes to the later one, written from more of the work", async () => {
+    let tries = 0;
+    const h = harness({
+      verdicts: [refuse(0.5), refuse(0.5), refuse(0.2)],
+      generated: () => ({ title: `Guess ${++tries}`, branch: `guess-${tries}` }),
+    });
+
+    await h.gate.start(h.record(), PROMPT);
+    await h.endTurn("turn_completed");
+
+    expect(h.applied.map((a) => a.title)).toEqual(["Guess 2"]);
+  });
+
+  test("a guess refused unscored, as one from a prompt holding a link is, never stands in", async () => {
+    let tries = 0;
+    const h = harness({
+      verdicts: [refuse(0)],
+      generated: () => (++tries === 1 ? { title: "Check link", branch: "check-link" } : null),
+    });
+
+    await h.gate.start(h.record(), PROMPT);
+    await h.endTurn("turn_completed");
+
     expect(h.applied).toEqual([]);
     expect(h.record().titleState).toMatchObject({ status: "exhausted", attempts: 3 });
   });
