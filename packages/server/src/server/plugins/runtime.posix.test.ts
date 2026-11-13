@@ -10,7 +10,7 @@ import type { ProviderEvent, ProviderRegistration } from "@getpaseo/plugin/serve
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentStreamEvent } from "../agent/agent-sdk-types.js";
 import { PluginAgentClientRegistry } from "../agent/plugin-provider.js";
-import { PLUGIN_START_TIMEOUT_MS, PluginRuntime } from "./runtime.js";
+import { PluginRuntime } from "./runtime.js";
 import { resolveDaemonVersion } from "../daemon-version.js";
 import type { PluginSessionSocket } from "./session-socket.js";
 
@@ -1241,7 +1241,7 @@ export default function contribute(server: { registerProvider(provider: Provider
         )
         .finally(() => (settled = true));
       await initializing;
-      await vi.advanceTimersByTimeAsync(PLUGIN_START_TIMEOUT_MS - 1_000);
+      await vi.advanceTimersByTimeAsync(119_000);
       expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1_000);
       await expect(outcome).resolves.toBe("Plugin never-starts did not initialize");

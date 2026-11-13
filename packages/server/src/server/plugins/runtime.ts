@@ -49,7 +49,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
  * scanning every file a process opens, starts measured 30-62 s. At the request limit, a plugin
  * update failed half its starts and the rollback to the old version was itself at risk.
  */
-export const PLUGIN_START_TIMEOUT_MS = 120_000;
+const PLUGIN_START_TIMEOUT_MS = 120_000;
 const TOOL_CALL_TIMEOUT_MS = 10 * 60_000;
 const MAX_LOG_ENTRIES = 500;
 const MAX_LOG_BYTES = 256 * 1024;
