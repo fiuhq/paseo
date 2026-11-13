@@ -49,7 +49,15 @@ export interface WorkfloorProviderOptions {
   fetch?: typeof fetch;
   /** Paseo's API, to put an imported card in a worktree of its repository. */
   paseo?: PluginServerContext["paseo"];
+  /** How long a link search waits for the card's worktree; the default is `PLACE_WAIT_MS`. */
+  placeWaitMs?: number;
 }
+
+/**
+ * Paseo gives a provider 90 s to list its sessions, and making a worktree can take minutes on a busy
+ * machine. A link search waits this long for the card's worktree, which keeps being made after.
+ */
+export const PLACE_WAIT_MS = 60_000;
 
 /** A Paseo model is one of a project's agents: `<project id>:<agent profile id>`. */
 const modelId = (project: string, agent: string) => `${project}:${agent}`;
@@ -158,7 +166,11 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
       placing.set(key, found);
       void found.finally(() => placing.delete(key));
     }
-    return found;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<Placement>((resolve) => {
+      timer = setTimeout(() => resolve({ pending: true }), options.placeWaitMs ?? PLACE_WAIT_MS);
+    });
+    return Promise.race([found, late]).finally(() => clearTimeout(timer));
   };
   return {
     id: "workfloor",
@@ -477,6 +489,11 @@ async function listSessions(
     const project = projects.find((p) => p.id === linked.project);
     // The card works in a worktree of its repository, so Import puts its agent there.
     const placed = await state.place(linked, card);
+    // Listing it elsewhere would import the card outside its worktree: Retry once it is made.
+    if (placed.pending)
+      throw new WorkfloorError(
+        `Still making the worktree for "${card.title || linked.card}"; Retry in a minute`,
+      );
     const unplaced =
       placed.failure === undefined ? "" : ` · worktree not made: ${message(placed.failure)}`;
     const sessions = [

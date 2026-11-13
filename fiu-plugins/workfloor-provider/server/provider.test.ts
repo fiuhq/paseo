@@ -282,6 +282,7 @@ class FakePaseo {
   workspaces: Array<Record<string, unknown>> = [];
   created: Array<Record<string, unknown>> = [];
   failCreate: string | undefined;
+  createMs = 20;
   api = {
     projects: { list: async () => ({ requestId: "r", projects: this.projects }) },
     workspaces: {
@@ -299,7 +300,7 @@ class FakePaseo {
         };
       },
       create: async (options: Record<string, unknown>) => {
-        await Bun.sleep(20);
+        await Bun.sleep(this.createMs);
         if (this.failCreate) throw new Error(this.failCreate);
         this.created.push(options);
         const directory = `/worktrees/sfp-pro-${this.created.length}`;
@@ -319,11 +320,13 @@ async function connect(
   wf: FakeWorkfloor,
   auth: () => Promise<typeof AUTH | { missing: string }> = async () => AUTH,
   paseo?: FakePaseo,
+  placeWaitMs?: number,
 ) {
   const provider = createWorkfloorProvider({
     auth,
     fetch: wf.fetch,
     ...(paseo ? { paseo: paseo.api as never } : {}),
+    ...(placeWaitMs === undefined ? {} : { placeWaitMs }),
   });
   const connection = await provider.connect({
     versions: [1],
@@ -2113,6 +2116,27 @@ describe("the Workfloor provider", () => {
         metadata: { workfloorCard: `${P}/lane-card` },
       },
     ]);
+  });
+
+  test("a worktree still being made fails the search saying so, and a later search lists the card in it", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", laneCard(ON_PR));
+    const paseo = new FakePaseo();
+    paseo.createMs = 200;
+    const { connection, events } = await connect(wf, undefined, paseo, 50);
+    await connection.send({ type: "sessions", requestId: "l1", cwd: "/here", query: LINK });
+    expect(
+      await until(events, (e) => e.type === "request.failed" || e.type === "sessions"),
+    ).toEqual({
+      type: "request.failed",
+      requestId: "l1",
+      error: { message: 'Still making the worktree for "Server heap crashes"; Retry in a minute' },
+    });
+    await Bun.sleep(250);
+    expect((await listLink(connection, events, "l2")).sessions[0]?.cwd).toBe(
+      "/worktrees/sfp-pro-1",
+    );
+    expect(paseo.created).toHaveLength(1);
   });
 
   test("a card whose repository Paseo has no project for stays where Import is", async () => {
