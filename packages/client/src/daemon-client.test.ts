@@ -2400,10 +2400,14 @@ test("keeps a plugin reload pending past the session RPC deadline", async () => 
   }
 });
 
-test("keeps enable and disable inside the session RPC deadline", async () => {
+test("waits out the plugin start limit on enable and keeps disable at the session RPC deadline", async () => {
   useHeartbeatClock();
   try {
-    for (const action of ["enable", "disable"] as const) {
+    // Enable waits for the daemon to start the plugin, which may take up to 120 s.
+    for (const [action, deadline] of [
+      ["enable", 180_000],
+      ["disable", 60_000],
+    ] as const) {
       const mock = createMockTransport();
       const client = new DaemonClient({
         url: "ws://test",
@@ -2438,11 +2442,11 @@ test("keeps enable and disable inside the session RPC deadline", async () => {
         pluginId: "example",
       });
 
-      await vi.advanceTimersByTimeAsync(59_999);
+      await vi.advanceTimersByTimeAsync(deadline - 1);
       expect(settled).toBe(false);
 
       await vi.advanceTimersByTimeAsync(1);
-      await expect(pending).rejects.toThrow("Timeout waiting for message (60000ms)");
+      await expect(pending).rejects.toThrow(`Timeout waiting for message (${deadline}ms)`);
     }
   } finally {
     vi.useRealTimers();
