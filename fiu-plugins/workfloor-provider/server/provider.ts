@@ -611,6 +611,8 @@ async function openSession(
       const item = timelineItem(m, shown);
       if (item) state.emit({ type: "timeline.item", sessionId: input.sessionId, item });
     }
+  if (input.history === "replay" && !busy && !session.archived && wf)
+    await noticeGate(session, `${input.sessionId}-gate`, wf, state);
   state.emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
   if (busy && wf) startTurn(session, newTurn(session), wf, state);
   else watch(session, state);
@@ -839,7 +841,7 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
           detail.messages.filter((m) => !session.seen.has(m.id)),
         );
         const outcome = step(session, turn, detail, waiting, wf, state, shown);
-        if (outcome?.settled) await noticeGate(session, turn, wf, state);
+        if (outcome?.settled) await noticeGate(session, `${turn.id}-gate`, wf, state);
         if (outcome) return end(outcome.state, outcome.error);
       } while (again && !turn.abort.signal.aborted);
     } catch (error) {
@@ -1134,16 +1136,17 @@ function step(
 
 /**
  * A lane card whose agent stopped, asking nothing, may wait on a person's approval to move on
- * (Plan's "Approve plan"): Workfloor marks no question for it, so its card view's gate is named here.
+ * (Plan's "Approve plan"): Workfloor marks no question for it, so its card view's gate is named
+ * here, at the end of a turn and at the end of a reopened card's history.
  */
 async function noticeGate(
   session: Session,
-  turn: Turn,
+  id: string,
   wf: Workfloor,
   state: State,
 ): Promise<void> {
-  const card = session.card!;
-  if (card.lane === lane(card.project)) return;
+  const card = session.card;
+  if (!card || card.lane === lane(card.project)) return;
   const view = await wf.card(card).catch((error: unknown) => {
     console.error(`[workfloor-provider] reading ${card.card}'s gates: ${message(error)}`);
     return undefined;
@@ -1155,7 +1158,7 @@ async function noticeGate(
     sessionId: session.id,
     item: {
       type: "notification",
-      id: `${turn.id}-gate`,
+      id,
       level: "warning",
       message: `The card waits on you: ${gate}. Take it in Workfloor, ${wf.link(card)}`,
     },
