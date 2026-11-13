@@ -1155,6 +1155,36 @@ describe("the Workfloor provider", () => {
     });
   });
 
+  test("a lane card reopened while it already waits at an approval gate ends its history with the notice", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [{ id: "m1", role: "agent", body: "Plan is ready." }],
+      board: {
+        agentState: "idle",
+        gates: {
+          ways: [],
+          locked: [{ stage: "build", gate: "Approve plan to build", through: "plan-review" }],
+        },
+      },
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    const items = events.flatMap((e) => (e.type === "timeline.item" ? [e.item] : []));
+    expect(items.map((i) => i.type)).toEqual(["assistant_message", "notification"]);
+    expect(items[1]).toMatchObject({
+      level: "warning",
+      message: expect.stringContaining("The card waits on you: Approve plan to build."),
+    });
+    // Nothing turned: the card was only read.
+    expect(events.some((e) => e.type === "session.turn")).toBe(false);
+  });
+
   test("a lane card with no gate, or a conversation, ends its turn without a waits-on-you notice", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", {
