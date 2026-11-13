@@ -323,13 +323,13 @@ async function connect(
   wf: FakeWorkfloor,
   auth: () => Promise<typeof AUTH | { missing: string }> = async () => AUTH,
   paseo?: FakePaseo,
-  placeWaitMs?: number,
+  waits: { placeWaitMs?: number; searchLimitMs?: number } = {},
 ) {
   const provider = createWorkfloorProvider({
     auth,
     fetch: wf.fetch,
     ...(paseo ? { paseo: paseo.api as never } : {}),
-    ...(placeWaitMs === undefined ? {} : { placeWaitMs }),
+    ...waits,
   });
   const connection = await provider.connect({
     versions: [1],
@@ -2126,7 +2126,7 @@ describe("the Workfloor provider", () => {
     wf.cards.set("lane-card", laneCard(ON_PR));
     const paseo = new FakePaseo();
     paseo.createMs = 200;
-    const { connection, events } = await connect(wf, undefined, paseo, 50);
+    const { connection, events } = await connect(wf, undefined, paseo, { placeWaitMs: 50 });
     await connection.send({ type: "sessions", requestId: "l1", cwd: "/here", query: LINK });
     expect(
       await until(events, (e) => e.type === "request.failed" || e.type === "sessions"),
@@ -2142,17 +2142,38 @@ describe("the Workfloor provider", () => {
     expect(paseo.created).toHaveLength(1);
   });
 
-  test("the worktree wait counts from when the search starts, so slow Workfloor reads use it up", async () => {
+  test("slow Workfloor reads leave the worktree only what is left of the search's limit", async () => {
     const wf = new FakeWorkfloor();
     wf.cards.set("lane-card", laneCard(ON_PR));
     wf.cardDelay = 150;
     const paseo = new FakePaseo();
-    paseo.createMs = 100;
-    const { connection, events } = await connect(wf, undefined, paseo, 200);
+    paseo.createMs = 300;
+    const { connection, events } = await connect(wf, undefined, paseo, {
+      placeWaitMs: 1000,
+      searchLimitMs: 200,
+    });
     await connection.send({ type: "sessions", requestId: "l1", cwd: "/here", query: LINK });
     expect(
       await until(events, (e) => e.type === "request.failed" || e.type === "sessions"),
-    ).toMatchObject({ type: "request.failed", requestId: "l1" });
+    ).toEqual({
+      type: "request.failed",
+      requestId: "l1",
+      error: { message: 'Still making the worktree for "Server heap crashes"; Retry in a minute' },
+    });
+  });
+
+  test("slow Workfloor reads still leave the worktree its whole wait when the search's limit allows", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", laneCard(ON_PR));
+    wf.cardDelay = 300;
+    const paseo = new FakePaseo();
+    const { connection, events } = await connect(wf, undefined, paseo, {
+      placeWaitMs: 200,
+      searchLimitMs: 1000,
+    });
+    expect((await listLink(connection, events, "l1")).sessions[0]?.cwd).toBe(
+      "/worktrees/sfp-pro-1",
+    );
   });
 
   test("a card whose repository Paseo has no project for stays where Import is", async () => {

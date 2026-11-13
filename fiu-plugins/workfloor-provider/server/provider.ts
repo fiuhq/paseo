@@ -51,14 +51,21 @@ export interface WorkfloorProviderOptions {
   paseo?: PluginServerContext["paseo"];
   /** How long a link search waits for the card's worktree; the default is `PLACE_WAIT_MS`. */
   placeWaitMs?: number;
+  /** How long after it starts a link search answers by; the default is `SEARCH_LIMIT_MS`. */
+  searchLimitMs?: number;
 }
 
 /**
- * Paseo gives a provider 90 s to list its sessions, and making a worktree can take minutes on a busy
- * machine. A link search waits this long, from when it starts, for the card's worktree, which keeps
- * being made after.
+ * Making a worktree can take minutes on a busy machine. A link search waits this long for the card's
+ * worktree, which keeps being made after.
  */
 export const PLACE_WAIT_MS = 60_000;
+
+/**
+ * Paseo stops waiting for a provider's sessions 90 s after asking. A link search answers within this
+ * long of when it started, however long its Workfloor reads took.
+ */
+export const SEARCH_LIMIT_MS = 85_000;
 
 /** A Paseo model is one of a project's agents: `<project id>:<agent profile id>`. */
 const modelId = (project: string, agent: string) => `${project}:${agent}`;
@@ -169,7 +176,10 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<Placement>((resolve) => {
-      const wait = since + (options.placeWaitMs ?? PLACE_WAIT_MS) - Date.now();
+      const wait = Math.min(
+        options.placeWaitMs ?? PLACE_WAIT_MS,
+        since + (options.searchLimitMs ?? SEARCH_LIMIT_MS) - Date.now(),
+      );
       timer = setTimeout(() => resolve({ pending: true }), wait);
     });
     return Promise.race([found, late]).finally(() => clearTimeout(timer));
