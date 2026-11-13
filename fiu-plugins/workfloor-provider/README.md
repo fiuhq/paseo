@@ -57,7 +57,7 @@ audits each write as made by a token, and refuses it a go on a gate or a permiss
 - a plan step's go, an approval, a handoff or issue the agent offers, and a permission request are
   answered in Workfloor: the turn ends with a link to the card. A lane card whose agent stopped
   at a stage's approval gate (Plan's Approve plan) ends its turn with a notice naming the gate,
-  with the same link;
+  with the same link, and ends its history with that notice each time its tab is opened;
 - the agent works in Workfloor, on its project's repositories, not in your Paseo workspace;
 - a conversation keeps the agent it started with.
 
