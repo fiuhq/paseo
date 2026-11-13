@@ -20,6 +20,7 @@ import {
   WorkfloorError,
   cardIdOfShortLink,
   cardOfLink,
+  gateWaiting,
   lane,
   type Attachment,
   type CardRef,
@@ -808,6 +809,7 @@ async function follow(session: Session, turn: Turn, wf: Workfloor, state: State)
           detail.messages.filter((m) => !session.seen.has(m.id)),
         );
         const outcome = step(session, turn, detail, waiting, wf, state, shown);
+        if (outcome?.settled) await noticeGate(session, turn, wf, state);
         if (outcome) return end(outcome.state, outcome.error);
       } while (again && !turn.abort.signal.aborted);
     } catch (error) {
@@ -1039,7 +1041,7 @@ function step(
   wf: Workfloor,
   state: State,
   shown: ReadonlyMap<string, string>,
-): { state: "completed" | "failed"; error?: string } | undefined {
+): { state: "completed" | "failed"; error?: string; settled?: boolean } | undefined {
   const current = detail.sessions?.find((s) => s.id === detail.sessionId);
   const working = !current || WORKING.has(current.state);
   if (current && WORKING.has(current.state)) turn.worked = true;
@@ -1095,7 +1097,39 @@ function step(
     });
     return { state: "completed" };
   }
-  return !working && (turn.replied || turn.worked) ? { state: "completed" } : undefined;
+  return !working && (turn.replied || turn.worked)
+    ? { state: "completed", settled: true }
+    : undefined;
+}
+
+/**
+ * A lane card whose agent stopped, asking nothing, may wait on a person's approval to move on
+ * (Plan's "Approve plan"): Workfloor marks no question for it, so its card view's gate is named here.
+ */
+async function noticeGate(
+  session: Session,
+  turn: Turn,
+  wf: Workfloor,
+  state: State,
+): Promise<void> {
+  const card = session.card!;
+  if (card.lane === lane(card.project)) return;
+  const view = await wf.card(card).catch((error: unknown) => {
+    console.error(`[workfloor-provider] reading ${card.card}'s gates: ${message(error)}`);
+    return undefined;
+  });
+  const gate = view && gateWaiting(view);
+  if (!gate) return;
+  state.emit({
+    type: "timeline.item",
+    sessionId: session.id,
+    item: {
+      type: "notification",
+      id: `${turn.id}-gate`,
+      level: "warning",
+      message: `The card waits on you: ${gate}. Take it in Workfloor, ${wf.link(card)}`,
+    },
+  });
 }
 
 /** A Workfloor message as a timeline item, its pictures shown under its words. */
