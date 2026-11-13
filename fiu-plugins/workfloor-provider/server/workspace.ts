@@ -10,6 +10,8 @@ export const CARD_KEY = "workfloorCard";
 export interface Placement {
   cwd?: string;
   failure?: unknown;
+  /** Still being made when the search stopped waiting: a later search finds it. */
+  pending?: boolean;
 }
 
 /**
