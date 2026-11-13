@@ -4399,7 +4399,8 @@ export const WorkspaceGitHubRuntimePayloadSchema = z
 /**
  * Why a workspace has no title yet. Absent unless a plugin judges titles. `naming`,
  * `refused`, `no-reply` and `exhausted` hold the title back; `unchecked` means it went on
- * without a verdict.
+ * without a pass: with `score: null` the judge gave no verdict, and with a score it is the best of
+ * three refused tries.
  */
 export const WorkspaceTitleStateSchema = z.object({
   status: z.enum(["naming", "refused", "no-reply", "exhausted", "unchecked"]),
