@@ -134,7 +134,7 @@ describe("CompactWorkspaceHeader title state", () => {
   });
 
   it("says a title is the best of refused tries, with its score and Rename, without muting it", () => {
-    const view = renderHeader({ ...held("below-bar"), score: 0.62 });
+    const view = renderHeader({ ...held("unchecked"), score: 0.62 });
 
     const chip = view.querySelector('[data-testid="workspace-title-state"]')?.textContent;
     expect(chip).toContain("0.62");

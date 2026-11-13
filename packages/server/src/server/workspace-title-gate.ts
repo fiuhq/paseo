@@ -268,7 +268,8 @@ export class WorkspaceTitleGate {
 
   /**
    * After the last try, the best-scored refused title goes on rather than none: it is marked
-   * `below-bar` with its score, so it never reads as a pass and Rename stays one tap away.
+   * `unchecked` and carries its score, so it never reads as a pass and Rename stays one tap away.
+   * An `unchecked` state from a judge failure always has `score: null`, which tells the two apart.
    */
   private async refused(
     workspaceId: string,
@@ -279,7 +280,7 @@ export class WorkspaceTitleGate {
     const best = this.best.get(workspaceId);
     if (!best) return this.setState(workspaceId, { ...next, status: "exhausted" });
     await this.place(workspaceId, best.firstAgentContext, best.generated, {
-      status: "below-bar",
+      status: "unchecked",
       attempts: attempt,
       refusedTitle: null,
       score: best.score,

@@ -261,7 +261,7 @@ describe("WorkspaceTitleGate", () => {
     expect(h.judged).toHaveLength(3);
     expect(h.applied).toEqual([{ title: "Guess 2", branch: "guess-2", unchecked: true }]);
     expect(h.record().titleState).toMatchObject({
-      status: "below-bar",
+      status: "unchecked",
       attempts: 3,
       score: 0.6,
       judge: "Jev",
