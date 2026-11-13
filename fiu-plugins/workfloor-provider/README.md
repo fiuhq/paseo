@@ -53,7 +53,9 @@ audits each write as made by a token, and refuses it a go on a gate or a permiss
 - the agent's question is asked in Paseo, while the turn stays open: pick an option, write your own
   answer, or decline it; one you answer in Workfloor meanwhile is withdrawn here;
 - a plan step's go, an approval, a handoff or issue the agent offers, and a permission request are
-  answered in Workfloor: the turn ends with a link to the card;
+  answered in Workfloor: the turn ends with a link to the card. A lane card whose agent stopped
+  at a stage's approval gate (Plan's Approve plan) ends its turn with a notice naming the gate,
+  with the same link;
 - the agent works in Workfloor, on its project's repositories, not in your Paseo workspace;
 - a conversation keeps the agent it started with.
 
