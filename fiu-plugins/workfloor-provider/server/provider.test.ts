@@ -72,6 +72,8 @@ class FakeWorkfloor {
 
   /** How long each read of a conversation takes. */
   detailDelay = 0;
+  /** How long each read of a card's view takes. */
+  cardDelay = 0;
 
   changed() {
     for (const s of this.streams)
@@ -191,6 +193,7 @@ class FakeWorkfloor {
       return json({ started: true });
     }
     if (url.pathname === "/api/connection" && q.get("view") === "card") {
+      await Bun.sleep(this.cardDelay);
       const c = this.cards.get(q.get("task")!);
       if (!c || q.get("workflow") !== (c.lane ?? `conversations:${P}`))
         return json({ error: "Not found" }, 404);
@@ -2137,6 +2140,19 @@ describe("the Workfloor provider", () => {
       "/worktrees/sfp-pro-1",
     );
     expect(paseo.created).toHaveLength(1);
+  });
+
+  test("the worktree wait counts from when the search starts, so slow Workfloor reads use it up", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", laneCard(ON_PR));
+    wf.cardDelay = 150;
+    const paseo = new FakePaseo();
+    paseo.createMs = 100;
+    const { connection, events } = await connect(wf, undefined, paseo, 200);
+    await connection.send({ type: "sessions", requestId: "l1", cwd: "/here", query: LINK });
+    expect(
+      await until(events, (e) => e.type === "request.failed" || e.type === "sessions"),
+    ).toMatchObject({ type: "request.failed", requestId: "l1" });
   });
 
   test("a card whose repository Paseo has no project for stays where Import is", async () => {

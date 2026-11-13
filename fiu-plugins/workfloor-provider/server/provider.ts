@@ -55,7 +55,8 @@ export interface WorkfloorProviderOptions {
 
 /**
  * Paseo gives a provider 90 s to list its sessions, and making a worktree can take minutes on a busy
- * machine. A link search waits this long for the card's worktree, which keeps being made after.
+ * machine. A link search waits this long, from when it starts, for the card's worktree, which keeps
+ * being made after.
  */
 export const PLACE_WAIT_MS = 60_000;
 
@@ -150,7 +151,7 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
   };
   // One placement per card at a time: two searches for the same link never make two worktrees.
   const placing = new Map<string, Promise<Placement>>();
-  const place: Place = (ref, card) => {
+  const place: Place = (ref, card, since) => {
     const paseo = options.paseo;
     if (!paseo) return Promise.resolve({});
     const key = `${ref.project}/${ref.card}`;
@@ -168,7 +169,8 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<Placement>((resolve) => {
-      timer = setTimeout(() => resolve({ pending: true }), options.placeWaitMs ?? PLACE_WAIT_MS);
+      const wait = since + (options.placeWaitMs ?? PLACE_WAIT_MS) - Date.now();
+      timer = setTimeout(() => resolve({ pending: true }), wait);
     });
     return Promise.race([found, late]).finally(() => clearTimeout(timer));
   };
@@ -210,7 +212,7 @@ export function createWorkfloorProvider(options: WorkfloorProviderOptions): Prov
 }
 
 /** Where an imported card works, when Paseo has its repository. */
-type Place = (ref: CardRef, card: CardView) => Promise<Placement>;
+type Place = (ref: CardRef, card: CardView, since: number) => Promise<Placement>;
 
 function createConnection(
   workfloor: () => Promise<Workfloor>,
@@ -480,6 +482,7 @@ async function listSessions(
   input: Extract<ProviderInput, { type: "sessions" }>,
   state: State,
 ): Promise<void> {
+  const since = Date.now();
   const wf = await state.workfloor();
   const projects = await wf.projects();
   // A Workfloor card's link, pasted into the search, lists that card: any lane's, to open and drive here.
@@ -488,7 +491,7 @@ async function listSessions(
     const { ref: linked, card } = found;
     const project = projects.find((p) => p.id === linked.project);
     // The card works in a worktree of its repository, so Import puts its agent there.
-    const placed = await state.place(linked, card);
+    const placed = await state.place(linked, card, since);
     // Listing it elsewhere would import the card outside its worktree: Retry once it is made.
     if (placed.pending)
       throw new WorkfloorError(
