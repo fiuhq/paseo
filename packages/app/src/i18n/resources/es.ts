@@ -478,6 +478,7 @@ export const es: TranslationResources = {
       refused: 'Rechazado "{{title}}" ({{score}}): esperando al agente',
       noReply: "Aún sin título: el agente no respondió",
       exhausted: "Aún sin título: {{tries}} intentos rechazados",
+      belowBar: "El mejor de {{tries}} intentos, con {{score}}: bajo el umbral",
       unchecked: "Sin comprobar: {{judge}} no disponible",
       judgeFallback: "el evaluador",
       rename: "Renombrar",

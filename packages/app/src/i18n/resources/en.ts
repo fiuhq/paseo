@@ -470,6 +470,7 @@ export const en = {
       refused: 'Refused "{{title}}" ({{score}}): waiting for the agent',
       noReply: "No title yet: the agent never replied",
       exhausted: "No title yet: {{tries}} tries refused",
+      belowBar: "Best of {{tries}} tries, scored {{score}}: under the bar",
       unchecked: "Not checked: {{judge}} unreachable",
       judgeFallback: "the judge",
       rename: "Rename",

@@ -478,6 +478,7 @@ export const ja: TranslationResources = {
       refused: "「{{title}}」を却下 ({{score}}): エージェントを待っています",
       noReply: "タイトルなし: エージェントが応答しませんでした",
       exhausted: "タイトルなし: {{tries}} 回却下されました",
+      belowBar: "{{tries}} 回中の最高 ({{score}}): 基準未満",
       unchecked: "未確認: {{judge}} に接続できません",
       judgeFallback: "判定者",
       rename: "名前を変更",

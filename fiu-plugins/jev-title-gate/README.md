@@ -14,14 +14,14 @@ the states and the UI.
 
 ## What happens when
 
-| Situation                        | What you see                                 |
-| -------------------------------- | -------------------------------------------- |
-| The prompt is specific, no link  | The title goes on at once.                   |
-| It holds a link, or a poor guess | `Naming…`, and why, until the agent replies. |
-| Three tries refused              | `Naming…` with a Rename button.              |
-| The agent never replies          | `Naming…` with a Rename button.              |
-| Jev is unreachable               | The title goes on, marked `Not checked`.     |
-| You or an agent rename it        | Your name wins and the hold ends.            |
+| Situation                        | What you see                                                     |
+| -------------------------------- | ---------------------------------------------------------------- |
+| The prompt is specific, no link  | The title goes on at once.                                       |
+| It holds a link, or a poor guess | `Naming…`, and why, until the agent replies.                     |
+| Three tries refused              | The best-scored try goes on, with its score and a Rename button. |
+| The agent never replies          | `Naming…` with a Rename button.                                  |
+| Jev is unreachable               | The title goes on, marked `Not checked`.                         |
+| You or an agent rename it        | Your name wins and the hold ends.                                |
 
 ## What leaves the machine
 

@@ -4402,7 +4402,7 @@ export const WorkspaceGitHubRuntimePayloadSchema = z
  * without a verdict.
  */
 export const WorkspaceTitleStateSchema = z.object({
-  status: z.enum(["naming", "refused", "no-reply", "exhausted", "unchecked"]),
+  status: z.enum(["naming", "refused", "no-reply", "exhausted", "unchecked", "below-bar"]),
   attempts: z.number().int(),
   refusedTitle: z.string().nullable(),
   score: z.number().nullable(),
@@ -4410,9 +4410,12 @@ export const WorkspaceTitleStateSchema = z.object({
 });
 export type WorkspaceTitleState = z.infer<typeof WorkspaceTitleStateSchema>;
 
-/** True while a workspace has no title because a plugin's judge has not passed one yet. */
+/**
+ * True while a workspace has no title because a plugin's judge has not passed one yet. A title
+ * that went on unchecked, or as the best of refused tries (`below-bar`), is no longer held.
+ */
 export function isWorkspaceTitleHeld(state: WorkspaceTitleState | null | undefined): boolean {
-  return state != null && state.status !== "unchecked";
+  return state != null && state.status !== "unchecked" && state.status !== "below-bar";
 }
 
 export const WorkspaceDescriptorPayloadSchema = z

@@ -474,6 +474,7 @@ export const ko: TranslationResources = {
       refused: '"{{title}}" 거부됨 ({{score}}): 에이전트 대기 중',
       noReply: "아직 제목 없음: 에이전트가 응답하지 않았습니다",
       exhausted: "아직 제목 없음: {{tries}}번 거부됨",
+      belowBar: "{{tries}}번 중 최고 ({{score}}): 기준 미달",
       unchecked: "확인되지 않음: {{judge}}에 연결할 수 없음",
       judgeFallback: "판정기",
       rename: "이름 바꾸기",

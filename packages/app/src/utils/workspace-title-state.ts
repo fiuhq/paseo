@@ -38,6 +38,14 @@ export function describeWorkspaceTitleState(
         text: i18n.t("workspace.titleState.exhausted", { tries: state.attempts }),
         canRename: true,
       };
+    case "below-bar":
+      return {
+        text: i18n.t("workspace.titleState.belowBar", {
+          tries: state.attempts,
+          score: state.score === null ? "?" : state.score.toFixed(2),
+        }),
+        canRename: true,
+      };
     case "unchecked":
       return {
         text: i18n.t("workspace.titleState.unchecked", {

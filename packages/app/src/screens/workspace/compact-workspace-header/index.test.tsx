@@ -133,6 +133,16 @@ describe("CompactWorkspaceHeader title state", () => {
     expect(view.textContent).toContain("Paseo");
   });
 
+  it("says a title is the best of refused tries, with its score and Rename, without muting it", () => {
+    const view = renderHeader({ ...held("below-bar"), score: 0.62 });
+
+    const chip = view.querySelector('[data-testid="workspace-title-state"]')?.textContent;
+    expect(chip).toContain("0.62");
+    expect(chip).toContain("3");
+    expect(view.querySelector('[data-testid="workspace-title-rename"]')).not.toBeNull();
+    expect(titleColor(view)).toBe("rgb(1, 1, 1)");
+  });
+
   it("says a title went on unchecked, without muting it", () => {
     const view = renderHeader(held("unchecked"));
 

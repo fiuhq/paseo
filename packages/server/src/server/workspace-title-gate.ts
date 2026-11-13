@@ -40,6 +40,14 @@ export const HELD_TITLE_STATE: WorkspaceTitleState = {
 type Verdict = NonNullable<PluginWorkspaceTitleRequest["verdict"]>;
 type CandidateOrigin = Pick<PluginWorkspaceTitleRequest, "source" | "sourceText">;
 
+/** The refused candidate the judge scored highest so far, kept for when every try is refused. */
+interface ScoredCandidate {
+  generated: GeneratedWorkspaceName;
+  firstAgentContext: FirstAgentContext;
+  score: number;
+  judge: string | null;
+}
+
 export interface ApplyJudgedTitleInput {
   workspace: PersistedWorkspaceRecord;
   firstAgentContext: FirstAgentContext;
@@ -75,6 +83,7 @@ interface WorkspaceTitleGateDeps {
 export class WorkspaceTitleGate {
   private readonly starts = new Map<string, { context: FirstAgentContext; selection: unknown }>();
   private readonly queues = new Map<string, Promise<void>>();
+  private readonly best = new Map<string, ScoredCandidate>();
   private readonly deadlines: TitleGateDeadlines;
 
   constructor(private readonly deps: WorkspaceTitleGateDeps) {
@@ -166,6 +175,7 @@ export class WorkspaceTitleGate {
     });
 
     if (verdict.decision === "refuse") {
+      this.keepIfBest(workspaceId, { generated, firstAgentContext, ...verdict });
       await this.refused(workspaceId, attempt, {
         status: "refused",
         attempts: attempt,
@@ -176,19 +186,43 @@ export class WorkspaceTitleGate {
       return;
     }
 
+    await this.place(
+      workspaceId,
+      firstAgentContext,
+      generated,
+      verdict.decision === "unchecked"
+        ? { ...HELD_TITLE_STATE, status: "unchecked", attempts: attempt, judge: verdict.judge }
+        : null,
+    );
+  }
+
+  private async place(
+    workspaceId: string,
+    firstAgentContext: FirstAgentContext,
+    generated: GeneratedWorkspaceName,
+    titleState: WorkspaceTitleState | null,
+  ): Promise<void> {
     // Re-read: a rename that landed while the judge scored must win.
     const current = await this.deps.workspaceRegistry.get(workspaceId);
     if (!current || !isWorkspaceTitleHeld(current.titleState)) return;
-    await this.deps.apply({
-      workspace: current,
-      firstAgentContext,
-      generated,
-      titleState:
-        verdict.decision === "unchecked"
-          ? { ...HELD_TITLE_STATE, status: "unchecked", attempts: attempt, judge: verdict.judge }
-          : null,
-    });
+    await this.deps.apply({ workspace: current, firstAgentContext, generated, titleState });
     this.starts.delete(workspaceId);
+    this.best.delete(workspaceId);
+  }
+
+  /**
+   * Only a title the judge actually scored can stand in. A score of 0 is a refusal made before
+   * any scoring (a guess from a prompt holding a link), and a tie goes to the later try, which
+   * was written from more of the work.
+   */
+  private keepIfBest(
+    workspaceId: string,
+    candidate: Omit<ScoredCandidate, "score"> & { score: number | null },
+  ): void {
+    const { score } = candidate;
+    if (score === null || score <= 0) return;
+    const kept = this.best.get(workspaceId);
+    if (!kept || score >= kept.score) this.best.set(workspaceId, { ...candidate, score });
   }
 
   /** A name that never comes back is a failed try, so the next one can run. */
@@ -232,11 +266,25 @@ export class WorkspaceTitleGate {
     }
   }
 
-  private refused(workspaceId: string, attempt: number, next: WorkspaceTitleState): Promise<void> {
-    return this.setState(
-      workspaceId,
-      attempt >= MAX_TRIES ? { ...next, status: "exhausted" } : next,
-    );
+  /**
+   * After the last try, the best-scored refused title goes on rather than none: it is marked
+   * `below-bar` with its score, so it never reads as a pass and Rename stays one tap away.
+   */
+  private async refused(
+    workspaceId: string,
+    attempt: number,
+    next: WorkspaceTitleState,
+  ): Promise<void> {
+    if (attempt < MAX_TRIES) return this.setState(workspaceId, next);
+    const best = this.best.get(workspaceId);
+    if (!best) return this.setState(workspaceId, { ...next, status: "exhausted" });
+    await this.place(workspaceId, best.firstAgentContext, best.generated, {
+      status: "below-bar",
+      attempts: attempt,
+      refusedTitle: null,
+      score: best.score,
+      judge: best.judge,
+    });
   }
 
   private async setState(workspaceId: string, titleState: WorkspaceTitleState): Promise<void> {
