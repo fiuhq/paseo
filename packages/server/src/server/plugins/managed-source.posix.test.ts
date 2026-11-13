@@ -1,7 +1,7 @@
 import { mkdir, rename, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { createServer } from "node:http";
+import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -406,6 +406,57 @@ describe("managed Git plugin sources", () => {
       await restarted.preview(id, updated.directory, { kind: "git", ref: initial.slice(0, 8) }),
     ).toMatchObject({ target: { commit: initial } });
   }, 30_000);
+  it(
+    "recovers when the remote stalls the first transfer",
+    withoutCredentialHelpers(async () => {
+      const repository = await createRepository();
+      await runGitCommand(["update-server-info"], { cwd: repository });
+      let stalled = false;
+      const hung: ServerResponse[] = [];
+      const server = createServer((request, response) => {
+        if (!stalled) {
+          // A dropped connection the forge never answers: headers, then silence.
+          stalled = true;
+          response.writeHead(200, { "content-type": "application/octet-stream" });
+          response.write("");
+          hung.push(response);
+          return;
+        }
+        const pathname = new URL(request.url!, "http://localhost").pathname;
+        const file = path.resolve(repository, ".git", `.${pathname}`);
+        if (!file.startsWith(path.join(repository, ".git") + path.sep)) {
+          response.writeHead(404).end();
+          return;
+        }
+        try {
+          response.end(readFileSync(file));
+        } catch {
+          response.writeHead(404).end();
+        }
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Expected HTTP port");
+      const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-stall-"));
+      roots.push(home);
+      try {
+        const startedAt = Date.now();
+        const sources = new ManagedPluginSources(home);
+        const candidate = await sources.prepareInstall({
+          source: `http://127.0.0.1:${address.port}/`,
+        });
+        expect(existsSync(path.join(candidate.directory, "paseo-plugin.json"))).toBe(true);
+        expect(stalled).toBe(true);
+        // Well inside the 120 s a stalled transfer used to hold the install.
+        expect(Date.now() - startedAt).toBeLessThan(60_000);
+      } finally {
+        for (const response of hung) response.destroy();
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }),
+    90_000,
+  );
   it(
     "uses retained acquisition remote when credential rewriting changes origin, preserving nested identity",
     withoutCredentialHelpers(async () => {

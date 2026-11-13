@@ -31,7 +31,30 @@ import {
 } from "./managed-source/npm.js";
 
 const GIT_TIMEOUT_MS = 120_000;
-const GIT_ENV = { GIT_TERMINAL_PROMPT: "0" } as const;
+// A stalled HTTPS transfer otherwise waits forever: Git has no read timeout of its own, so a dropped
+// connection to the forge held a plugin update until GIT_TIMEOUT_MS killed it. Below 1 KB/s for 20 s
+// counts as stalled; the network steps below then try once more on a fresh connection.
+const GIT_ENV = {
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000",
+  GIT_HTTP_LOW_SPEED_TIME: "20",
+} as const;
+const NETWORK_ATTEMPTS = 2;
+
+/** Runs a step that reaches the remote, once more if it fails (a stalled or dropped connection). */
+async function withNetworkRetry<T>(
+  step: () => Promise<T>,
+  beforeRetry?: () => Promise<void>,
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await step();
+    } catch (error) {
+      if (attempt >= NETWORK_ATTEMPTS) throw error;
+      await beforeRetry?.();
+    }
+  }
+}
 // COMPAT(plugin-source-record): v0.8.0; accept and strip pre-correction selector/revision/root copies until daemon floor supports artifact-derived metadata.
 const ManagedPluginRecordSchema = z.union([
   z.object({
@@ -517,13 +540,17 @@ async function clone(remote: string, checkoutRoot: string): Promise<void> {
   try {
     // Blobs arrive on checkout, so a plugin in a subdirectory of a large repository downloads only
     // its own files. A server without filter support ignores the flag and sends the full pack.
-    await runGitCommand(
-      ["clone", "--no-checkout", "--filter=blob:none", "--", cloneRemote, checkoutRoot],
-      {
-        cwd: path.dirname(checkoutRoot),
-        envOverlay,
-        timeout: GIT_TIMEOUT_MS,
-      },
+    await withNetworkRetry(
+      () =>
+        runGitCommand(
+          ["clone", "--no-checkout", "--filter=blob:none", "--", cloneRemote, checkoutRoot],
+          {
+            cwd: path.dirname(checkoutRoot),
+            envOverlay,
+            timeout: GIT_TIMEOUT_MS,
+          },
+        ),
+      () => rm(checkoutRoot, { recursive: true, force: true }),
     );
   } catch (error) {
     throw redactRemoteError(error, remote);
@@ -572,11 +599,14 @@ async function checkout(
         await runGitCommand(args, { cwd: checkoutRoot, envOverlay, timeout: GIT_TIMEOUT_MS });
       }
     }
-    await runGitCommand(["checkout", "--detach", commit], {
-      cwd: checkoutRoot,
-      envOverlay,
-      timeout: GIT_TIMEOUT_MS,
-    });
+    // Fetches the checked-out files from the remote, so it retries like the clone.
+    await withNetworkRetry(() =>
+      runGitCommand(["checkout", "--detach", commit], {
+        cwd: checkoutRoot,
+        envOverlay,
+        timeout: GIT_TIMEOUT_MS,
+      }),
+    );
   } catch (error) {
     throw redactRemoteError(error, remote);
   }
@@ -640,11 +670,13 @@ async function resolveRemoteCommit(remote: string, cwd: string, ref?: string): P
     const names = ref
       ? [`refs/heads/${ref}`, `refs/tags/${ref}^{}`, `refs/tags/${ref}`, ref]
       : ["HEAD"];
-    const { stdout } = await runGitCommand(["ls-remote", "--symref", "--", cloneRemote, ...names], {
-      cwd,
-      envOverlay,
-      timeout: GIT_TIMEOUT_MS,
-    });
+    const { stdout } = await withNetworkRetry(() =>
+      runGitCommand(["ls-remote", "--symref", "--", cloneRemote, ...names], {
+        cwd,
+        envOverlay,
+        timeout: GIT_TIMEOUT_MS,
+      }),
+    );
     const entries = new Map(
       stdout
         .trim()
