@@ -196,7 +196,9 @@ export function collectProviderErrorRows(
     if (!query || provider === undefined) continue;
     const failed = query.isError || (query.data?.providerErrors?.length ?? 0) > 0;
     if (!failed) continue;
-    const reason = query.data?.providerErrors?.find((e) => e.provider === provider)?.message;
+    const reason = query.isError
+      ? undefined
+      : query.data?.providerErrors?.find((e) => e.provider === provider)?.message;
     rows.push({
       provider,
       label: providerLabelById.get(provider) ?? provider,
