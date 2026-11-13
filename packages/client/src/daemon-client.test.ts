@@ -6479,6 +6479,51 @@ test("fetches scoped recent provider sessions", async () => {
   });
 });
 
+test("waits past the daemon's 90 s per-provider limit for recent provider sessions", async () => {
+  useHeartbeatClock();
+  try {
+    const mock = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_unit_test",
+      logger: createMockLogger(),
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+    const connectPromise = client.connect();
+    mock.triggerOpen();
+    await connectPromise;
+
+    const promise = client.fetchRecentProviderSessions({ providers: ["codex"] });
+    const outcome = promise.then(
+      (payload) => ({ payload }),
+      (error: unknown) => ({ error }),
+    );
+    const request = JSON.parse(String(mock.sent[0])) as { message: { requestId: string } };
+    await vi.advanceTimersByTimeAsync(91_000);
+    const reason = "Timed out listing importable sessions for provider 'codex' after 90000ms";
+    mock.triggerMessage(
+      JSON.stringify({
+        type: "session",
+        message: {
+          type: "fetch_recent_provider_sessions_response",
+          payload: {
+            requestId: request.message.requestId,
+            entries: [],
+            providerErrors: [{ provider: "codex", message: reason }],
+          },
+        },
+      }),
+    );
+    expect(await outcome).toMatchObject({
+      payload: { providerErrors: [{ provider: "codex", message: reason }] },
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("imports an agent by provider handle id", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

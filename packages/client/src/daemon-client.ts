@@ -1156,6 +1156,9 @@ const DEFAULT_SESSION_RPC_TIMEOUT_MS = 60_000;
  * a failure for an import that still lands, and a retry then finds it already imported.
  */
 const IMPORT_AGENT_TIMEOUT_MS = 10 * 60_000;
+// The daemon gives each provider 90 s to list its sessions, then answers with why it failed: wait past
+// that so the answer, and its reason, arrives.
+const RECENT_PROVIDER_SESSIONS_TIMEOUT_MS = 100_000;
 const PUSH_TOKEN_REVOCATION_TIMEOUT_MS = 2_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_LIVENESS_TIMEOUT_MS = 5000;
@@ -3019,6 +3022,7 @@ export class DaemonClient {
     return this.sendRequest({
       requestId: resolvedRequestId,
       message,
+      timeout: RECENT_PROVIDER_SESSIONS_TIMEOUT_MS,
       options: { skipQueue: true },
       select: (msg) => {
         if (msg.type !== "fetch_recent_provider_sessions_response") {
