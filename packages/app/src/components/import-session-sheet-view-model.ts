@@ -174,6 +174,8 @@ export function hasMoreSessions(
 export interface ProviderErrorRow {
   provider: string;
   label: string;
+  /** Why the daemon could not list the provider, when it said. */
+  reason?: string;
 }
 
 /**
@@ -194,7 +196,14 @@ export function collectProviderErrorRows(
     if (!query || provider === undefined) continue;
     const failed = query.isError || (query.data?.providerErrors?.length ?? 0) > 0;
     if (!failed) continue;
-    rows.push({ provider, label: providerLabelById.get(provider) ?? provider });
+    const reason = query.isError
+      ? undefined
+      : query.data?.providerErrors?.find((e) => e.provider === provider)?.message;
+    rows.push({
+      provider,
+      label: providerLabelById.get(provider) ?? provider,
+      ...(reason ? { reason } : {}),
+    });
   }
   return rows;
 }

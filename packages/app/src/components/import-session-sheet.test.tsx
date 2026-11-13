@@ -1278,7 +1278,7 @@ describe("ImportSessionSheet", () => {
     expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
   });
 
-  it("shows an error row for a provider the daemon reported as failed", async () => {
+  it("shows an error row for a provider the daemon reported as failed, with its reason", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",
       entries: [createProviderSessionEntry({ providerId: "codex", providerLabel: "Codex" })],
@@ -1297,6 +1297,7 @@ describe("ImportSessionSheet", () => {
     );
 
     await screen.findByText("Could not load Codex sessions");
+    expect(screen.getByTestId("import-session-error-reason-codex").textContent).toBe("timed out");
   });
 
   it("imports a foreign-directory row without the current workspace once Show all is on", async () => {

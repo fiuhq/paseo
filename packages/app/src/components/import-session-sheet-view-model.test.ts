@@ -200,6 +200,23 @@ describe("collectProviderErrorRows", () => {
       ],
       new Map([["codex", "Codex"]]),
     );
+    expect(rows).toEqual([{ provider: "codex", label: "Codex", reason: "timed out" }]);
+  });
+
+  it("drops the previous answer's reason when the retry itself failed", () => {
+    const rows = collectProviderErrorRows(
+      ["codex"],
+      [
+        settled(
+          {
+            entries: [],
+            providerErrors: [{ provider: "codex", message: "worktree is still being made" }],
+          },
+          { isError: true },
+        ),
+      ],
+      new Map([["codex", "Codex"]]),
+    );
     expect(rows).toEqual([{ provider: "codex", label: "Codex" }]);
   });
 
