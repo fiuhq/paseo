@@ -664,6 +664,20 @@ describe("relay external socket reconnect behavior", () => {
     await server.close();
   });
 
+  test("waits for a plugin whose process sends its hello after 45 seconds", async () => {
+    const server = createServer();
+    const socket = new MockSocket();
+    await server.attachPluginSocket("slow-start", socket);
+
+    // A start measured on a loaded machine; a client would have been closed at 15 s.
+    await vi.advanceTimersByTimeAsync(45_000);
+    socket.emit("message", JSON.stringify(createHelloMessage("plugin:slow-start")));
+
+    await vi.waitFor(() => expect(sentServerInfoEnvelopes(socket)).toHaveLength(1));
+    expect(socket.readyState).toBe(1);
+    await server.close();
+  });
+
   test("still reaps an ordinary socket whose heartbeat stalls past the application lease", async () => {
     const server = createServer();
     const socket = new MockSocket();

@@ -1515,24 +1515,26 @@ export class VoiceAssistantWebSocketServer {
       admission,
       authenticating: false,
     };
-    const timeout = setTimeout(() => {
-      if (this.pendingConnections.get(ws) !== pending) {
-        return;
-      }
-      pending.helloTimeout = null;
-      this.pendingConnections.delete(ws);
-      pending.connectionLogger.warn(
-        { ...toConnectionLogFields(identity), timeoutMs: HELLO_TIMEOUT_MS },
-        "Closing connection due to missing hello",
-      );
-      try {
-        ws.close(WS_CLOSE_HELLO_TIMEOUT, "Hello timeout");
-      } catch {
-        // ignore close errors
-      }
-    }, HELLO_TIMEOUT_MS);
-    pending.helloTimeout = timeout;
-    (timeout as unknown as { unref?: () => void }).unref?.();
+    if (!this.pluginSocketIds.has(ws)) {
+      const timeout = setTimeout(() => {
+        if (this.pendingConnections.get(ws) !== pending) {
+          return;
+        }
+        pending.helloTimeout = null;
+        this.pendingConnections.delete(ws);
+        pending.connectionLogger.warn(
+          { ...toConnectionLogFields(identity), timeoutMs: HELLO_TIMEOUT_MS },
+          "Closing connection due to missing hello",
+        );
+        try {
+          ws.close(WS_CLOSE_HELLO_TIMEOUT, "Hello timeout");
+        } catch {
+          // ignore close errors
+        }
+      }, HELLO_TIMEOUT_MS);
+      pending.helloTimeout = timeout;
+      (timeout as unknown as { unref?: () => void }).unref?.();
+    }
 
     this.pendingConnections.set(ws, pending);
     this.incrementRuntimeCounter("connectedAwaitingHello");

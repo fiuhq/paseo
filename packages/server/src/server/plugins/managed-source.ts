@@ -610,18 +610,20 @@ async function checkout(
   } catch (error) {
     throw redactRemoteError(error, remote);
   }
-  await runGitCommand(["submodule", "update", "--init", "--recursive"], {
-    cwd: checkoutRoot,
-    envOverlay: GIT_ENV,
-    timeout: GIT_TIMEOUT_MS,
-  });
+  await withNetworkRetry(() =>
+    runGitCommand(["submodule", "update", "--init", "--recursive"], {
+      cwd: checkoutRoot,
+      envOverlay: GIT_ENV,
+      timeout: GIT_TIMEOUT_MS,
+    }),
+  );
 }
 
 /**
  * Whether the plugin's manifest at `commit` declares `"checkout": "directory"`. Only the plugin knows
  * whether it reaches outside its directory (a build step, tsconfig paths, a symlink, a workspace
- * sibling), so the whole repository is checked out unless it says otherwise. An unreadable manifest
- * gets the full checkout, and manifest validation then reports it.
+ * sibling), so the whole repository is checked out unless it says otherwise. A missing or invalid
+ * manifest gets the full checkout, and manifest validation then reports it.
  */
 async function declaresSelfContained(
   checkoutRoot: string,
@@ -629,12 +631,20 @@ async function declaresSelfContained(
   sparsePath: string,
   envOverlay: Record<string, string>,
 ): Promise<boolean> {
-  try {
-    const { stdout } = await runGitCommand(["show", `${commit}:${sparsePath}/paseo-plugin.json`], {
+  const manifestPath = `${sparsePath}/paseo-plugin.json`;
+  const { stdout: listed } = await runGitCommand(
+    ["ls-tree", "--name-only", commit, "--", manifestPath],
+    { cwd: checkoutRoot, envOverlay, timeout: GIT_TIMEOUT_MS },
+  );
+  if (listed.trim() === "") return false;
+  const { stdout } = await withNetworkRetry(() =>
+    runGitCommand(["show", `${commit}:${manifestPath}`], {
       cwd: checkoutRoot,
       envOverlay,
       timeout: GIT_TIMEOUT_MS,
-    });
+    }),
+  );
+  try {
     const manifest: unknown = JSON.parse(stdout);
     return (
       typeof manifest === "object" &&
