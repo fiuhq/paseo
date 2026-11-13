@@ -1184,6 +1184,73 @@ export default function contribute(server: { registerProvider(provider: Provider
     await Promise.all([rm(startedFile, { force: true }), rm(closedFile, { force: true })]);
   });
 
+  it("waits past the request limit for a plugin that is slow to start", async () => {
+    const directory = await createPlugin(
+      "slow-start",
+      `export default function contribute(plugin: unknown) { void plugin; return () => undefined; }`,
+    );
+    const child = createReloadChild("slow-start", []);
+    const originalSend = child.send.bind(child);
+    let initialized!: () => void;
+    const initializing = new Promise<void>((resolve) => (initialized = resolve));
+    child.send = (message, callback) => {
+      if (message.type !== "initialize") return originalSend(message, callback);
+      callback?.(null);
+      initialized();
+      // A busy machine (on-access antivirus scanning every file a new process opens) took 30-62 s.
+      setTimeout(() => originalSend(message), 45_000);
+      return true;
+    };
+    const runtime = createTestRuntime({ spawnChild: () => child });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const started = runtime.startPlugin("slow-start", directory);
+      await initializing;
+      await vi.advanceTimersByTimeAsync(45_000);
+      await expect(started).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+      await runtime.stopAll();
+    }
+  });
+
+  it("gives up on a plugin that never starts after the start limit", async () => {
+    const directory = await createPlugin(
+      "never-starts",
+      `export default function contribute(plugin: unknown) { void plugin; return () => undefined; }`,
+    );
+    const child = createReloadChild("never-starts", []);
+    const originalSend = child.send.bind(child);
+    let initialized!: () => void;
+    const initializing = new Promise<void>((resolve) => (initialized = resolve));
+    child.send = (message, callback) => {
+      if (message.type !== "initialize") return originalSend(message, callback);
+      callback?.(null);
+      initialized();
+      return true;
+    };
+    const runtime = createTestRuntime({ spawnChild: () => child });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const started = runtime.startPlugin("never-starts", directory);
+      let settled = false;
+      const outcome = started
+        .then(
+          () => "started",
+          (error: Error) => error.message,
+        )
+        .finally(() => (settled = true));
+      await initializing;
+      await vi.advanceTimersByTimeAsync(119_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(outcome).resolves.toBe("Plugin never-starts did not initialize");
+    } finally {
+      vi.useRealTimers();
+      await runtime.stopAll();
+    }
+  });
+
   it("closes a provider connection that arrives after negotiation timed out", async () => {
     const directory = await createPlugin(
       "late-provider",

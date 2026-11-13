@@ -6576,6 +6576,7 @@ export class DaemonClient {
       requestId,
       message: { type: "plugin.directory.install.request", requestId, path, ...(id ? { id } : {}) },
       responseType: "plugin.directory.install.response",
+      timeout: 180_000,
     });
     return payload.plugin;
   }
@@ -6646,7 +6647,7 @@ export class DaemonClient {
       requestId,
       message: { type: "plugin.source.update.apply.request", requestId, proposals },
       responseType: "plugin.source.update.apply.response",
-      timeout: 300_000,
+      timeout: Math.max(300_000, proposals.length * 600_000),
     });
     return payload.plugins;
   }
@@ -6707,7 +6708,7 @@ export class DaemonClient {
       // Reload tears the plugin down and starts it again before the daemon answers, and it queues
       // behind other plugin lifecycle work. Wait for that answer instead of failing the reload at
       // the request deadline while the daemon keeps loading it.
-      ...(action === "reload" ? { timeout: 0 } : {}),
+      timeout: { reload: 0, enable: 180_000, disable: undefined }[action],
     });
     return payload.plugin;
   }
