@@ -126,7 +126,10 @@ export class WorkspaceTitleGate {
 
   private async afterTurn(workspaceId: string, agentId: string): Promise<void> {
     const state = (await this.deps.workspaceRegistry.get(workspaceId))?.titleState;
-    if (!isWorkspaceTitleHeld(state) || !state || state.status === "exhausted") return;
+    if (!isWorkspaceTitleHeld(state) || !state || state.status === "exhausted") {
+      this.forget(workspaceId);
+      return;
+    }
     const reply = await this.deps.agentManager.getLastAssistantMessage(agentId);
     if (!reply?.trim()) {
       await this.setState(workspaceId, { ...state, status: "no-reply" });
@@ -156,7 +159,10 @@ export class WorkspaceTitleGate {
   ): Promise<void> {
     const workspace = await this.deps.workspaceRegistry.get(workspaceId);
     const state = workspace?.titleState;
-    if (!workspace || !state || !isWorkspaceTitleHeld(state)) return;
+    if (!workspace || !state || !isWorkspaceTitleHeld(state)) {
+      this.forget(workspaceId);
+      return;
+    }
     const attempt = state.attempts + 1;
 
     const generated = await this.generate(workspace, firstAgentContext);
@@ -204,8 +210,13 @@ export class WorkspaceTitleGate {
   ): Promise<void> {
     // Re-read: a rename that landed while the judge scored must win.
     const current = await this.deps.workspaceRegistry.get(workspaceId);
-    if (!current || !isWorkspaceTitleHeld(current.titleState)) return;
-    await this.deps.apply({ workspace: current, firstAgentContext, generated, titleState });
+    if (current && isWorkspaceTitleHeld(current.titleState)) {
+      await this.deps.apply({ workspace: current, firstAgentContext, generated, titleState });
+    }
+    this.forget(workspaceId);
+  }
+
+  private forget(workspaceId: string): void {
     this.starts.delete(workspaceId);
     this.best.delete(workspaceId);
   }
