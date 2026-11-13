@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ProviderConnection, ProviderEvent } from "@getpaseo/plugin/server/provider";
 import { createWorkfloorProvider } from "./provider";
+import { gateWaiting } from "./workfloor";
 
 const P = "proj-1";
 const A = "agent-1";
@@ -27,6 +28,8 @@ class FakeWorkfloor {
       session?: string;
       /** The card view's repository and linked items. */
       code?: Record<string, unknown>;
+      /** The card view's board state: its agent's state, its question, its stage's gates. */
+      board?: Record<string, unknown>;
       /** Its stage's agent never started: no session yet, and Start agent can start it (yours or not). */
       idle?: { stage: string; yours: boolean };
       /** Its agent is starting: no session yet, and nothing idle for Start agent to start. */
@@ -201,6 +204,7 @@ class FakeWorkfloor {
           stageId: c.stage,
           agent: c.agentName,
           ...c.code,
+          ...c.board,
         },
       });
     }
@@ -1109,6 +1113,64 @@ describe("the Workfloor provider", () => {
         },
       ],
     });
+  });
+
+  test("a lane card whose agent stopped at an approval gate says the card waits on the person, with its link", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "plan-agent",
+      lane: "normal-lane",
+      messages: [],
+      board: {
+        agentState: "idle",
+        gates: {
+          ways: [],
+          locked: [{ stage: "build", gate: "Approve plan to build", through: "plan-review" }],
+        },
+      },
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "write the plan");
+    expect(await until(events, turnEnded)).toMatchObject({ state: "completed" });
+    expect(
+      events.find((e) => e.type === "timeline.item" && e.item.type === "notification"),
+    ).toMatchObject({
+      item: {
+        level: "warning",
+        message: expect.stringMatching(
+          /^The card waits on you: Approve plan to build\. Take it in Workfloor, https:\/\/wf\.test\/\?project=proj-1&workflow=normal-lane&page=lanes&task=lane-card$/,
+        ),
+      },
+    });
+  });
+
+  test("a lane card with no gate, or a conversation, ends its turn without a waits-on-you notice", async () => {
+    const wf = new FakeWorkfloor();
+    wf.cards.set("lane-card", {
+      title: "Server heap crashes",
+      state: "WAITING_FOR_INPUT",
+      agent: "build-agent",
+      lane: "normal-lane",
+      messages: [],
+      board: { agentState: "idle", gates: { ways: [], locked: [] } },
+    });
+    const { connection, events } = await connect(wf);
+    await open(connection, events, "s1", {
+      persistence: { version: 1, data: { project: P, card: "lane-card", lane: "normal-lane" } },
+    });
+    await say(connection, "s1", "go on");
+    await until(events, turnEnded);
+    await open(connection, events, "s2");
+    await say(connection, "s2", "hello");
+    await until(events, (e) => turnEnded(e) && e.sessionId === "s2");
+    expect(events.some((e) => e.type === "timeline.item" && e.item.type === "notification")).toBe(
+      false,
+    );
   });
 
   test("an opened card is opened with its Workfloor title, so Paseo names the agent after it", async () => {
@@ -2122,5 +2184,27 @@ describe("the Workfloor provider", () => {
     const { connection, events } = await connect(wf, undefined, paseo);
     expect((await listLink(connection, events, "l1")).sessions[0]?.cwd).toBe("/here");
     expect(paseo.created).toEqual([]);
+  });
+});
+
+describe("gateWaiting", () => {
+  const gates = {
+    ways: [],
+    locked: [{ stage: "build", gate: "Approve plan to build", through: "plan-review" }],
+  };
+  test("names the gate of a card whose agent stopped and asks nothing", () => {
+    expect(gateWaiting({ agentState: "idle", gates })).toBe("Approve plan to build");
+    expect(
+      gateWaiting({
+        agentState: "waiting",
+        gates: { ...gates, approves: [{ to: "build", gate: "Approve plan" }] },
+      }),
+    ).toBe("Approve plan");
+  });
+  test("names nothing while the agent works, while the card asks a question, or without a gate", () => {
+    expect(gateWaiting({ agentState: "running", gates })).toBeUndefined();
+    expect(gateWaiting({ agentState: "idle", question: "Go on?", gates })).toBeUndefined();
+    expect(gateWaiting({ agentState: "idle" })).toBeUndefined();
+    expect(gateWaiting({ gates })).toBeUndefined();
   });
 });

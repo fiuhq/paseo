@@ -95,6 +95,16 @@ export interface CardView {
   stageId?: string;
   /** The name of the agent that has the card now. */
   agent?: string;
+  /** Its agent's state on the board: `idle`, `waiting`, `ready` or `done` once it stopped. */
+  agentState?: string;
+  /** What the card asks its people, when it asks. */
+  question?: unknown;
+  /** Its stage's approval gates: the ways out a person must approve, and the stages past one. */
+  gates?: {
+    ways: Array<{ to: string; label: string }>;
+    locked: Array<{ stage: string; gate: string; through: string }>;
+    approves?: Array<{ to: string; gate: string }>;
+  };
   repository?: string;
   externalItems?: Array<{
     kind: string;
@@ -118,6 +128,18 @@ export interface CardRef {
 /** A card's agent session. */
 export interface Scope extends CardRef {
   session: string;
+}
+
+const STOPPED = new Set(["idle", "waiting", "ready", "done"]);
+
+/**
+ * The gate a lane card waits on a person to pass, by its name ("Approve plan to build"), once its
+ * agent stopped and asks nothing: the card moves on only when someone takes that decision in Workfloor.
+ */
+export function gateWaiting(view: CardView): string | undefined {
+  if (view.question || !view.agentState || !STOPPED.has(view.agentState)) return undefined;
+  const gates = view.gates;
+  return gates?.approves?.[0]?.gate ?? gates?.ways[0]?.label ?? gates?.locked[0]?.gate;
 }
 
 export class WorkfloorError extends Error {
