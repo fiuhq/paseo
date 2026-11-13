@@ -200,7 +200,7 @@ describe("collectProviderErrorRows", () => {
       ],
       new Map([["codex", "Codex"]]),
     );
-    expect(rows).toEqual([{ provider: "codex", label: "Codex" }]);
+    expect(rows).toEqual([{ provider: "codex", label: "Codex", reason: "timed out" }]);
   });
 
   it("uses provider id when the label map has no entry", () => {

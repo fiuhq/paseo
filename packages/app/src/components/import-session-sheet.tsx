@@ -205,9 +205,20 @@ function ProviderErrorBannerRow({
   const handleRetry = useCallback(() => onRetry(row.provider), [onRetry, row.provider]);
   return (
     <View style={styles.errorRow}>
-      <Text style={styles.errorText}>
-        {t("importSession.status.failedProvider", { provider: row.label })}
-      </Text>
+      <View style={styles.errorTextBlock}>
+        <Text style={styles.errorText}>
+          {t("importSession.status.failedProvider", { provider: row.label })}
+        </Text>
+        {row.reason ? (
+          <Text
+            style={styles.errorReason}
+            numberOfLines={3}
+            testID={`import-session-error-reason-${row.provider}`}
+          >
+            {row.reason}
+          </Text>
+        ) : null}
+      </View>
       <Button
         variant="ghost"
         size="sm"
@@ -1193,10 +1204,16 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     gap: theme.spacing[2],
   },
-  errorText: {
+  errorTextBlock: {
     flexShrink: 1,
     minWidth: 0,
+  },
+  errorText: {
     color: theme.colors.palette.red[300],
+    fontSize: theme.fontSize.sm,
+  },
+  errorReason: {
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
   emptyState: {
