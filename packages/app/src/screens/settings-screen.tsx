@@ -1,3 +1,5 @@
+import { useSettingsContentPresented } from "@/navigation/settings-presentation";
+import { AppearanceText as Text } from "@/appearance/text";
 import { useHardwareKeyboardPresent } from "@/keyboard";
 import { useAddHost } from "@/hosts/add-host";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -6,7 +8,6 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  Text,
   useWindowDimensions,
   View,
   type PressableStateCallbackType,
@@ -1136,6 +1137,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
   const appVersion = resolveAppVersion();
   const appVersionText = formatVersionWithPrefix(appVersion);
   const isCompactLayout = useIsCompactFormFactor();
+  const onContentLayout = useSettingsContentPresented();
   const insets = useSafeAreaInsets();
   const insetBottomStyle = useMemo(() => ({ paddingBottom: insets.bottom }), [insets.bottom]);
   const hosts = useHosts();
@@ -1360,7 +1362,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
 
   if (settingsLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.loadingContainer} onLayout={onContentLayout}>
         <Text style={styles.loadingText}>{t("settings.loading")}</Text>
       </View>
     );
@@ -1369,7 +1371,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
   // Mobile root: full-screen sidebar-as-list.
   if (isCompactLayout && view.kind === "root") {
     return (
-      <View style={styles.container}>
+      <View style={styles.container} onLayout={onContentLayout}>
         <BackHeader title={t("settings.title")} onBack={handleBackToWorkspace} />
         <ScrollView style={styles.scrollView} contentContainerStyle={insetBottomStyle}>
           <SettingsSidebar
@@ -1389,7 +1391,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
 
   if (isCompactLayout) {
     return (
-      <View style={styles.container}>
+      <View style={styles.container} onLayout={onContentLayout}>
         <PageLayout title={detailTitle} onBack={handleBackFromDetail}>
           {content}
         </PageLayout>
@@ -1401,7 +1403,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
   // region + traffic-light padding; detail pane renders whatever header the
   // selected section provides.
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={onContentLayout}>
       <View style={desktopStyles.row}>
         <WindowChromeRegion corners="top-left">
           <SettingsSidebar
