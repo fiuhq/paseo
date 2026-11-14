@@ -7,6 +7,7 @@ import { useAppSettings } from "@/hooks/use-settings";
 import type { SidebarWorkspaceTrailing } from "@/hooks/use-settings";
 import { useCompactTimeAgo } from "@/hooks/use-time-ago";
 import { useIsWorkspaceStarting } from "@/workspace-startup/store";
+import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 
 export type { SidebarWorkspaceTrailing };
 
@@ -41,9 +42,11 @@ export function hasSidebarWorkspaceTrailing({
 export function SidebarWorkspaceTrailingContent({
   workspace,
   trailing,
+  backdrop,
 }: {
   workspace: SidebarWorkspaceEntry;
   trailing: SidebarWorkspaceTrailing;
+  backdrop: SidebarSurfaceBackdrop;
 }) {
   if (trailing === "diff" && workspace.diffStat) {
     return (
@@ -54,6 +57,7 @@ export function SidebarWorkspaceTrailingContent({
     return (
       <WorkspaceTimestamp
         enteredAt={workspace.statusEnteredAt}
+        backdrop={backdrop}
         serverId={workspace.serverId}
         workspaceId={workspace.workspaceId}
       />
@@ -69,10 +73,12 @@ export function SidebarWorkspaceTrailingContent({
  */
 function WorkspaceTimestamp({
   enteredAt,
+  backdrop,
   serverId,
   workspaceId,
 }: {
   enteredAt: Date;
+  backdrop: SidebarSurfaceBackdrop;
   serverId: string;
   workspaceId: string;
 }) {
@@ -80,7 +86,15 @@ function WorkspaceTimestamp({
   const label = useCompactTimeAgo(enteredAt);
   const isStarting = useIsWorkspaceStarting({ serverId, workspaceId });
   return (
-    <Text style={styles.timestamp} numberOfLines={1} testID="sidebar-workspace-timestamp">
+    <Text
+      style={[
+        styles.timestamp,
+        backdrop === "surfaceSidebarHover" && styles.hovered,
+        backdrop === "surfaceSidebarSelected" && styles.selected,
+      ]}
+      numberOfLines={1}
+      testID="sidebar-workspace-timestamp"
+    >
       {isStarting ? t("newWorkspace.startup.sidebarStatus") : label}
     </Text>
   );
@@ -98,4 +112,6 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.normal,
     flexShrink: 0,
   },
+  hovered: { color: theme.colors.foregroundSidebarHover },
+  selected: { color: theme.colors.foregroundSidebarSelected },
 }));
