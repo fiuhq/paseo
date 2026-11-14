@@ -1,8 +1,5 @@
 import { useAddHost } from "@/hosts/add-host";
-import type {
-  CreateAgentRequestOptions,
-  CreateWorkspaceRequestOptions,
-} from "@getpaseo/client/internal/daemon-client";
+import type { CreateWorkspaceRequestOptions } from "@getpaseo/client/internal/daemon-client";
 import type { AgentSnapshotPayload, CreationSnapshot } from "@getpaseo/protocol/messages";
 import { encodeImages } from "@/utils/encode-images";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
@@ -141,7 +138,6 @@ import {
   WorkspaceStartupFailure,
 } from "@/workspace-startup/checklist";
 import { buildStartingWorkspace, mintWorkspaceId } from "@/workspace-startup/starting-workspace";
-import { retriedAgentRequest } from "./new-workspace/retry-agent-request";
 
 function useIsNewWorkspaceDraftHandoffActive(input: {
   draftId: string | undefined;
@@ -258,7 +254,6 @@ interface SubmitDraftInput {
   clearConsumedDraft: () => void;
   agentCreation?: {
     result: Promise<AgentSnapshotPayload>;
-    retry: (input: CreateAgentRequestOptions) => Promise<AgentSnapshotPayload>;
   };
   serverId: string;
   draftKey: string;
@@ -562,13 +557,13 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       supportsForgeSearch: input.supportsForgeSearch,
       agentCreation,
     });
-  const execute = async (requestedAgent = initialAgent): Promise<AgentSnapshotPayload> => {
+  const execute = async (): Promise<AgentSnapshotPayload> => {
     const { agent } = await ensureWorkspace({
       cwd,
       prompt: text,
       attachments: workspaceNamingAttachments,
       withInitialAgent: true,
-      agent: requestedAgent,
+      agent: initialAgent,
       ...(starting ? { workspaceId: starting.id } : {}),
       onEvent: (snapshot) => {
         if (startupDraftId) recordStartupPhase(startupDraftId, snapshot);
@@ -599,11 +594,8 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
     if (!agent) throw new Error("Workspace creation returned no agent");
     return agent;
   };
-  const agentCreation = {
-    result: Promise.resolve().then(() => execute()),
-    retry: (request: CreateAgentRequestOptions) =>
-      execute(retriedAgentRequest(initialAgent, request, cwd)),
-  };
+  // A retry after a failed agent start belongs to the ready workspace's draft, not to this creation.
+  const agentCreation = { result: Promise.resolve().then(() => execute()) };
   if (starting) {
     getHostRuntimeStore().acceptWorkspaceSnapshots(serverId, [starting]);
     outcome = openWorkspaceDraft({

@@ -48,6 +48,7 @@ function plugin(): InstalledPlugin {
     composerItems: [],
     newWorkspaceItems: [],
     newWorkspaceTitles: [],
+    workspaceRowBadgeItems: [],
     workspacePanels: [],
     commandCenterItems: [],
     clientSlashCommands: [],
