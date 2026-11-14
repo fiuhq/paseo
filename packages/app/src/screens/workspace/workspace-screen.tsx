@@ -3990,7 +3990,11 @@ function WorkspaceMarkdownLinks({
 }: AssistantFileLinkResolverProviderProps & { workspace: WorkspaceDescriptor | null | undefined }) {
   return (
     <AssistantFileLinkResolverProvider {...fileLinks}>
-      <ForgeShorthandProvider forge={workspace?.forge} remoteUrl={workspace?.gitRuntime?.remoteUrl}>
+      <ForgeShorthandProvider
+        forge={workspace?.forge}
+        remoteUrl={workspace?.gitRuntime?.remoteUrl}
+        forgeWeb={workspace?.forgeWeb}
+      >
         {children}
       </ForgeShorthandProvider>
     </AssistantFileLinkResolverProvider>
